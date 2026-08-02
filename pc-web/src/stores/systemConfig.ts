@@ -18,7 +18,7 @@ export interface SystemSettings {
 const DEFAULT_SETTINGS: SystemSettings = {
   // 版本号兜底 (与 pc-api/config/oa.php::app_version 同步 — 首屏渲染就显示正确版本)
   // 部署前用 .workbuddy/sync_version.py 自动同步
-  version: 'v1.3.2',
+  version: 'v1.4.1',
   system_name: '安防运维OA办公系统',
   system_short_name: '安防OA',
   copyright: '@2026zsk',
@@ -35,11 +35,11 @@ function loadFromLocal(): SystemSettings {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const cached = JSON.parse(raw)
-      // V1.2.10: 版本号不匹配时丢弃缓存 (避免部署新版本后仍显示旧版本号)
-      if (cached.version === DEFAULT_SETTINGS.version) {
+      // V1.4.1: 缓存优先 — 缓存里是后端最后写入的真实设置(含版本号),
+      // 不再因"版本号与默认不一致"丢弃缓存(旧逻辑导致每次刷新都回退默认版本号)
+      if (cached && typeof cached === 'object' && typeof cached.version === 'string') {
         return { ...DEFAULT_SETTINGS, ...cached }
       }
-      // 版本号不一致 → 丢弃旧缓存, 用新默认值
     }
   } catch (e) { /* noop */ }
   return { ...DEFAULT_SETTINGS }

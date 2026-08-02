@@ -48,6 +48,13 @@ window.addEventListener('beforeunload', () => {
 })
 
 // V0.5.7 块6 — 注册 Service Worker (PWA)
+// V1.4.1: 部署策略已禁用服务端 sw.js; 主动注销历史已注册的旧 Service Worker,
+//         避免旧 SW 拦截资源导致前端缓存旧版本(版本号/页面不更新)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const reg of regs) reg.unregister()
+  }).catch(() => { /* ignore */ })
+}
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })

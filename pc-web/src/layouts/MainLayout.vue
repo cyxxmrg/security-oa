@@ -249,6 +249,8 @@ function onEmailClick(e: MouseEvent) {
 
 onMounted(() => {
   loadUnreadCount()
+  // V1.4.1: 登录后主动拉取系统设置(版本号/版权), 保证侧边栏版本号显示后端真实值, 不再依赖进数据管理页才刷新
+  systemConfigStore.fetchSettings()
   // 每 60s 拉一次
   unreadTimer = setInterval(loadUnreadCount, 60000)
 })
