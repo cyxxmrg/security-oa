@@ -1,6 +1,7 @@
 {
-    "name": "oa/security-oa-api",
-    "description": "安防运维OA系统后端API",
+    "name": "security-oa/platform-api",
+    "description": "Security OA enterprise operations API for security engineering, delivery and maintenance workflows",
+    "license": "MIT",
     "type": "project",
     "require": {
         "php": ">=8.2",

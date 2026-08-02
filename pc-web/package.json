@@ -1,6 +1,7 @@
 {
-  "name": "oa-security-pc",
-  "version": "1.2.11",
+  "name": "security-oa-web",
+  "version": "1.4.2",
+  "description": "Security OA enterprise operations web client for security engineering and maintenance teams",
   "private": true,
   "type": "module",
   "scripts": {
