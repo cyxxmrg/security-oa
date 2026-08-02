@@ -23,6 +23,7 @@ class Tool extends Model
         'code',
         'specification',
         'unit',
+        'quantity',
         'warehouse_id',
         'status',
         'remark',
@@ -31,6 +32,7 @@ class Tool extends Model
 
     protected $casts = [
         'inventory_item_id' => 'integer',
+        'quantity'          => 'integer',
         'warehouse_id'      => 'integer',
         'created_by'        => 'integer',
     ];

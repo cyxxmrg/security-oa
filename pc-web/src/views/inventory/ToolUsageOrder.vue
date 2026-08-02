@@ -106,7 +106,7 @@
             <el-input-number
               v-model="row.quantity"
               :min="1"
-              :max="movementType === 'checkout' ? (row.tool?.current_stock || 99999) : 99999"
+              :max="Math.max(1, movementType === 'checkout' ? (row.tool?.available ?? 1) : (row.tool?.borrowed ?? 1))"
               :step="1"
               size="small"
               style="width: 110px"
@@ -144,13 +144,22 @@
           <template #default="{ row }">{{ row.specification || '-' }}</template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="60" align="center" />
+        <el-table-column label="台账件数" width="90" align="center">
+          <template #default="{ row }">{{ row.quantity ?? 0 }}</template>
+        </el-table-column>
         <el-table-column label="在库数量" width="90" align="center">
           <template #default="{ row }">{{ row.current_stock ?? 0 }}</template>
         </el-table-column>
-        <el-table-column label="已借出" width="80" align="center">
+        <el-table-column v-if="movementType === 'checkout'" label="可用件数" width="90" align="center">
           <template #default="{ row }">
-            <span v-if="(row.borrowed ?? 0) > 0" style="font-weight: 600; color: #0C447C">{{ row.borrowed }}</span>
-            <span v-else class="muted">-</span>
+            <span v-if="(row.available ?? 0) > 0" style="font-weight: 600; color: #1D9E75">{{ row.available }}</span>
+            <span v-else class="muted">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column v-else label="已借出" width="90" align="center">
+          <template #default="{ row }">
+            <span v-if="(row.borrowed ?? 0) > 0" style="font-weight: 600; color: #A32D2D">{{ row.borrowed }}</span>
+            <span v-else class="muted">0</span>
           </template>
         </el-table-column>
       </el-table>
@@ -161,8 +170,8 @@
     </el-dialog>
 
     <!-- 库存转工具 -->
-    <el-dialog v-model="showConvert" title="库存转工具" width="900px" :close-on-click-modal="false" top="10vh">
-      <el-alert title="把库存商品转换为工具台账，自动生成固定资产编号（GD-YYYYMMDD-NNNN）。已转换过的商品会跳过。" type="info" :closable="false" show-icon style="margin-bottom: 12px" />
+    <el-dialog v-model="showConvert" title="库存转工具" width="980px" :close-on-click-modal="false" top="10vh">
+      <el-alert title="把库存商品的部分数量转换为工具台账，自动生成固定资产编号（GD-YYYYMMDD-NNNN）。转换数量不能超过当前库存，已转换过的商品会跳过。" type="info" :closable="false" show-icon style="margin-bottom: 12px" />
       <div class="movement-toolbar">
         <el-button type="primary" plain size="small" :icon="Plus" @click="convertPickerVisible = true">选择库存商品</el-button>
         <span class="muted">已选 {{ convertItems.length }} 项</span>
@@ -170,15 +179,20 @@
       <el-table :data="convertItems" stripe border style="width: 100%" max-height="340">
         <el-table-column type="index" label="#" width="42" />
         <el-table-column label="编码" width="130">
-          <template #default="{ row }"><span class="item-code">{{ row.code }}</span></template>
+          <template #default="{ row }"><span class="item-code">{{ row.item.code }}</span></template>
         </el-table-column>
-        <el-table-column prop="name" label="商品名称" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="item.name" label="商品名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="规格" width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.specification || row.spec || '-' }}</template>
+          <template #default="{ row }">{{ row.item.specification || row.item.spec || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="unit" label="单位" width="60" align="center" />
-        <el-table-column label="库存" width="80" align="center">
-          <template #default="{ row }">{{ row.current_stock ?? 0 }}</template>
+        <el-table-column prop="item.unit" label="单位" width="60" align="center" />
+        <el-table-column label="当前库存" width="90" align="center">
+          <template #default="{ row }">{{ row.item.current_stock ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column label="转换数量" width="130">
+          <template #default="{ row }">
+            <el-input-number v-model="row.quantity" :min="1" :max="Math.max(1, row.item.current_stock ?? 1)" :step="1" size="small" style="width: 110px" />
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="55" align="center">
           <template #default="{ $index }">
@@ -214,8 +228,10 @@ interface ToolOption extends Record<string, unknown> {
   specification?: string | null
   unit?: string | null
   status: string
+  quantity?: number
   current_stock?: number
   borrowed?: number
+  available?: number
 }
 
 interface RecordRow extends Record<string, unknown> {
@@ -231,6 +247,8 @@ interface RecordRow extends Record<string, unknown> {
 }
 
 interface MovementRow { uid: string; tool: ToolOption | null; quantity: number }
+
+interface ConvertRow { uid: string; item: InventoryItem; quantity: number }
 
 const searchKey = ref('')
 const filterType = ref('')
@@ -346,7 +364,7 @@ function confirmToolPick() {
     movementItems.value.push({
       uid: String(Date.now()) + String(Math.random()) + String(t.id),
       tool: { ...t },
-      quantity: Math.min(1, movementType.value === 'checkout' ? (t.current_stock || 1) : (t.borrowed || 1)),
+      quantity: Math.min(1, movementType.value === 'checkout' ? (t.available || t.current_stock || 1) : (t.borrowed || 1)),
     })
   }
   toolPickerVisible.value = false
@@ -355,9 +373,9 @@ function confirmToolPick() {
 // ===== 库存转工具 =====
 const showConvert = ref(false)
 const converting = ref(false)
-const convertItems = ref<InventoryItem[]>([])
+const convertItems = ref<ConvertRow[]>([])
 const convertPickerVisible = ref(false)
-const convertPickedIds = computed(() => convertItems.value.map(i => i.id))
+const convertPickedIds = computed(() => convertItems.value.map(i => i.item.id))
 
 function openConvert() {
   convertItems.value = []
@@ -367,8 +385,12 @@ function openConvert() {
 function onConvertPick(items: InventoryItem[]) {
   if (!items || !items.length) return
   for (const it of items) {
-    if (!convertItems.value.some(c => c.id === it.id)) {
-      convertItems.value.push({ ...it })
+    if (!convertItems.value.some(c => c.item.id === it.id)) {
+      convertItems.value.push({
+        uid: String(Date.now()) + String(Math.random()) + String(it.id),
+        item: { ...it },
+        quantity: Math.min(1, it.current_stock || 1),
+      })
     }
   }
   convertPickerVisible.value = false
@@ -379,12 +401,12 @@ async function submitConvert() {
   converting.value = true
   try {
     const res = await post('/inventory/tools/convert', {
-      items: convertItems.value.map(i => ({ inventory_item_id: i.id })),
+      items: convertItems.value.map(r => ({ inventory_item_id: r.item.id, quantity: r.quantity })),
     })
     const d = (res?.data ?? {}) as { created?: unknown[]; skipped?: { reason?: string }[] }
     const created = d.created?.length || 0
     const skipped = d.skipped?.length || 0
-    ElMessage.success(`转换成功 ${created} 件工具${skipped ? `, 跳过 ${skipped} 件(已存在)` : ''}, 已自动生成固定资产编号`)
+    ElMessage.success(`转换成功 ${created} 件工具${skipped ? `, 跳过 ${skipped} 件(已存在或数量超库存)` : ''}, 已自动生成固定资产编号`)
     showConvert.value = false
     await loadList(pagination.page)
   } catch (e: unknown) {

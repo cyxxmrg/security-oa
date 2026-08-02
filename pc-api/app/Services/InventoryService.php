@@ -909,9 +909,9 @@ class InventoryService
     }
 
     /**
-     * V1.3.4: 工具使用单 — 库存转工具
+     * V1.3.5: 工具使用单 — 库存转工具 (支持选择数量)
      *
-     * 把库存商品转换成工具台账, 自动生成固定资产编号 GD-YYYYMMDD-NNNN。
+     * 把库存商品的部分数量转换成工具台账, 自动生成固定资产编号 GD-YYYYMMDD-NNNN。
      * 已转换过的商品跳过 (inventory_item_id 唯一)。
      *
      * @return array{created:array, skipped:array}
@@ -921,12 +921,14 @@ class InventoryService
         $data = $request->validate([
             'items' => 'required|array|min:1',
             'items.*.inventory_item_id' => 'required|integer|exists:inventory_items,id',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
         $created = [];
         $skipped = [];
         foreach ($data['items'] as $it) {
             $itemId = (int) $it['inventory_item_id'];
+            $qty    = (int) $it['quantity'];
             if (Tool::where('inventory_item_id', $itemId)->exists()) {
                 $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
                 continue;
@@ -936,6 +938,10 @@ class InventoryService
                 $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '商品不存在'];
                 continue;
             }
+            if ($qty > (int) $item->current_stock) {
+                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => "转换数量超过当前库存({$item->current_stock})"];
+                continue;
+            }
             $tool = Tool::create([
                 'inventory_item_id' => $itemId,
                 'fixed_asset_no'    => $this->nextFixedAssetNo(),
@@ -943,6 +949,7 @@ class InventoryService
                 'code'              => $item->code,
                 'specification'     => $item->specification ?: ($item->spec ?? null),
                 'unit'              => $item->unit,
+                'quantity'          => $qty,
                 'warehouse_id'      => $item->warehouse_id,
                 'status'            => 'in_stock',
                 'created_by'        => $request->user()->id,
@@ -979,21 +986,30 @@ class InventoryService
                 }
                 $item = InventoryItem::lockForUpdate()->findOrFail($tool->inventory_item_id);
                 $qty  = (int) $it['quantity'];
+                $borrowed = $this->toolBorrowedCount($tool->inventory_item_id);
 
                 if ($isCheckout) {
+                    $available = (int) $tool->quantity - $borrowed;
+                    if ($qty > $available) {
+                        throw new RuntimeException("工具「{$tool->name}」可领用件数不足(台账 {$tool->quantity} 件, 已借出 {$borrowed} 件, 可用 {$available} 件)");
+                    }
                     if ((int) $item->current_stock < $qty) {
                         throw new RuntimeException("工具「{$tool->name}」库存不足(当前 {$item->current_stock}, 需 {$qty})");
                     }
                     $item->decrement('current_stock', $qty);
-                    $tool->update(['status' => 'out']);
                 } else {
+                    if ($qty > $borrowed) {
+                        throw new RuntimeException("工具「{$tool->name}」已借出 {$borrowed} 件, 退还数量超出");
+                    }
                     $item->increment('current_stock', $qty);
                     if ($item->warehouse_id === null && $tool->warehouse_id) {
                         $item->warehouse_id = (int) $tool->warehouse_id;
                         $item->save();
                     }
-                    $tool->update(['status' => 'in_stock']);
                 }
+
+                $newBorrowed = $isCheckout ? $borrowed + $qty : $borrowed - $qty;
+                $tool->update(['status' => $newBorrowed >= (int) $tool->quantity ? 'out' : 'in_stock']);
 
                 $records[] = StockRecord::create([
                     'record_no'         => $recordNo,
@@ -1013,6 +1029,18 @@ class InventoryService
                 'records'    => $records,
             ];
         });
+    }
+
+    /**
+     * V1.3.5: 指定库存商品累计借出件数 (领用 - 退还)
+     */
+    private function toolBorrowedCount(int $inventoryItemId): int
+    {
+        $a = StockRecord::where('inventory_item_id', $inventoryItemId)
+            ->whereIn('type', ['tool_checkout', 'tool_return'])
+            ->selectRaw("SUM(CASE WHEN type = 'tool_checkout' THEN quantity ELSE 0 END) AS out_qty, SUM(CASE WHEN type = 'tool_return' THEN quantity ELSE 0 END) AS in_qty")
+            ->first();
+        return $a ? (int) $a->out_qty - (int) $a->in_qty : 0;
     }
 
     /**
@@ -1086,6 +1114,7 @@ class InventoryService
         foreach ($tools as $tool) {
             $a = $agg->get($tool->inventory_item_id);
             $tool->borrowed = $a ? (int) $a->out_qty - (int) $a->in_qty : 0;
+            $tool->available = max(0, (int) $tool->quantity - $tool->borrowed);
             $tool->current_stock = (int) ($tool->inventoryItem->current_stock ?? 0);
         }
 
