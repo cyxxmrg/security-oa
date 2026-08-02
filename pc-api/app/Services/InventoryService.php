@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\InventoryItem;
 use App\Models\InventoryCategory;
 use App\Models\StockRecord;
+use App\Models\ToolUsageOrder;
 use App\Models\Warehouse;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -905,6 +906,64 @@ class InventoryService
         $fullPrefix = "{$prefix}-{$today}-";
         $cnt = StockRecord::where('record_no', 'like', $fullPrefix . '%')->count();
         return $fullPrefix . str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * V1.3.3: 工具使用单 — 领用/退还流水
+     *
+     * @param  string  $direction  'checkout'=工具领用(出库,扣库存) | 'return'=工具退还(入库,加库存)
+     * @return array{record_no:string,item_count:int,records:array}
+     */
+    public function toolMovement(Request $request, ToolUsageOrder $order, string $direction): array
+    {
+        $isCheckout = $direction === 'checkout';
+        $data = $request->validate([
+            'items'            => 'required|array|min:1',
+            'items.*.item_id'  => 'required|integer|exists:inventory_items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'remark'           => 'nullable|string|max:500',
+        ]);
+
+        return DB::transaction(function () use ($data, $order, $isCheckout, $request) {
+            $recordNo = $this->nextRecordNo('TU');
+            $records  = [];
+            foreach ($data['items'] as $it) {
+                $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                $qty  = (int) $it['quantity'];
+
+                if ($isCheckout) {
+                    if ((int) $item->current_stock < $qty) {
+                        throw new RuntimeException("工具「{$item->name}」库存不足(当前 {$item->current_stock}, 需 {$qty})");
+                    }
+                    $item->decrement('current_stock', $qty);
+                } else {
+                    $item->increment('current_stock', $qty);
+                    if ($item->warehouse_id === null && $order->warehouse_id) {
+                        $item->warehouse_id = (int) $order->warehouse_id;
+                        $item->save();
+                    }
+                }
+
+                $records[] = StockRecord::create([
+                    'record_no'         => $recordNo,
+                    'inventory_item_id' => $item->id,
+                    'warehouse_id'      => $order->warehouse_id,
+                    'type'              => $isCheckout ? 'tool_checkout' : 'tool_return',
+                    'quantity'          => $qty,
+                    'remaining_stock'   => (int) $item->current_stock,
+                    'order_no'          => $order->code,
+                    'project_id'        => $order->project_id,
+                    'operator_id'       => $request->user()->id,
+                    'remark'            => $data['remark'] ?? null,
+                ]);
+            }
+
+            return [
+                'record_no'  => $recordNo,
+                'item_count' => count($records),
+                'records'    => $records,
+            ];
+        });
     }
 
     // ============================================================

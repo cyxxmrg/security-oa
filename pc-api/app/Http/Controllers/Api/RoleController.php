@@ -457,6 +457,7 @@ class RoleController extends Controller
                 ['path' => 'outbound-order',   'name' => 'InventoryOutboundOrder',   'title' => '出库单',   'perm_key' => 'inventory.outbound'],
                 ['path' => 'material-request', 'name' => 'InventoryMaterialRequest', 'title' => '领料单',   'perm_key' => 'inventory.request'],
                 ['path' => 'material-return',  'name' => 'InventoryMaterialReturn',  'title' => '退料单',   'perm_key' => 'inventory.return'],
+                ['path' => 'tool-usage',       'name' => 'InventoryToolUsage',       'title' => '工具使用单','perm_key' => 'inventory.transfer'],
             ]],
             ['path' => 'finance', 'title' => '财务管理', 'icon' => 'Wallet', 'leaves' => [
                 ['path' => 'overview',        'name' => 'FinanceOverview',        'title' => '财务概览',   'perm_key' => 'finance.overview'],

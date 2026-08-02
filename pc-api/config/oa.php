@@ -9,7 +9,7 @@
 return [
 
     // 应用版本号 (全系统单一真相源 — 改这里, 前端/后端/部署全部自动同步)
-    'app_version' => 'v1.3.2',
+    'app_version' => 'v1.3.3',
 
     // 慢接口阈值 (毫秒) — P2-3 三级阈值
     'warn_ms'     => (int) env('OA_WARN_MS', 200),   // 偏慢, debug 记

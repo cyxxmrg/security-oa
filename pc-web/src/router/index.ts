@@ -391,6 +391,7 @@ const routes: RouteRecordRaw[] = [
           { path: 'outbound-order', name: 'InventoryOutboundOrder', component: () => import('@/views/inventory/OutboundOrder.vue'), meta: { title: '出库单' } },
           { path: 'material-request', name: 'InventoryMaterialRequest', component: () => import('@/views/inventory/MaterialRequest.vue'), meta: { title: '领料单' } },
           { path: 'material-return', name: 'InventoryMaterialReturn', component: () => import('@/views/inventory/MaterialReturn.vue'), meta: { title: '退料单' } },
+          { path: 'tool-usage-order', name: 'InventoryToolUsageOrder', component: () => import('@/views/inventory/ToolUsageOrder.vue'), meta: { title: '工具使用单' } },
           { path: 'warehouse-manage', name: 'InventoryWarehouseManage', component: () => import('@/views/inventory/WarehouseManage.vue'), meta: { title: '仓库管理' } },
           { path: 'stock-transfer', name: 'InventoryStockTransfer', component: () => import('@/views/inventory/StockTransfer.vue'), meta: { title: '调拨单' } }
         ]

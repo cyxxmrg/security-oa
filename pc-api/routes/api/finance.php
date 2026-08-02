@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\VehicleController;
 use App\Http\Controllers\Api\FuelCardController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\InventoryCategoryController;
+use App\Http\Controllers\Api\ToolUsageOrderController;
 use App\Http\Controllers\Api\DiskController;
 use App\Http\Controllers\Api\KnowledgeController;
 use App\Http\Controllers\Api\BackupController;
@@ -91,6 +92,14 @@ Route::prefix('inventory')->middleware(['auth:sanctum', 'ensure_business', 'perm
     Route::delete('warehouses/{id}', [InventoryController::class, 'warehouseDestroy'])->middleware('permission:inventory.create');
     // 仓库调拨 (V1.2.14p)
     Route::post('stock-transfer', [InventoryController::class, 'stockTransfer'])->middleware('permission:inventory.transfer');
+    // 工具使用单 (V1.3.3) — 注意: 必须在 {inventoryItem} 泛路由之前注册
+    Route::get('tool-usage-orders', [ToolUsageOrderController::class, 'index']);
+    Route::post('tool-usage-orders', [ToolUsageOrderController::class, 'store'])->middleware('permission:inventory.transfer');
+    Route::get('tool-usage-orders/{toolUsageOrder}', [ToolUsageOrderController::class, 'show']);
+    Route::post('tool-usage-orders/{toolUsageOrder}/checkout', [ToolUsageOrderController::class, 'checkout'])->middleware('permission:inventory.transfer');
+    Route::post('tool-usage-orders/{toolUsageOrder}/return', [ToolUsageOrderController::class, 'returnItem'])->middleware('permission:inventory.transfer');
+    Route::post('tool-usage-orders/{toolUsageOrder}/close', [ToolUsageOrderController::class, 'close'])->middleware('permission:inventory.transfer');
+    Route::delete('tool-usage-orders/{toolUsageOrder}', [ToolUsageOrderController::class, 'destroy'])->middleware('permission:inventory.transfer');
     Route::get('{inventoryItem}', [InventoryController::class, 'show']);
     Route::put('{inventoryItem}', [InventoryController::class, 'update'])->middleware('permission:inventory.create');
     Route::delete('{inventoryItem}', [InventoryController::class, 'destroy'])->middleware('permission:inventory.create');
