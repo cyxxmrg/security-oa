@@ -82,10 +82,18 @@ if [ -d "$INSTALL_DIR/.git" ] || [ -d "$INSTALL_DIR/pc-api" ]; then
 fi
 
 # 随机密码生成
-rand_pass() { tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 16; }
+# 注意: 管道末尾 head -c 会让 tr 收到 SIGPIPE(141)，在 set -euo pipefail 下会静默终止脚本，
+# 因此函数末尾必须加 || true 吞掉该退出码，调用方才能拿到非空的随机串。
+rand_pass() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16 || true; }
 DB_PASS="$(rand_pass)"
+[ -z "$DB_PASS" ] && DB_PASS="$(head -c 256 /dev/urandom | sha256sum | cut -c1-16)"
 
 # ---------- 1. 系统基础工具 ----------
+# 停止无人值守升级, 避免其占用 apt/dpkg 锁导致后续安装失败 (部署机不需要自动更新)
+systemctl disable --now unattended-upgrades 2>/dev/null || true
+pkill -f unattended-upgrade 2>/dev/null || true
+pkill -f apt.systemd.daily 2>/dev/null || true
+sleep 2
 info "更新软件源并安装基础工具..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -141,8 +149,12 @@ systemctl enable --now postgresql redis-server nginx
 # ---------- 7. 创建数据库与用户 ----------
 info "创建数据库 security_oa 与用户 oa_user..."
 set +e
-sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='oa_user'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER oa_user WITH PASSWORD '$DB_PASS' CREATEDB;"
+# 每次都同步 oa_user 密码: 首次创建, 后续重跑 ALTER 同步, 避免 .env 与库中实际密码因多次随机生成而不一致
+if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='oa_user'" | grep -q 1; then
+  sudo -u postgres psql -c "ALTER USER oa_user WITH PASSWORD '$DB_PASS' CREATEDB;" >/dev/null 2>&1
+else
+  sudo -u postgres psql -c "CREATE USER oa_user WITH PASSWORD '$DB_PASS' CREATEDB;" >/dev/null 2>&1
+fi
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='security_oa'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE security_oa OWNER oa_user;"
 set -e
@@ -164,12 +176,20 @@ WEB_DIR="$INSTALL_DIR/pc-web"
 # ---------- 9. 配置 pc-api ----------
 info "配置后端 pc-api ..."
 cd "$API_DIR"
+# 全新 clone 后 bootstrap/cache、storage 等运行时目录被 .gitignore 排除, 可能不存在,
+# 必须在 composer install (其 post-update-cmd 会触发 artisan) 之前创建, 否则 artisan 启动失败。
+mkdir -p bootstrap/cache storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
 cp -n .env.example .env
 sed -i "s#^APP_URL=.*#APP_URL=http://${DOMAIN}#" .env
 sed -i "s#^DB_PASSWORD=.*#DB_PASSWORD=${DB_PASS}#" .env
 sed -i "s#^SANCTUM_STATEFUL_DOMAINS=.*#SANCTUM_STATEFUL_DOMAINS=${DOMAIN}#" .env
 
 info "安装 PHP 依赖 (composer)..."
+export COMPOSER_ALLOW_SUPERUSER=1
+# Composer 2.8+ 默认因安全公告阻断受影响的包（如 laravel/framework 全版本）；
+# 部署环境需放行，否则 composer install 直接失败。写入项目 composer.json 的
+# config.policy.advisories.block=false（全局配置在当前版本不生效，必须用项目级）。
+composer config policy.advisories.block false >/dev/null 2>&1 || true
 composer install --no-dev --optimize-autoloader --no-interaction
 
 info "生成应用密钥并迁移数据库..."

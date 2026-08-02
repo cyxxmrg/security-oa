@@ -81,7 +81,8 @@ pc-api/scripts/__pycache__/
 output/
 logs/
 framework/
-app/
+# 注意: pc-api/app/ 是 Laravel 后端源码(控制器/模型/服务)，必须纳入版本控制。
+# 运行时目录已由下方 /pc-api/storage/ 单独排除，切勿在此排除 app/。
 =
 # 备份 / 数据库 dump / 遗留密钥
 *.sql
