@@ -15,6 +15,7 @@
 | **数据库** | PostgreSQL 15+ |
 | **缓存/队列** | Redis |
 | **认证** | Sanctum Token |
+|**开发测试部署环境**|Ubuntu Server 26.04 LTS|
 
 ## 功能模块（16 大模块）
 
