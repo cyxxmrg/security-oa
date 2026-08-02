@@ -4,7 +4,7 @@
 >
 > PC Web 端（Vue3）+ Laravel API 端（pc-api）全栈 OA 系统
 
-> 本仓库为开源发布的**纯核心源码**，仅包含前端与后端本体代码及必要配置，部署脚本、开发调试工具、归档文档等不入仓。
+> 本仓库为开源发布的**纯核心源码**，包含前端与后端本体代码、必要配置及 `install.sh` 一键部署脚本；开发调试工具、归档文档等不入仓。
 
 ## 技术栈
 
@@ -47,7 +47,7 @@ security-oa/
 └── .gitattributes
 ```
 
-> 部署（Docker /  桌面端）相关脚本不在本仓库内，如需生产部署文档请联系维护方获取。
+> 仓库内置 `install.sh` 提供 Ubuntu 22.04 / 24.04 一键部署（Nginx + PHP 8.5 + PostgreSQL + Redis + 前后端构建）。Docker / 桌面端部署方案可联系维护方获取。
 
 ## 快速开始
 
@@ -74,7 +74,7 @@ cd pc-api
 composer install
 cp .env.example .env       # 配置数据库凭据
 php artisan key:generate
-php artisan migrate --seed
+php artisan migrate
 php artisan serve          # http://localhost:8000
 ```
 
@@ -87,6 +87,27 @@ cd pc-web && npm run build
 # 后端优化
 cd pc-api && php artisan optimize
 ```
+
+## 一键部署（Ubuntu 服务器）
+
+仓库内置 `install.sh`，可在干净的 Ubuntu 22.04 / 24.04 上自动完成全套安装与启动：
+
+```bash
+# 以 root 执行
+sudo bash install.sh --domain oa.example.com
+```
+
+脚本自动安装 PHP 8.5（sury 源）、Composer、Node.js 20、Nginx、PostgreSQL、Redis，拉取源码、配置后端（随机生成数据库密码与应用密钥）、构建前端，并写入 Nginx 站点（80 端口同源托管前端与 `/api`）。
+
+| 参数 | 说明 |
+|---|---|
+| `--domain <域名或IP>` | 指定访问地址（默认取本机 IP） |
+| `--dir <路径>` | 安装目录（默认 `/var/www/oa`） |
+| `--demo` | 额外创建演示管理员 `admin`（随机密码，结尾打印） |
+| `--skip-clone` | 复用已有代码目录，跳过 git clone |
+| `--force` | 目标目录已存在时强制覆盖重装 |
+
+> 脚本不硬编码任何真实密码，数据库密码与应用密钥均随机生成并打印；部署后请及时修改默认凭据并启用 HTTPS。
 
 ## 版本里程碑
 
