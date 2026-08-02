@@ -183,6 +183,10 @@ cp -n .env.example .env
 sed -i "s#^APP_URL=.*#APP_URL=http://${DOMAIN}#" .env
 sed -i "s#^DB_PASSWORD=.*#DB_PASSWORD=${DB_PASS}#" .env
 sed -i "s#^SANCTUM_STATEFUL_DOMAINS=.*#SANCTUM_STATEFUL_DOMAINS=${DOMAIN}#" .env
+# Laravel 11 读取 CACHE_STORE (旧键 CACHE_DRIVER 已废弃); 缺失会使缓存回退到
+# database 驱动, 因缺 cache 表导致登录等接口 500。此处幂等确保为 redis。
+grep -q "^CACHE_STORE=" .env || echo "CACHE_STORE=redis" >> .env
+sed -i "s#^CACHE_STORE=.*#CACHE_STORE=redis#" .env
 
 info "安装 PHP 依赖 (composer)..."
 export COMPOSER_ALLOW_SUPERUSER=1
@@ -231,6 +235,9 @@ server {
     }
 
     location ~ \.php\$ {
+        # 必须显式声明 root: try_files 将 /api/* 重写到 /index.php 后,
+        # 内部跳转至此 location, 若无 root 会落到 nginx 默认 root 导致 404
+        root ${API_DIR}/public;
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php${PHP_VER}-fpm.sock;
     }
