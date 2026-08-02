@@ -73,7 +73,7 @@ flowchart LR
 | --- | --- | --- |
 | [`pc-web/`](./pc-web) | Web 客户端 | 页面、组件、状态管理、权限指令和前端 API 适配层 |
 | [`pc-api/`](./pc-api) | 业务服务端 | API、领域服务、模型、队列任务、迁移与自动化测试 |
-| [`install.sh`](./install.sh) | 生产安装器 | 在 Ubuntu 22.04 / 24.04 LTS 上安装并配置完整运行环境 |
+| [`install.sh`](./install.sh) | 生产安装器 | 在 Ubuntu 26.04  LTS 上安装并配置完整运行环境 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 版本记录 | 按版本记录能力变化、重要修复和兼容性说明 |
 | [`docs/PROJECT_STRUCTURE.md`](./docs/PROJECT_STRUCTURE.md) | 代码地图 | 关键目录、入口文件、调用关系和常见开发任务导航 |
 | [`output/OA_V1.4.2_专项修复验证报告_20260802.md`](./output/OA_V1.4.2_专项修复验证报告_20260802.md) | 验证基线 | V1.4.2 构建、审批、客户、库存和数据一致性验证结果 |
