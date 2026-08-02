@@ -47,7 +47,7 @@ security-oa/
 └── .gitattributes
 ```
 
-> 仓库内置 `install.sh` 提供 Ubuntu 22.04 / 24.04 一键部署（Nginx + PHP 8.5 + PostgreSQL + Redis + 前后端构建）。Docker / 桌面端部署方案可联系维护方获取。
+> 仓库内置 `install.sh` 提供 Ubuntu 26.04  一键部署（Nginx + PHP 8.5 + PostgreSQL + Redis + 前后端构建）。Docker / 桌面端部署方案可联系维护方获取。
 
 ## 快速开始
 
