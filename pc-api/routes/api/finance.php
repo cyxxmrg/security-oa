@@ -73,6 +73,8 @@ Route::prefix('inventory')->middleware(['auth:sanctum', 'ensure_business', 'perm
     Route::post('/', [InventoryController::class, 'store'])->middleware('permission:inventory.create');
     Route::get('stock-records', [InventoryController::class, 'stockRecords']);
     Route::get('stock-records/{recordNo}', [InventoryController::class, 'stockRecordDetail']);
+    // V1.3.6: 库存流水记录 (原始明细, 不聚合, 供出入库页逐条展示)
+    Route::get('stock-flow', [InventoryController::class, 'stockFlow']);
     Route::get('warehouses', [InventoryController::class, 'warehouses']);
     Route::get('low-stock', [InventoryController::class, 'lowStock']);
     Route::get('stats', [InventoryController::class, 'stats']);

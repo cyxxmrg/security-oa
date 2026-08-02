@@ -35,7 +35,7 @@
         </el-table-column>
         <el-table-column label="物料" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="row.inventoryItem">{{ row.inventoryItem.name }}（{{ row.inventoryItem.code }}）</span>
+            <span v-if="itemLabel(row)">{{ itemLabel(row) }}</span>
             <span v-else class="muted">物料 #{{ row.inventory_item_id }}</span>
           </template>
         </el-table-column>
@@ -47,11 +47,11 @@
             <span :style="{ color: isInbound(row.type) ? '#1D9E75' : '#A32D2D', fontWeight: 600 }">
               {{ isInbound(row.type) ? '+' : '-' }}{{ row.quantity }}
             </span>
-            <span class="unit-text"> {{ row.inventoryItem?.unit || '' }}</span>
+            <span class="unit-text"> {{ itemOf(row)?.unit || '' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作后库存" width="120" align="center">
-          <template #default="{ row }">{{ row.remaining_stock }} {{ row.inventoryItem?.unit || '' }}</template>
+          <template #default="{ row }">{{ row.remaining_stock }} {{ itemOf(row)?.unit || '' }}</template>
         </el-table-column>
         <el-table-column label="操作人" width="100">
           <template #default="{ row }">{{ row.operator?.name || '-' }}</template>
@@ -101,6 +101,16 @@ const recordTypeLabel = (t?: string) => typeLabelMap[t ?? ''] || t || '-'
 const recordTypeTag = (t?: string): TagType => typeTagMap[t ?? ''] || 'info'
 const isInbound = (t?: string) => ['in', 'return'].includes(t ?? '')
 
+// V1.3.6: 兼容分页接口返回的关联键 (分页序列化为 inventory_item, 详情为 inventoryItem)
+interface ItemLite { name?: string; code?: string; unit?: string }
+function itemOf(row: Record<string, unknown>): ItemLite | undefined {
+  return (row.inventoryItem ?? row.inventory_item) as ItemLite | undefined
+}
+function itemLabel(row: Record<string, unknown>): string {
+  const it = itemOf(row)
+  return it && it.name ? `${it.name}（${it.code || ''}）` : ''
+}
+
 const formatDate = (s?: string | null) => {
   if (!s) return '-'
   const d = new Date(s)
@@ -113,6 +123,7 @@ async function loadList(page = 1) {
   pagination.page = page
   loading.value = true
   try {
+    // V1.3.6: 改用 /inventory/stock-flow 原始明细流水接口 (逐条显示, 带物料信息)
     const params: Record<string, unknown> = { page, per_page: pagination.per_page }
     if (filterType.value) params.type = filterType.value
     if (searchKey.value)  params.keyword = searchKey.value
@@ -120,8 +131,7 @@ async function loadList(page = 1) {
       params.date_from = dateRange.value[0]
       params.date_to = dateRange.value[1]
     }
-    const res = await get('/inventory/stock-records', params)
-    // V0.6.3: res = {code, data: paginator}
+    const res = await get('/inventory/stock-flow', params)
     const pag = unwrapPaginate(res)
     list.value = pag.list
     pagination.total = pag.total

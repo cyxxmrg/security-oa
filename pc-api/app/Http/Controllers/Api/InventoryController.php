@@ -84,6 +84,12 @@ class InventoryController extends Controller
         return response()->json(['code' => 0, 'data' => $this->svc->paginateStockRecords($request)]);
     }
 
+    /** V1.3.6: 库存流水记录 (原始明细, 不聚合) */
+    public function stockFlow(Request $request): JsonResponse
+    {
+        return response()->json(['code' => 0, 'data' => $this->svc->paginateRawStockRecords($request)]);
+    }
+
     public function stockRecordDetail(string $recordNo): JsonResponse
     {
         $data = $this->svc->stockRecordDetail($recordNo);

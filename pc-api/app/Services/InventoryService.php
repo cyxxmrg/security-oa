@@ -662,6 +662,39 @@ class InventoryService
     }
 
     /**
+     * V1.3.6: 库存流水记录 — 原始明细流水分页 (不聚合)
+     *
+     * 供「出入库」流水记录页逐条展示 (每行=一次物料变动, 带完整物料信息)。
+     * 排除工具领退流水 (tool_checkout/tool_return), 工具流水在「工具使用单」页展示。
+     */
+    public function paginateRawStockRecords(Request $request)
+    {
+        $query = StockRecord::with([
+                'inventoryItem:id,code,name,specification,unit',
+                'operator:id,name',
+                'warehouse:id,name',
+            ])
+            ->whereNotIn('type', ['tool_checkout', 'tool_return']);
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+        if ($request->filled('keyword')) {
+            $kw = $request->keyword;
+            $query->where(function ($q) use ($kw) {
+                $q->where('record_no', 'like', "%{$kw}%")
+                  ->orWhereHas('inventoryItem', fn ($x) => $x->where('name', 'like', "%{$kw}%")->orWhere('code', 'like', "%{$kw}%"))
+                  ->orWhereHas('operator', fn ($x) => $x->where('name', 'like', "%{$kw}%"));
+            });
+        }
+        if ($request->filled('date_from')) $query->whereDate('created_at', '>=', $request->date_from);
+        if ($request->filled('date_to'))   $query->whereDate('created_at', '<=', $request->date_to);
+
+        return $query->orderByDesc('created_at')
+            ->paginate((int) $request->integer('per_page', 15));
+    }
+
+    /**
      * V1.2.14p: 单据详情 (整单 + 物料明细)
      */
     public function stockRecordDetail(string $recordNo): ?array
