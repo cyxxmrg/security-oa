@@ -1,6 +1,6 @@
 # 安防运维 OA 系统 (Security OA)
 
-> **v1.3.2** — 企业级安防运维综合办公管理系统
+> **v1.3.2** — 安防运维企业综合办公管理系统
 >
 > PC Web 端（Vue3）+ Laravel API 端（pc-api）全栈 OA 系统
 
