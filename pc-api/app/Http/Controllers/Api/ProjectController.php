@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ProjectStage;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectStageRequest;
 use App\Models\{Project, ProjectContract, ConstructionLog, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProjectController extends Controller
 {
+    use ClearsListCache;
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -131,6 +134,7 @@ class ProjectController extends Controller
                 \Log::warning('项目网盘文件夹创建失败', ['project_id' => $project->id, 'error' => $e->getMessage()]);
             }
         }
+        $this->clearListCache('projects:index');
 
         return response()->json(['code' => 0, 'message' => '创建成功', 'data' => $project->load('customer', 'manager')]);
     }
@@ -148,6 +152,7 @@ class ProjectController extends Controller
 
         $project->update($data);
         Cache::forget('projects:dashboard_summary');
+        $this->clearListCache('projects:index');
         return response()->json(['code' => 0, 'message' => '更新成功', 'data' => $project]);
     }
 
@@ -156,6 +161,7 @@ class ProjectController extends Controller
         $data = $request->validated();
         Cache::forget('projects:dashboard_summary');
         $project->update(['stage' => $data['stage']]);
+        $this->clearListCache('projects:index');
         return response()->json(['code' => 0, 'message' => '阶段更新成功']);
     }
 
@@ -218,6 +224,7 @@ class ProjectController extends Controller
         // 业务规则：已开工/已完成的项目不能删
         $stageValue = $project->stage instanceof \BackedEnum ? $project->stage->value : $project->stage;
         if (in_array($stageValue, ['construction', 'acceptance', 'settlement', 'warranty'], true)) {
+        $this->clearListCache('projects:index');
             return response()->json(['code' => 1001, 'message' => '项目已进入施工/结算/质保阶段，不允许删除'], 422);
         }
         // 业务规则：有合同的项目不能删

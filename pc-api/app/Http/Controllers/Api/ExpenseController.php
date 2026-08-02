@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Models\ExpenseClaim;
 use App\Models\ExpenseItem;
 use App\Models\Project;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\Cache;
 
 class ExpenseController extends Controller
 {
+    use ClearsListCache;
+
     public function index(Request $request): JsonResponse
     {
         // V1.3.1: 缓存响应 JSON, 避免 Eloquent 序列化开销
@@ -137,6 +140,7 @@ class ExpenseController extends Controller
         } catch (\Throwable $e) {
             \Log::error('ExpenseController::store sync to approval center failed', ['msg' => $e->getMessage()]);
         }
+        $this->clearListCache('expenses:index');
 
         return response()->json(['code' => 0, 'message' => '报销单已提交', 'data' => $claim]);
     }
@@ -144,6 +148,7 @@ class ExpenseController extends Controller
     public function update(Request $request, ExpenseClaim $claim): JsonResponse
     {
         if ($claim->status !== 'draft' && $claim->status !== 'submitted') {
+        $this->clearListCache('expenses:index');
             return response()->json(['code' => 1001, 'message' => '只有草稿/待审批状态的报销单可以修改'], 422);
         }
         $data = $request->validate([
@@ -170,6 +175,7 @@ class ExpenseController extends Controller
     public function destroy(Request $request, ExpenseClaim $claim): JsonResponse
     {
         if ($claim->user_id !== $request->user()->id && !$request->user()->can('expense.delete')) {
+        $this->clearListCache('expenses:index');
             return response()->json(['code' => 1001, 'message' => '只能删除自己的报销单'], 403);
         }
         if (in_array($claim->status, ['approved', 'paid'])) {

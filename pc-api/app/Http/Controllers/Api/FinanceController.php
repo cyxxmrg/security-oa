@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Models\Receivable as ReceivableModel;
 use App\Models\Payable as PayableModel;
 use App\Models\FinancePayment;
@@ -18,6 +19,8 @@ use App\Http\Middleware\EnforcePaginationLimit;
 
 class FinanceController extends Controller
 {
+    use ClearsListCache;
+
     public function overview(Request $request): JsonResponse
     {
         $monthStart = now()->startOfMonth();
@@ -221,6 +224,7 @@ class FinanceController extends Controller
         } else {
             $data['status'] = 'pending';
         }
+        $this->clearListCache('receivables:index');
         return response()->json(['code' => 0, 'data' => ReceivableModel::create($data), 'message' => '应收已创建']);
     }
 
@@ -250,6 +254,7 @@ class FinanceController extends Controller
     public function destroyReceivable(ReceivableModel $receivable): JsonResponse
     {
         if ($receivable->received_amount > 0) {
+        $this->clearListCache('receivables:index');
             return response()->json(['code' => 1001, 'message' => '该应收单已有收款记录，不允许删除'], 422);
         }
         $receivable->delete();

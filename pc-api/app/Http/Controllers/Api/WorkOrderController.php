@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\WorkOrderPriority;
 use App\Enums\WorkOrderStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Services\WorkOrderService;
@@ -33,6 +34,8 @@ use Illuminate\Support\Facades\Cache;
  */
 class WorkOrderController extends Controller
 {
+    use ClearsListCache;
+
     public function __construct(private readonly WorkOrderService $service) {}
 
     public function index(Request $request): JsonResponse
@@ -121,6 +124,7 @@ class WorkOrderController extends Controller
             if ($project) {
                 $stage = is_object($project->stage) ? $project->stage->value : $project->stage;
                 if (!in_array($stage, ['settlement', 'warranty'], true)) {
+        $this->clearListCache('work_orders:index');
                     return response()->json([
                         'code' => 422,
                         'message' => "项目 #{$project->id} 当前阶段为「{$stage}」, 需进入「结算」或「质保」阶段后才能创建售后工单",
@@ -151,6 +155,7 @@ class WorkOrderController extends Controller
     {
         $wo = WorkOrder::findOrFail($id);
         if (!$wo->isEditable()) {
+        $this->clearListCache('work_orders:index');
             return response()->json(['code' => 422, 'message' => "工单 {$wo->code} 已锁定, 不可编辑"], 422);
         }
 
@@ -176,6 +181,7 @@ class WorkOrderController extends Controller
     {
         $wo = WorkOrder::findOrFail($id);
         if (!in_array($wo->status, [WorkOrderStatus::PENDING, WorkOrderStatus::CANCELLED], true)) {
+        $this->clearListCache('work_orders:index');
             return response()->json(['code' => 422, 'message' => "工单 {$wo->code} 状态 {$wo->status->value} 不可删除"], 422);
         }
         $wo->delete();

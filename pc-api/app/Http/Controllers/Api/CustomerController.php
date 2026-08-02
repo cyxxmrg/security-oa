@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Models\Customer;
 use App\Models\FollowUpRecord;
 use App\Services\CustomerService;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Cache;
  */
 class CustomerController extends Controller
 {
+    use ClearsListCache;
+
     public function __construct(private CustomerService $svc) {}
 
     public function index(Request $request): JsonResponse
@@ -64,12 +67,16 @@ class CustomerController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->createCustomer($request)]);
+        $result = $this->svc->createCustomer($request);
+        $this->clearListCache('customers:index');
+        return response()->json(['code' => 0, 'data' => $result]);
     }
 
     public function update(Request $request, Customer $customer): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->updateCustomer($request, $customer)]);
+        $result = $this->svc->updateCustomer($request, $customer);
+        $this->clearListCache('customers:index');
+        return response()->json(['code' => 0, 'data' => $result]);
     }
 
     public function listContacts(Customer $customer): JsonResponse
@@ -118,6 +125,7 @@ class CustomerController extends Controller
     {
         try {
             $this->svc->destroyCustomer($customer);
+            $this->clearListCache('customers:index');
             return response()->json(['code' => 0, 'data' => ['deleted' => true]]);
         } catch (\RuntimeException $e) {
             return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
