@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\InventoryItem;
 use App\Models\InventoryCategory;
 use App\Models\StockRecord;
-use App\Models\ToolUsageOrder;
+use App\Models\Tool;
 use App\Models\Warehouse;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -909,50 +909,99 @@ class InventoryService
     }
 
     /**
-     * V1.3.3: 工具使用单 — 领用/退还流水
+     * V1.3.4: 工具使用单 — 库存转工具
      *
-     * @param  string  $direction  'checkout'=工具领用(出库,扣库存) | 'return'=工具退还(入库,加库存)
+     * 把库存商品转换成工具台账, 自动生成固定资产编号 GD-YYYYMMDD-NNNN。
+     * 已转换过的商品跳过 (inventory_item_id 唯一)。
+     *
+     * @return array{created:array, skipped:array}
+     */
+    public function toolConvert(Request $request): array
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.inventory_item_id' => 'required|integer|exists:inventory_items,id',
+        ]);
+
+        $created = [];
+        $skipped = [];
+        foreach ($data['items'] as $it) {
+            $itemId = (int) $it['inventory_item_id'];
+            if (Tool::where('inventory_item_id', $itemId)->exists()) {
+                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
+                continue;
+            }
+            $item = InventoryItem::find($itemId);
+            if (!$item) {
+                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '商品不存在'];
+                continue;
+            }
+            $tool = Tool::create([
+                'inventory_item_id' => $itemId,
+                'fixed_asset_no'    => $this->nextFixedAssetNo(),
+                'name'              => $item->name,
+                'code'              => $item->code,
+                'specification'     => $item->specification ?: ($item->spec ?? null),
+                'unit'              => $item->unit,
+                'warehouse_id'      => $item->warehouse_id,
+                'status'            => 'in_stock',
+                'created_by'        => $request->user()->id,
+            ]);
+            $created[] = $tool->fresh();
+        }
+
+        return ['created' => $created, 'skipped' => $skipped];
+    }
+
+    /**
+     * V1.3.4: 工具使用单 — 工具领用/退还
+     *
+     * @param  string  $direction  'checkout'=领用(出库,扣库存,工具置为已领用) | 'return'=退还(入库,加库存,工具置为在库)
      * @return array{record_no:string,item_count:int,records:array}
      */
-    public function toolMovement(Request $request, ToolUsageOrder $order, string $direction): array
+    public function toolMovement(Request $request, string $direction): array
     {
         $isCheckout = $direction === 'checkout';
         $data = $request->validate([
             'items'            => 'required|array|min:1',
-            'items.*.item_id'  => 'required|integer|exists:inventory_items,id',
+            'items.*.tool_id'  => 'required|integer|exists:tools,id',
             'items.*.quantity' => 'required|integer|min:1',
             'remark'           => 'nullable|string|max:500',
         ]);
 
-        return DB::transaction(function () use ($data, $order, $isCheckout, $request) {
+        return DB::transaction(function () use ($data, $isCheckout, $request) {
             $recordNo = $this->nextRecordNo('TU');
             $records  = [];
             foreach ($data['items'] as $it) {
-                $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                $tool = Tool::with('inventoryItem')->findOrFail($it['tool_id']);
+                if (!$tool->inventoryItem) {
+                    throw new RuntimeException("工具「{$tool->name}」未关联库存商品, 无法操作");
+                }
+                $item = InventoryItem::lockForUpdate()->findOrFail($tool->inventory_item_id);
                 $qty  = (int) $it['quantity'];
 
                 if ($isCheckout) {
                     if ((int) $item->current_stock < $qty) {
-                        throw new RuntimeException("工具「{$item->name}」库存不足(当前 {$item->current_stock}, 需 {$qty})");
+                        throw new RuntimeException("工具「{$tool->name}」库存不足(当前 {$item->current_stock}, 需 {$qty})");
                     }
                     $item->decrement('current_stock', $qty);
+                    $tool->update(['status' => 'out']);
                 } else {
                     $item->increment('current_stock', $qty);
-                    if ($item->warehouse_id === null && $order->warehouse_id) {
-                        $item->warehouse_id = (int) $order->warehouse_id;
+                    if ($item->warehouse_id === null && $tool->warehouse_id) {
+                        $item->warehouse_id = (int) $tool->warehouse_id;
                         $item->save();
                     }
+                    $tool->update(['status' => 'in_stock']);
                 }
 
                 $records[] = StockRecord::create([
                     'record_no'         => $recordNo,
                     'inventory_item_id' => $item->id,
-                    'warehouse_id'      => $order->warehouse_id,
+                    'warehouse_id'      => $tool->warehouse_id,
                     'type'              => $isCheckout ? 'tool_checkout' : 'tool_return',
                     'quantity'          => $qty,
                     'remaining_stock'   => (int) $item->current_stock,
-                    'order_no'          => $order->code,
-                    'project_id'        => $order->project_id,
                     'operator_id'       => $request->user()->id,
                     'remark'            => $data['remark'] ?? null,
                 ]);
@@ -965,6 +1014,94 @@ class InventoryService
             ];
         });
     }
+
+    /**
+     * V1.3.4: 工具使用明细列表 — 直接平铺显示领用/归还流水
+     */
+    public function paginateToolRecords(Request $request)
+    {
+        $query = StockRecord::with([
+                'inventoryItem:id,code,name,specification,unit',
+                'operator:id,name',
+            ])
+            ->whereIn('type', ['tool_checkout', 'tool_return']);
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+        if ($request->filled('keyword')) {
+            $kw = $request->keyword;
+            $query->where(function ($q) use ($kw) {
+                $q->where('record_no', 'like', "%{$kw}%")
+                  ->orWhereHas('inventoryItem', fn ($x) => $x->where('name', 'like', "%{$kw}%")->orWhere('code', 'like', "%{$kw}%"))
+                  ->orWhereHas('operator', fn ($x) => $x->where('name', 'like', "%{$kw}%"));
+            });
+        }
+
+        $list = $query->orderByDesc('created_at')
+            ->paginate((int) $request->integer('per_page', 15));
+
+        // 附加固定资产编号 (按 inventory_item_id 关联工具台账)
+        $itemIds = collect($list->items())->pluck('inventory_item_id')->unique()->all();
+        $toolMap = $itemIds ? Tool::whereIn('inventory_item_id', $itemIds)
+            ->get(['inventory_item_id', 'fixed_asset_no'])
+            ->keyBy('inventory_item_id') : collect();
+        foreach ($list as $rec) {
+            $rec->tool = $toolMap->get($rec->inventory_item_id);
+        }
+
+        return $list;
+    }
+
+    /**
+     * V1.3.4: 工具台账列表 (供领用/归还选择器 + 管理)
+     */
+    public function listTools(Request $request)
+    {
+        $query = Tool::with(['inventoryItem:id,code,name,specification,unit,current_stock', 'warehouse:id,name']);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('keyword')) {
+            $kw = $request->keyword;
+            $query->where(function ($q) use ($kw) {
+                $q->where('name', 'like', "%{$kw}%")
+                  ->orWhere('fixed_asset_no', 'like', "%{$kw}%")
+                  ->orWhere('code', 'like', "%{$kw}%");
+            });
+        }
+
+        $tools = $query->orderByDesc('created_at')->get();
+
+        // 每件工具的借出数 (累计领用 - 累计退还), 供退还数量参考
+        $itemIds = $tools->pluck('inventory_item_id')->all();
+        $agg = StockRecord::whereIn('inventory_item_id', $itemIds)
+            ->whereIn('type', ['tool_checkout', 'tool_return'])
+            ->selectRaw('inventory_item_id, SUM(CASE WHEN type = \'tool_checkout\' THEN quantity ELSE 0 END) AS out_qty, SUM(CASE WHEN type = \'tool_return\' THEN quantity ELSE 0 END) AS in_qty')
+            ->groupBy('inventory_item_id')
+            ->get()
+            ->keyBy('inventory_item_id');
+
+        foreach ($tools as $tool) {
+            $a = $agg->get($tool->inventory_item_id);
+            $tool->borrowed = $a ? (int) $a->out_qty - (int) $a->in_qty : 0;
+            $tool->current_stock = (int) ($tool->inventoryItem->current_stock ?? 0);
+        }
+
+        return $tools;
+    }
+
+    /**
+     * V1.3.4: 生成固定资产编号 GD-YYYYMMDD-NNNN
+     */
+    public function nextFixedAssetNo(): string
+    {
+        $prefix = 'GD-' . date('Ymd') . '-';
+        $cnt = Tool::where('fixed_asset_no', 'like', $prefix . '%')->count();
+        return $prefix . str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
+    }
+
 
     // ============================================================
     // === 批量导入（CSV/XLSX）— 业务逻辑层 ===
