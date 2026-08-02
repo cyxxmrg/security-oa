@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { HomeFilled, InfoFilled, Refresh, TurnOff } from '@element-plus/icons-vue'
 const router = useRouter()
 function retry() { window.location.reload() }
 function goHome() { router.push('/') }

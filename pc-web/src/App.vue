@@ -1,18 +1,21 @@
 <template>
-  <PageLoader :loading="isRouteLoading" />
-  <router-view v-slot="{ Component, route }">
-    <transition name="app-fade" mode="out-in">
-      <div :key="route.path" class="app-route-wrap">
-        <AppSkeleton v-if="showSkeleton" :type="skeletonType" :rows="skeletonRows" />
-        <component v-else :is="Component" />
-      </div>
-    </transition>
-  </router-view>
+  <el-config-provider :locale="zhCn" size="default">
+    <PageLoader :loading="isRouteLoading" />
+    <router-view v-slot="{ Component, route }">
+      <transition name="app-fade" mode="out-in">
+        <div :key="route.path" class="app-route-wrap">
+          <AppSkeleton v-if="showSkeleton" :type="skeletonType" :rows="skeletonRows" />
+          <component v-else :is="Component" />
+        </div>
+      </transition>
+    </router-view>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import AppSkeleton from '@/components/AppSkeleton.vue'
 import PageLoader from '@/components/PageLoader.vue'

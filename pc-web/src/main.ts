@@ -1,9 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 // 闲置监控 composable — 这里导入,让 module 提早加载
@@ -14,14 +10,8 @@ import './styles/index.scss'
 
 const app = createApp(App)
 
-// 注册所有 Element Plus 图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
-
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { locale: zhCn, size: 'default' })
 
 // V0.5.0 注册 v-permission 指令 (L1 菜单/L2 按钮)
 app.directive('permission', permissionDirective)

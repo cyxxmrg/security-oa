@@ -18,7 +18,7 @@ export interface SystemSettings {
 const DEFAULT_SETTINGS: SystemSettings = {
   // 版本号兜底 (与 pc-api/config/oa.php::app_version 同步 — 首屏渲染就显示正确版本)
   // 部署前用 .workbuddy/sync_version.py 自动同步
-  version: 'v1.4.1',
+  version: 'v1.4.2',
   system_name: '安防运维OA办公系统',
   system_short_name: '安防OA',
   copyright: '@2026zsk',

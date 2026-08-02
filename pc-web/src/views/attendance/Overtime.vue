@@ -23,7 +23,7 @@
           <template #default="{ row }">{{ row.user?.name || '-' }}</template>
         </el-table-column>
         <el-table-column label="加班日期" min-width="110">
-          <template #default="{ row }">{{ row.overtime_date }}</template>
+          <template #default="{ row }">{{ formatDateOnly(row.overtime_date) }}</template>
         </el-table-column>
         <el-table-column label="开始时间" min-width="100">
           <template #default="{ row }">{{ row.start_time }}</template>
@@ -88,7 +88,7 @@
     <el-dialog v-model="showDetailDialog" title="加班详情" width="1500px">
       <el-descriptions :column="2" border v-if="detailRow">
         <el-descriptions-item label="申请人">{{ detailRow.user?.name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="加班日期">{{ detailRow.overtime_date }}</el-descriptions-item>
+        <el-descriptions-item label="加班日期">{{ formatDateOnly(detailRow.overtime_date) }}</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ detailRow.start_time }}</el-descriptions-item>
         <el-descriptions-item label="结束时间">{{ detailRow.end_time }}</el-descriptions-item>
         <el-descriptions-item label="时长">{{ detailRow.hours }} 小时</el-descriptions-item>
@@ -147,6 +147,21 @@ const statusMap: Record<string, { label: string; type: 'warning' | 'success' | '
 }
 const statusLabel = (s: string) => statusMap[s]?.label || s
 const statusTag = (s: string): 'warning' | 'success' | 'danger' | 'info' => statusMap[s]?.type || 'info'
+const formatDateOnly = (value: unknown): string => {
+  if (!value) return '-'
+
+  const date = new Date(String(value))
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
+
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
 
 const loadList = async () => {
   loading.value = true

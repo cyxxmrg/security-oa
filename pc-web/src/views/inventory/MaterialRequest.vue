@@ -30,7 +30,7 @@
         </el-table-column>
         <el-table-column label="申领总数" width="120" align="right">
           <template #default="{ row }">
-            <span style="font-weight: 600; color: #A32D2D">-{{ row.quantityTotal || 0 }}</span>
+            <span style="font-weight: 600; color: #A32D2D">{{ row.quantityTotal || 0 }}</span>
             <span class="unit-text" style="margin-left:4px">{{ row.payload?.items?.length || 1 }} 种</span>
           </template>
         </el-table-column>
@@ -97,7 +97,7 @@
             <span v-else class="muted">未关联</span>
           </el-descriptions-item>
           <el-descriptions-item label="申领总数" :span="2">
-            <span style="font-weight:600;color:#A32D2D">-{{ detailItem.quantityTotal || 0 }}</span>
+            <span style="font-weight:600;color:#A32D2D">{{ detailItem.quantityTotal || 0 }}</span>
             <span class="unit-text" style="margin-left:8px">{{ detailItem.payload?.items?.length || 1 }} 种物料</span>
           </el-descriptions-item>
           <el-descriptions-item label="提交时间" :span="2">{{ formatDate(detailItem.created_at) }}</el-descriptions-item>
@@ -125,7 +125,7 @@
           </el-table-column>
           <el-table-column label="申领数量" width="120" align="right">
             <template #default="{ row }">
-              <span style="font-weight:600;color:#A32D2D">-{{ row.quantity }}</span>
+              <span style="font-weight:600;color:#A32D2D">{{ row.quantity }}</span>
             </template>
           </el-table-column>
           <el-table-column label="仓库" min-width="120">

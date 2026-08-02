@@ -44,13 +44,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
-        // 拆分 vendor:首屏主 chunk 应 < 500KB
+        // Element Plus 由按需导入插件拆分，避免聚合成一个超大主包。
         manualChunks: {
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          'element-plus': ['element-plus', '@element-plus/icons-vue'],
           'echarts-vendor': ['echarts', 'vue-echarts'],
-          'utils-vendor': ['axios', 'dayjs'],
-          'xlsx-vendor': ['xlsx']
+          'utils-vendor': ['axios', 'dayjs']
         },
         // chunk 文件名分类
         chunkFileNames: 'assets/[name]-[hash].js',

@@ -176,7 +176,18 @@ import { ElMessageBox } from 'element-plus'
 import { get as httpGet } from '@/utils/request'
 import { useDeviceCheck } from '@/composables/useDeviceCheck'
 import PwaInstallBanner from '@/components/PwaInstallBanner.vue'
-import { Message as MessageIcon, Loading as LoadingIcon } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  Bell,
+  FullScreen,
+  Loading as LoadingIcon,
+  Lock,
+  Message as MessageIcon,
+  Search,
+  SwitchButton,
+  User,
+  Warning,
+} from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

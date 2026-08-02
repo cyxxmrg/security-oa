@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
+use App\Models\OvertimeRequest;
 use App\Models\PurchaseRequirement;
 use App\Models\User;
 use App\Services\ApprovalFlowService;
@@ -147,6 +148,7 @@ class OperationApprovalController extends Controller
         // 只有最终 approved 时才同步采购需求状态
         if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
             $this->syncPurchaseRequirementStatus($approval, 'approved', $comment);
+            $this->syncOvertimeStatus($approval, 'approved');
         }
 
         $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部审批节点已完成）' : '已通过，已转交下一节点';
@@ -173,8 +175,10 @@ class OperationApprovalController extends Controller
         $approval->flow = $result['flow'];
         $approval->status = $result['status'];
         $approval->current_approver_id = $result['current_approver_id'];
+        $approval->comment = $comment;
         $approval->save();
         $this->syncPurchaseRequirementStatus($approval, 'rejected', $comment);
+        $this->syncOvertimeStatus($approval, 'rejected');
 
         return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
     }
@@ -216,6 +220,24 @@ class OperationApprovalController extends Controller
             'review_remark' => $comment,
             'reviewed_by' => request()->user()?->id,
             'reviewed_at' => now(),
+        ]);
+    }
+
+    private function syncOvertimeStatus(ApprovalRecord $approval, string $status): void
+    {
+        if ($approval->sub_type !== 'overtime') {
+            return;
+        }
+
+        $overtimeId = $approval->payload['overtime_id'] ?? null;
+        if (!$overtimeId) {
+            return;
+        }
+
+        OvertimeRequest::whereKey($overtimeId)->update([
+            'status' => $status,
+            'approver_id' => request()->user()?->id,
+            'approved_at' => now(),
         ]);
     }
 }

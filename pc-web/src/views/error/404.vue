@@ -13,6 +13,7 @@
 </template>
 
 <script setup lang="ts">
+import { Warning } from '@element-plus/icons-vue'
 import ErrorLayout from './ErrorLayout.vue'
 </script>
 

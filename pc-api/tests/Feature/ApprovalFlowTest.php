@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApprovalRecord;
+use App\Models\OvertimeRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -106,7 +107,7 @@ class ApprovalFlowTest extends TestCase
     }
 
     /**
-     * 2) approve → status=approved, flow 追加 approve 节点
+     * 2) approve → status=approved, flow 追加 complete 节点
      */
     public function test_approve_moves_status_to_approved(): void
     {
@@ -124,13 +125,56 @@ class ApprovalFlowTest extends TestCase
         $approval->refresh();
         $this->assertEquals(ApprovalRecord::STATUS_APPROVED, $approval->status);
 
-        // flow 应追加 approve 节点 (用 getAttribute 避免 array cast 的 overloaded property)
+        // flow 应追加 complete 节点 (用 getAttribute 避免 array cast 的 overloaded property)
         $flow = $approval->getAttribute('flow');
         $this->assertIsArray($flow);
         $this->assertGreaterThan(1, count($flow));
         $last = end($flow);
-        $this->assertEquals('approve', $last['action']);
-        $this->assertEquals('同意', $last['comment']);
+        $this->assertEquals('complete', $last['action']);
+        $this->assertEquals('审批流程完成', $last['comment']);
+        $this->assertEquals('同意', $approval->comment);
+    }
+
+    public function test_operation_approval_syncs_overtime_status(): void
+    {
+        $overtime = OvertimeRequest::create([
+            'user_id' => $this->applicant->id,
+            'overtime_date' => now()->addDay()->toDateString(),
+            'start_time' => '18:00',
+            'end_time' => '20:00',
+            'hours' => 2,
+            'reason' => '审批中心状态同步测试',
+            'compensation_type' => 'pay',
+            'status' => 'pending',
+        ]);
+
+        $approval = ApprovalRecord::create([
+            'code' => 'OPS-' . date('Y') . '-SYNC',
+            'type' => 'operation',
+            'sub_type' => 'overtime',
+            'title' => '加班审批同步测试',
+            'priority' => 'normal',
+            'status' => ApprovalRecord::STATUS_PENDING,
+            'applicant_id' => $this->applicant->id,
+            'current_approver_id' => $this->approver->id,
+            'payload' => ['overtime_id' => $overtime->id],
+            'flow' => [[
+                'operator' => $this->applicant->name,
+                'action' => 'submit',
+                'time' => now()->toDateTimeString(),
+                'comment' => '提交申请',
+            ]],
+        ]);
+
+        $this->actingAs($this->approver, 'sanctum')
+            ->postJson("/api/approvals/operation/{$approval->id}/approve", ['comment' => '同意'])
+            ->assertOk()
+            ->assertJsonPath('data.status', ApprovalRecord::STATUS_APPROVED);
+
+        $overtime->refresh();
+        $this->assertEquals('approved', $overtime->status);
+        $this->assertEquals($this->approver->id, $overtime->approver_id);
+        $this->assertNotNull($overtime->approved_at);
     }
 
     /**
