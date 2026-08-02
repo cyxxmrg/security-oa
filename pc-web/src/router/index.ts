@@ -417,7 +417,8 @@ const routes: RouteRecordRaw[] = [
           // V0.5.7 块4 — 维修成本报表
           { path: 'repair-cost', name: 'FinanceRepairCost', component: () => import('@/views/finance/RepairCostReport.vue'), meta: { title: '成本报表' } },
           { path: 'profit-report', name: 'FinanceProfitReport', component: () => import('@/views/finance/ProfitReport.vue'), meta: { title: '项目利润表' } },
-          { path: 'invoice', name: 'FinanceInvoice', component: () => import('@/views/finance/Invoice.vue'), meta: { title: '发票管理' } }
+          { path: 'invoice', name: 'FinanceInvoice', component: () => import('@/views/finance/Invoice.vue'), meta: { title: '发票管理' } },
+          { path: 'fixed-assets', name: 'FinanceFixedAssets', component: () => import('@/views/finance/FixedAssets.vue'), meta: { title: '固定资产管理' } }
         ]
       },
       // ---- 供应商管理 (V0.4.2) — V0.6.2 整合到「采购协同」后隐藏 ----

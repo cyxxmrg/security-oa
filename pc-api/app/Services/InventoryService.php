@@ -6,6 +6,7 @@ use App\Models\InventoryItem;
 use App\Models\InventoryCategory;
 use App\Models\StockRecord;
 use App\Models\Tool;
+use App\Models\FixedAsset;
 use App\Models\Warehouse;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -959,36 +960,53 @@ class InventoryService
 
         $created = [];
         $skipped = [];
-        foreach ($data['items'] as $it) {
-            $itemId = (int) $it['inventory_item_id'];
-            $qty    = (int) $it['quantity'];
-            if (Tool::where('inventory_item_id', $itemId)->exists()) {
-                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
-                continue;
+        DB::transaction(function () use ($data, $request, &$created, &$skipped) {
+            foreach ($data['items'] as $it) {
+                $itemId = (int) $it['inventory_item_id'];
+                $qty    = (int) $it['quantity'];
+                if (Tool::where('inventory_item_id', $itemId)->exists()) {
+                    $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
+                    continue;
+                }
+                $item = InventoryItem::find($itemId);
+                if (!$item) {
+                    $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '商品不存在'];
+                    continue;
+                }
+                if ($qty > (int) $item->current_stock) {
+                    $skipped[] = ['inventory_item_id' => $itemId, 'reason' => "转换数量超过当前库存({$item->current_stock})"];
+                    continue;
+                }
+                $tool = Tool::create([
+                    'inventory_item_id' => $itemId,
+                    'fixed_asset_no'    => $this->nextFixedAssetNo(),
+                    'name'              => $item->name,
+                    'code'              => $item->code,
+                    'specification'     => $item->specification ?: ($item->spec ?? null),
+                    'unit'              => $item->unit,
+                    'quantity'          => $qty,
+                    'warehouse_id'      => $item->warehouse_id,
+                    'status'            => 'in_stock',
+                    'created_by'        => $request->user()->id,
+                ]);
+                // V1.4.0: 与固定资产台账打通 — 工具自动进入固定资产 (同编号)
+                FixedAsset::create([
+                    'asset_no'           => $tool->fixed_asset_no,
+                    'name'               => $tool->name,
+                    'specification'      => $tool->specification,
+                    'unit'               => $tool->unit,
+                    'quantity'           => $tool->quantity,
+                    'source'             => 'tool',
+                    'tool_id'            => $tool->id,
+                    'inventory_item_id'  => $itemId,
+                    'acquisition_date'   => now()->toDateString(),
+                    'status'             => 'in_use',
+                    'location'           => '仓库',
+                    'created_by'         => $request->user()->id,
+                ]);
+                $created[] = $tool->fresh();
             }
-            $item = InventoryItem::find($itemId);
-            if (!$item) {
-                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '商品不存在'];
-                continue;
-            }
-            if ($qty > (int) $item->current_stock) {
-                $skipped[] = ['inventory_item_id' => $itemId, 'reason' => "转换数量超过当前库存({$item->current_stock})"];
-                continue;
-            }
-            $tool = Tool::create([
-                'inventory_item_id' => $itemId,
-                'fixed_asset_no'    => $this->nextFixedAssetNo(),
-                'name'              => $item->name,
-                'code'              => $item->code,
-                'specification'     => $item->specification ?: ($item->spec ?? null),
-                'unit'              => $item->unit,
-                'quantity'          => $qty,
-                'warehouse_id'      => $item->warehouse_id,
-                'status'            => 'in_stock',
-                'created_by'        => $request->user()->id,
-            ]);
-            $created[] = $tool->fresh();
-        }
+        });
 
         return ['created' => $created, 'skipped' => $skipped];
     }
@@ -1156,12 +1174,27 @@ class InventoryService
 
     /**
      * V1.3.4: 生成固定资产编号 GD-YYYYMMDD-NNNN
+     * V1.4.0: 统一号段 — 工具台账(tools.fixed_asset_no)与固定资产(fixed_assets.asset_no)共用计数, 防撞号
      */
     public function nextFixedAssetNo(): string
     {
+        return $this->nextAssetNumber();
+    }
+
+    /**
+     * V1.4.0: 统一固定资产编号生成器 (工具/资产共用号段, 取最大后缀+1, 防撞号)
+     */
+    public function nextAssetNumber(): string
+    {
         $prefix = 'GD-' . date('Ymd') . '-';
-        $cnt = Tool::where('fixed_asset_no', 'like', $prefix . '%')->count();
-        return $prefix . str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
+        $toolMax  = Tool::where('fixed_asset_no', 'like', $prefix . '%')->max('fixed_asset_no');
+        $assetMax = FixedAsset::where('asset_no', 'like', $prefix . '%')->max('asset_no');
+        $extract = function (?string $no) use ($prefix): int {
+            if (!$no || !str_starts_with($no, $prefix)) return 0;
+            return (int) substr($no, strlen($prefix));
+        };
+        $next = max($extract($toolMax), $extract($assetMax)) + 1;
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
 

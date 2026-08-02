@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\FuelCardController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\InventoryCategoryController;
 use App\Http\Controllers\Api\ToolController;
+use App\Http\Controllers\Api\AssetController;
 use App\Http\Controllers\Api\DiskController;
 use App\Http\Controllers\Api\KnowledgeController;
 use App\Http\Controllers\Api\BackupController;
@@ -117,6 +118,28 @@ Route::prefix('inventory-categories')->middleware(['auth:sanctum', 'ensure_busin
 
 // ========== 财务管理 ==========
 Route::prefix('finance')->middleware(['auth:sanctum', 'ensure_business', 'permission:finance.view', 'field_mask'])->group(function () {
+    // ===== 固定资产管理 (V1.4.0) — 注意: assets/{asset} 放在静态路由之后 =====
+    Route::get('assets/categories/tree', [AssetController::class, 'categoryTree']);
+    Route::post('assets/categories', [AssetController::class, 'storeCategory'])->middleware('permission:finance.pay');
+    Route::put('assets/categories/{id}', [AssetController::class, 'updateCategory'])->middleware('permission:finance.pay');
+    Route::delete('assets/categories/{id}', [AssetController::class, 'destroyCategory'])->middleware('permission:finance.pay');
+    Route::get('assets/depreciations', [AssetController::class, 'depreciations']);
+    Route::post('assets/depreciate', [AssetController::class, 'depreciate'])->middleware('permission:finance.pay');
+    Route::get('assets/maintenances', [AssetController::class, 'maintenances']);
+    Route::post('assets/maintenances', [AssetController::class, 'storeMaintenance'])->middleware('permission:finance.pay');
+    Route::get('assets/inventories', [AssetController::class, 'inventories']);
+    Route::post('assets/inventories', [AssetController::class, 'storeInventory'])->middleware('permission:finance.pay');
+    Route::post('assets/inventories/{inventory}/complete', [AssetController::class, 'completeInventory'])->middleware('permission:finance.pay');
+    Route::get('assets/disposals', [AssetController::class, 'disposals']);
+    Route::post('assets/disposals', [AssetController::class, 'storeDisposal'])->middleware('permission:finance.pay');
+    Route::get('assets/transfers', [AssetController::class, 'transfers']);
+    Route::post('assets/transfers', [AssetController::class, 'storeTransfer'])->middleware('permission:finance.pay');
+    Route::get('assets', [AssetController::class, 'index']);
+    Route::post('assets', [AssetController::class, 'store'])->middleware('permission:finance.pay');
+    Route::get('assets/{asset}', [AssetController::class, 'show']);
+    Route::put('assets/{asset}', [AssetController::class, 'update'])->middleware('permission:finance.pay');
+    Route::delete('assets/{asset}', [AssetController::class, 'destroy'])->middleware('permission:finance.pay');
+
     Route::get('overview', [FinanceController::class, 'overview']);
     Route::get('summary', [FinanceController::class, 'summary']);
     Route::get('project-profit', [FinanceController::class, 'projectProfit']); // V1.2.16
