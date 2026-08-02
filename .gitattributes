@@ -1,0 +1,17 @@
+# Auto detect text files, perform LF normalization on checkout
+* text=auto
+
+# Shell scripts need LF
+*.sh text eol=lf
+*.py text eol=lf
+
+# Windows batch files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Lock files are binary-ish
+package-lock.json -text
+composer.lock -text
+
+# Vendor / node_modules ignored but if tracked, keep LF

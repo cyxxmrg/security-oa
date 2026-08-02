@@ -1,0 +1,265 @@
+<?php
+
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
+
+/*
+|--------------------------------------------------------------------------
+| Console Routes
+|--------------------------------------------------------------------------
+*/
+
+Artisan::command('oa:seed-admin', function () {
+    $admin = \App\Models\User::firstOrCreate(
+        ['username' => 'admin'],
+        ['name' => '张建国', 'email' => 'admin@security-oa.com', 'phone' => '13800138000', 'password' => bcrypt('<已脱敏>'), 'status' => 'active']
+    );
+    $admin->assignRole('admin');
+
+    $manager = \App\Models\User::firstOrCreate(
+        ['username' => 'manager'],
+        ['name' => '李明辉', 'email' => 'manager@security-oa.com', 'phone' => '13900139001', 'password' => bcrypt('123456'), 'status' => 'active']
+    );
+    $manager->assignRole('manager');
+
+    $user = \App\Models\User::firstOrCreate(
+        ['username' => 'user'],
+        ['name' => '王小红', 'email' => 'user@security-oa.com', 'phone' => '13700137002', 'password' => bcrypt('123456'), 'status' => 'active']
+    );
+    $user->assignRole('user');
+
+    $this->info('默认管理员已创建: admin / <已脱敏>');
+})->purpose('创建默认管理员账号');
+
+Artisan::command('oa:seed-finance', function () {
+    // v0.3.14 D2: 财务角色 + 默认账号
+    $finance = \App\Models\User::firstOrCreate(
+        ['username' => 'finance'],
+        ['name' => '周会计', 'email' => 'finance@security-oa.com', 'phone' => '13700137003', 'password' => bcrypt('123456'), 'status' => 'active']
+    );
+    $finance->assignRole('finance');
+
+    $salesManager = \App\Models\User::firstOrCreate(
+        ['username' => 'sales_mgr'],
+        ['name' => '销售经理·陈', 'email' => 'sales_mgr@security-oa.com', 'phone' => '13700137004', 'password' => bcrypt('123456'), 'status' => 'active']
+    );
+    $salesManager->assignRole('sales_manager');
+
+    $this->info('财务账号已创建: finance / 123456');
+    $this->info('销售经理账号已创建: sales_mgr / 123456');
+})->purpose('创建财务和销售经理账号 (v0.3.14 D2)');
+
+Artisan::command('oa:seed-roles', function () {
+    // v0.3.14 D2: 创建细粒度角色 (idempotent)
+    $roles = [
+        ['name' => 'admin',         'guard_name' => 'web'],
+        ['name' => 'manager',       'guard_name' => 'web'],
+        ['name' => 'sales_manager', 'guard_name' => 'web'],
+        ['name' => 'finance',       'guard_name' => 'web'],
+        ['name' => 'user',          'guard_name' => 'web'],
+    ];
+    foreach ($roles as $r) {
+        \Spatie\Permission\Models\Role::firstOrCreate(
+            ['name' => $r['name'], 'guard_name' => $r['guard_name']],
+        );
+    }
+    $this->info('已创建 5 个角色: admin / manager / sales_manager / finance / user');
+})->purpose('创建细粒度角色 (v0.3.14 D2)');
+
+Artisan::command('oa:seed-demo', function () {
+    $this->call('oa:seed-admin');
+
+    // 创建部门
+    $techDept = \App\Models\Department::firstOrCreate(['name' => '技术部'], ['sort_order' => 1]);
+    $salesDept = \App\Models\Department::firstOrCreate(['name' => '销售部'], ['sort_order' => 2]);
+    $serviceDept = \App\Models\Department::firstOrCreate(['name' => '售后部'], ['sort_order' => 3]);
+    $financeDept = \App\Models\Department::firstOrCreate(['name' => '财务部'], ['sort_order' => 4]);
+
+    // 创建技能标签
+    $skills = ['监控安装', '门禁调试', '网络配置', '报警系统', '云平台部署', '弱电施工', '综合布线', 'CAD设计'];
+    foreach ($skills as $skill) {
+        \App\Models\SkillTag::firstOrCreate(['name' => $skill]);
+    }
+
+    // 创建示例客户
+    $customers = ['阳光小学', '中心医院', '科技园区A区', '万达工厂', '龙城商场'];
+    foreach ($customers as $name) {
+        \App\Models\Customer::firstOrCreate(['name' => $name], [
+            'category' => 'normal', 'province' => '广东', 'city' => '深圳', 'district' => '南山区',
+            'address' => '南山区科技路' . rand(1, 100) . '号', 'status' => 'active',
+        ]);
+    }
+
+    $this->info('演示数据已创建');
+})->purpose('创建演示数据');
+
+// ============================================================
+// === 定时任务 (v0.3.11 块四) — Laravel 11+ 需在 bootstrap/app.php withSchedule 注册 ===
+// ============================================================
+
+Artisan::command('oa:expire-quotations', function () {
+    // 每日 01:00 把过期的报价单自动改 expired
+    $count = \App\Models\Quotation::whereIn('status', ['draft', 'submitted', 'negotiating'])
+        ->whereNotNull('valid_until')
+        ->where('valid_until', '<', now()->toDateString())
+        ->update(['status' => 'expired']);
+    $this->info("已过期报价单: {$count} 个");
+})->purpose('每日过期报价单自动改 expired');
+
+Schedule::command('oa:expire-quotations')->dailyAt('01:00')->withoutOverlapping();
+
+// ============================================================
+// === 定时任务 (v0.3.14 B2) — 推荐人结算逾期 7 天提醒 ===
+// ============================================================
+
+Artisan::command('oa:remind-overdue-settlements {--days=7 : 多少天未审核视为逾期} {--dry-run : 仅统计不发送}', function () {
+    $days = (int) $this->option('days');
+    $dryRun = (bool) $this->option('dry-run');
+    $cutoff = now()->subDays($days);
+
+    // 1) 扫所有 pending 状态的结算单
+    $overdue = \App\Models\ReferralSettlement::with(['referrer', 'opportunity'])
+        ->where('status', 'pending')
+        ->get()
+        ->filter(function ($s) use ($cutoff) {
+            // PG 字段 created_at 是 timestamp 无默认值，可能为 null
+            // fallback: 用 id 推算时间戳（按 1 id = 100s 估算，最差情况几小时误差）
+            $ts = $s->created_at
+                ?? \Carbon\Carbon::createFromTimestamp(1700000000 + $s->id * 100);
+            return $ts && $ts->lt($cutoff);
+        });
+
+    $this->info("待提醒结算单: {$overdue->count()} 个 (阈值: {$days} 天)");
+
+    if ($overdue->isEmpty()) {
+        return 0;
+    }
+
+    // 2) 找所有接收方（manager / finance / admin 角色）
+    $receivers = \App\Models\User::role(['manager', 'finance', 'admin'])->get();
+    if ($receivers->isEmpty()) {
+        $this->warn('  无 manager/finance/admin 角色用户，跳过');
+        return 0;
+    }
+    $this->info("  接收方: {$receivers->count()} 人");
+
+    // 3) 24h 频控 + 发送
+    $totalSent = 0;
+    $totalSkipped = 0;
+    foreach ($overdue as $s) {
+        $referrerName = $s->referrer?->name ?? "推荐人#{$s->referrer_id}";
+        $oppName = $s->opportunity?->name ?? "商机#{$s->opportunity_id}";
+        // 优先用 created_at，回退到 id 推算
+        $ts = $s->created_at
+            ?? \Carbon\Carbon::createFromTimestamp(1700000000 + $s->id * 100);
+        // Carbon: 显式使用 absolute (新版默认 true，旧版默认 false)
+        $overdueDays = $ts->isPast()
+            ? (int) abs($ts->diffInDays(now()))
+            : 0;
+        $title = "结算单逾期 {$overdueDays} 天待处理";
+        $content = "推荐人「{$referrerName}」的居间费结算单（商机：{$oppName}，金额 ¥{$s->amount}）已挂起 {$overdueDays} 天，请尽快审核。";
+        $level = $overdueDays >= 14 ? 'danger' : 'warning';
+        $payload = [
+            'settlement_id'  => $s->id,
+            'opportunity_id' => $s->opportunity_id,
+            'referrer_id'    => $s->referrer_id,
+            'amount'         => (string) $s->amount,
+            'overdue_days'   => $overdueDays,
+            'action_url'     => "/sales/settlements?id={$s->id}",
+        ];
+
+        foreach ($receivers as $u) {
+            $exists = \Illuminate\Notifications\DatabaseNotification::where('notifiable_id', $u->id)
+                ->where('notifiable_type', \App\Models\User::class)
+                ->where('type', 'settlement_overdue')
+                ->where('data->settlement_id', $s->id)
+                ->where('created_at', '>=', now()->subDay())
+                ->exists();
+            if ($exists) {
+                $totalSkipped++;
+                continue;
+            }
+            if ($dryRun) {
+                $this->line("  [DRY] → {$u->name}: settlement #{$s->id} 金额 {$s->amount}");
+                continue;
+            }
+            \Illuminate\Notifications\DatabaseNotification::create([
+                'type'            => 'settlement_overdue',
+                'notifiable_type' => \App\Models\User::class,
+                'notifiable_id'   => $u->id,
+                'data'            => $payload,
+                'title'           => $title,
+                'content'         => $content,
+                'level'           => $level,
+                'sender_id'       => null,
+                'read_at'         => null,
+                'created_at'      => now(),
+                'updated_at'      => now(),
+            ]);
+            $totalSent++;
+        }
+    }
+
+    $this->info(sprintf('已发送 %d 条提醒，跳过 %d 条 (24h 频控)', $totalSent, $totalSkipped));
+    return 0;
+})->purpose('推荐人结算单逾期 N 天提醒（数据库频道站内信）');
+
+Schedule::command('oa:remind-overdue-settlements --days=7')
+    ->dailyAt('09:00')
+    ->withoutOverlapping()
+    ->name('settlement-overdue-reminder');
+
+// ============================================================
+// === V0.4.1 定时任务 — 项目预算 T+1 兜底同步（每日 02:00） ===
+// ============================================================
+Schedule::command('project:sync-actual-costs')
+    ->dailyAt('02:00')
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// ============================================================
+// === V0.4.3 定时任务 — 施工日志漏报扫描（每日 22:00） ===
+// ============================================================
+Schedule::command('construction:scan-overdue-logs')
+    ->dailyAt('22:00')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('construction-overdue-scan');
+
+// ============================================================
+// === V0.4.5 定时任务 — 质保期到期扫描（每日 22:00） ===
+// ============================================================
+Schedule::command('warranty:scan-expiry --within-days=30')
+    ->dailyAt('22:00')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('warranty-expiry-scan');
+
+// ============================================================
+// === V0.5.3 定时任务 — 临时角色清理 + 到期提醒（每日 00:30） ===
+// ============================================================
+Schedule::command('oa:clean-expired-roles')
+    ->dailyAt('00:30')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('clean-expired-roles');
+
+// ============================================================
+// === V0.8 定时任务 — 健康探针（每 5 分钟一次） ===
+// ============================================================
+Schedule::command('oa:health-check')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('health-probe');
+
+// ============================================================
+// === V1.2.7 E1 定时任务 — BI 物化视图刷新 (每日 02:30) ===
+// ============================================================
+// CONCURRENTLY 不锁表, 但要保证前一天已成功 (避免数据断层)
+// 失败时 SlowRequestAlertJob 告警 (command 内部)
+Schedule::command('analytics:refresh')
+    ->dailyAt('02:30')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('analytics-mv-refresh');

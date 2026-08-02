@@ -1,0 +1,9 @@
+node_modules
+dist
+dist2
+.DS_Store
+*.local
+*.log
+src/auto-imports.d.ts
+src/components.d.ts
+dist-build-check

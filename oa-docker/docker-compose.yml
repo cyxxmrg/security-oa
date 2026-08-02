@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    container_name: oa-db
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-security_oa}
+      POSTGRES_USER: ${DB_USERNAME:-oa_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-CHANGEME_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-oa_user} -d ${DB_DATABASE:-security_oa}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [oan]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: oa-redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-oa_redis_pwd_change_me}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-oa_redis_pwd_change_me}", "--no-auth-warning", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [oan]
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    container_name: oa-api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-security_oa}
+      DB_USERNAME: ${DB_USERNAME:-oa_user}
+      DB_PASSWORD: ${DB_PASSWORD:-CHANGEME_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-oa_redis_pwd_change_me}
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL:-http://localhost}
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+      OA_FRESH_INSTALL: ${OA_FRESH_INSTALL:-0}
+      OA_AUTO_SEED: ${OA_AUTO_SEED:-0}
+    volumes:
+      - ./pc-api:/var/www/oa-api:rw
+      - ./data/storage:/var/www/oa-api/storage/app:rw
+      - ./data/backups:/var/backups/oa:rw
+    networks: [oan]
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    restart: unless-stopped
+    container_name: oa-web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-80}:80"
+    volumes:
+      - ./pc-web/dist:/usr/share/nginx/html:ro
+    networks: [oan]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  oan:
+    driver: bridge

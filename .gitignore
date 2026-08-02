@@ -1,0 +1,104 @@
+# --- OA system monorepo ---
+# 顶层
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+.codebuddy/
+
+# --- 临时构建产物 (不入仓) ---
+oa-api.tar.gz
+oa-web-build*.tar.gz
+
+# --- pc-api (Laravel) ---
+/pc-api/vendor/
+/pc-api/node_modules/
+/pc-api/.env
+/pc-api/.env.backup
+/pc-api/.env.production
+/pc-api/storage/*.key
+/pc-api/storage/pail/
+/pc-api/storage/logs/*
+!/pc-api/storage/logs/.gitignore
+/pc-api/storage/framework/cache/*
+/pc-api/storage/framework/sessions/*
+/pc-api/storage/framework/testing/*
+/pc-api/storage/framework/views/*
+!/pc-api/storage/framework/cache/.gitignore
+!/pc-api/storage/framework/sessions/.gitignore
+!/pc-api/storage/framework/testing/.gitignore
+!/pc-api/storage/framework/views/.gitignore
+/pc-api/public/build/
+/pc-api/public/hot/
+/pc-api/public/storage/
+/pc-api/.phpunit.result.cache
+/pc-api/.phpunit.cache
+/pc-api/.php_cs.cache
+/pc-api/.php-cs-fixer.cache
+/pc-api/.phpactor.json
+/pc-api/.rector.php
+/pc-api/Homestead.json
+/pc-api/Homestead.yaml
+/pc-api/auth.json
+
+# --- pc-web (Vue3) ---
+/pc-web/node_modules/
+/pc-web/dist/
+/pc-web/.env.local
+/pc-web/.env.*.local
+/pc-web/*.local
+/pc-web/src/auto-imports.d.ts
+/pc-web/src/components.d.ts
+/pc-web/npm-debug.log*
+/pc-web/yarn-debug.log*
+/pc-web/yarn-error.log*
+/pc-web/pnpm-debug.log*
+
+# --- deploy/ 归档说明 ---
+# deploy/_archive/ 已清理，旧版本不再跟踪；现行 deploy 脚本在 deploy/ 根目录
+
+# --- V1.2.9e 临时 128 部署脚本 (大文件不入库, 只保留文档) ---
+.workbuddy/_128_setup/*.tar.gz
+.workbuddy/_128_setup/*.gz
+.workbuddy/_128_setup/packages.php
+.workbuddy/_128_setup/packages_new.php
+.workbuddy/_128_setup/services.php
+.workbuddy/_128_setup/services_new.php
+.workbuddy/_128_setup/oa_117.conf
+.workbuddy/_128_setup/*.bak
+.workbuddy/_128_setup/composer.lock
+.workbuddy/AAA_*.png
+.workbuddy/PICKER_*.png
+.workbuddy/_oa-api-v063.tar
+.workbuddy/backups/v0.4.2/pc-api/routes/api.php.bad
+pc-api/scripts/__pycache__/
+
+# --- 重建公开仓库排除项 (2026-08-02) ---
+# WorkBuddy 工作目录 / 生成产物 / 日志 (绝不公开)
+.workbuddy/
+output/
+logs/
+framework/
+app/
+=
+# 备份 / 数据库 dump / 遗留密钥
+*.sql
+*.sql.gz
+*.bak
+*.env.bak*
+.env.bak*
+# Laravel storage 运行时整体排除
+/pc-api/storage/
+# 调试 / 测试产物
+pc-api/make_hash.php
+pc-api/phpunit-coverage.xml
+# 构建 / 缓存产物
+deploy/dist/
+deploy/__pycache__/
+**/__pycache__/
+*.pyc
+pc-web/*.log
+# 部署脚本含真实服务器密码，不纳入公开仓库
+deploy/

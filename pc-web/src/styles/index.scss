@@ -1,0 +1,182 @@
+@use './variables' as *;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: $text-primary;
+  background: $bg-color;
+}
+
+a {
+  text-decoration: none;
+  color: $primary;
+}
+
+// NProgress 自定义样式
+#nprogress .bar {
+  background: linear-gradient(90deg, $primary, $success) !important;
+  height: 3px !important;
+}
+
+// Element Plus 全局覆盖
+.el-card {
+  border-radius: $border-radius;
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.el-table {
+  --el-table-border-color: #{$border-light};
+  --el-table-header-bg-color: #{$bg-color};
+  border-radius: $border-radius;
+  overflow: hidden;
+
+  th.el-table__cell {
+    font-weight: 500;
+    color: $text-primary;
+  }
+}
+
+.el-button--primary {
+  --el-button-bg-color: #{$primary};
+  --el-button-border-color: #{$primary};
+  --el-button-hover-bg-color: #{$primary-light};
+  --el-button-hover-border-color: #{$primary-light};
+}
+
+.el-tag {
+  border-radius: 4px;
+}
+
+// 页面通用样式
+.page-container {
+  padding: 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+
+  .page-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: $text-primary;
+
+    .page-desc {
+      font-size: 13px;
+      font-weight: 400;
+      color: $text-secondary;
+      margin-left: 12px;
+    }
+  }
+}
+
+.filter-bar {
+  background: $bg-white;
+  padding: 20px;
+  border-radius: $border-radius;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.content-card {
+  background: $bg-white;
+  padding: 20px;
+  border-radius: $border-radius;
+}
+
+// 状态徽标
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+
+  &.active { background: $success; }
+  &.pending { background: $warning; }
+  &.danger { background: $danger; }
+  &.info { background: $info; }
+}
+
+// 统计卡片
+.stat-card {
+  background: $bg-white;
+  border-radius: $border-radius;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: $transition;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: $primary;
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: $text-secondary;
+    margin-top: 8px;
+  }
+
+  .stat-trend {
+    font-size: 12px;
+    margin-top: 4px;
+
+    &.up { color: $success; }
+    &.down { color: $danger; }
+  }
+}
+
+// 自定义滚动条
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+
+  &:hover {
+    background: #909399;
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// V1.2.13: 全局弹窗默认 1440px (大哥要求: 整个 OA 所有弹窗 1440px)
+.el-dialog {
+  --el-dialog-width: 1440px;
+  max-width: 95vw;
+  .el-dialog__body {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+// 确认框/小弹窗保持合理宽度
+.el-message-box { width: 420px; }
+.el-dialog--small, .dialog--narrow { --el-dialog-width: 600px; }
