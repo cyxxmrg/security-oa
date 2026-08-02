@@ -1117,16 +1117,22 @@ class InventoryService
             });
         }
 
+        if ($request->filled('inventory_item_id')) {
+            $query->where('inventory_item_id', (int) $request->inventory_item_id);
+        }
+
         $list = $query->orderByDesc('created_at')
             ->paginate((int) $request->integer('per_page', 15));
 
-        // 附加固定资产编号 (按 inventory_item_id 关联工具台账)
+        // 附加固定资产编号 (按 inventory_item_id 关联工具台账) + 回带 tool_id (供明细页跳转)
         $itemIds = collect($list->items())->pluck('inventory_item_id')->unique()->all();
         $toolMap = $itemIds ? Tool::whereIn('inventory_item_id', $itemIds)
-            ->get(['inventory_item_id', 'fixed_asset_no'])
+            ->get(['id', 'inventory_item_id', 'fixed_asset_no'])
             ->keyBy('inventory_item_id') : collect();
         foreach ($list as $rec) {
-            $rec->tool = $toolMap->get($rec->inventory_item_id);
+            $t = $toolMap->get($rec->inventory_item_id);
+            $rec->tool = $t;
+            $rec->tool_id = $t ? $t->id : null;
         }
 
         return $list;
@@ -1141,6 +1147,9 @@ class InventoryService
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
+        }
+        if ($request->filled('id')) {
+            $query->where('id', (int) $request->id);
         }
         if ($request->filled('keyword')) {
             $kw = $request->keyword;

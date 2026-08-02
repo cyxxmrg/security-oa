@@ -392,6 +392,7 @@ const routes: RouteRecordRaw[] = [
           { path: 'material-request', name: 'InventoryMaterialRequest', component: () => import('@/views/inventory/MaterialRequest.vue'), meta: { title: '领料单' } },
           { path: 'material-return', name: 'InventoryMaterialReturn', component: () => import('@/views/inventory/MaterialReturn.vue'), meta: { title: '退料单' } },
           { path: 'tool-usage-order', name: 'InventoryToolUsageOrder', component: () => import('@/views/inventory/ToolUsageOrder.vue'), meta: { title: '工具使用单' } },
+          { path: 'tool-usage-detail', name: 'InventoryToolUsageDetail', component: () => import('@/views/inventory/ToolUsageDetail.vue'), meta: { title: '工具使用单明细' } },
           { path: 'warehouse-manage', name: 'InventoryWarehouseManage', component: () => import('@/views/inventory/WarehouseManage.vue'), meta: { title: '仓库管理' } },
           { path: 'stock-transfer', name: 'InventoryStockTransfer', component: () => import('@/views/inventory/StockTransfer.vue'), meta: { title: '调拨单' } }
         ]

@@ -54,6 +54,11 @@
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip />
+        <el-table-column label="操作" width="80" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" :icon="Document" :disabled="!row.tool_id" @click="goDetail(row.tool_id)">明细</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="pagination-wrap">
         <el-pagination
@@ -213,7 +218,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Search, Plus, Delete, TakeawayBox, RefreshLeft, Switch } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Search, Plus, Delete, TakeawayBox, RefreshLeft, Switch, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { get, post } from '@/utils/request'
 import { unwrapList, unwrapPaginate } from '@/utils/response'
@@ -415,6 +421,13 @@ async function submitConvert() {
   } finally {
     converting.value = false
   }
+}
+
+const router = useRouter()
+
+function goDetail(toolId: number) {
+  if (!toolId) return
+  router.push({ name: 'InventoryToolUsageDetail', query: { toolId } })
 }
 
 onMounted(() => {
