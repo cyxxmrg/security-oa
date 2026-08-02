@@ -1,6 +1,6 @@
 # 安防运维 OA 系统 (Security OA)
 
-> **v1.3.2** — 企业级安防运维综合办公管理系统
+> **v1.3.2** — 安防运维企业综合办公管理系统
 >
 > PC Web 端（Vue3）+ Laravel API 端（pc-api）全栈 OA 系统
 
@@ -47,7 +47,7 @@ security-oa/
 └── .gitattributes
 ```
 
-> 仓库内置 `install.sh` 提供 Ubuntu 22.04 / 24.04 一键部署（Nginx + PHP 8.5 + PostgreSQL + Redis + 前后端构建）。Docker / 桌面端部署方案可联系维护方获取。
+> 仓库内置 `install.sh` 提供 Ubuntu 26.04  一键部署（Nginx + PHP 8.5 + PostgreSQL + Redis + 前后端构建）。Docker / 桌面端部署方案可联系维护方获取。
 
 ## 快速开始
 
@@ -75,7 +75,7 @@ composer install
 cp .env.example .env       # 配置数据库凭据
 php artisan key:generate
 php artisan migrate
-php artisan serve          # http://localhost:8000
+php artisan serve          # http://localhost
 ```
 
 ### 生产构建
@@ -115,7 +115,7 @@ sudo bash install.sh --domain oa.example.com
 |---|---|---|
 | **v1.3.2** | 源码开源发布：精简为纯核心源码（pc-api + pc-web），清理敏感配置与历史泄露 | ✅ 已发布 |
 | v1.2.7 | 架构整改：模型拆分 / 路由拆分 / 队列 / API 文档 / 性能监控三级告警 | ✅ 完成 |
-| v1.2.6 | admin 隔离 / system 首次登录 / 考勤自动排班 / Docker 部署包 | ✅ 已发布 |
+| v1.2.6 | admin 隔离 / system 首次登录 / 考勤自动排班 / Docker 部署包 | ✅ 完成 |
 | v1.2.5 | 商机赢单自动建居间费结算单 + 编辑模式回填 referrer | ✅ 完成 |
 | v1.0 | 正式发布 — 全量 16 模块 / 监控 + 备份 + 审计 + 缓存 | ✅ 完成 |
 
