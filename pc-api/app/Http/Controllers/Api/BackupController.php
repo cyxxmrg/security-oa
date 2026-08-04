@@ -16,13 +16,16 @@ class BackupController extends Controller
 
     public function __construct()
     {
-        // P0-4 安全修复: 兜底守门, 任何方法执行前都先验证必须是 system 账号
-        // 即使 route 中间件被绕过 (例如未来路由配置回归), 控制器内部仍然拒绝
-        $user = auth()->user();
-        if (!$user || $user->user_type !== 'system') {
-            abort(403, '备份管理仅限 system 账号');
-        }
         $this->backupDir = storage_path('app/backups');
+        // Keep the controller-level guard, but defer it until request handling so
+        // route discovery and cache commands can instantiate the controller.
+        $this->middleware(function (Request $request, \Closure $next) {
+            if (!$request->user() || $request->user()->user_type !== 'system') {
+                abort(403, '备份管理仅限 system 账号');
+            }
+
+            return $next($request);
+        });
     }
 
     public function index(): JsonResponse
