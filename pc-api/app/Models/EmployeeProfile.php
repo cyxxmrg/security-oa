@@ -38,6 +38,7 @@ class EmployeeProfile extends Model
         'hire_date' => 'date', 'leave_date' => 'date',
         'contract_start' => 'date', 'contract_end' => 'date',
         'base_salary' => 'decimal:2', 'salary_allowance' => 'decimal:2',
+        'bank_account' => 'encrypted',
     ];
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

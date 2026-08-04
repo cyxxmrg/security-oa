@@ -2,7 +2,7 @@
 // 从 employee/Organization.vue <script setup> 抽出, 主组件 + 子组件共享
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Files, SwitchButton } from '@element-plus/icons-vue'
 import { get, post, put, del } from '@/utils/request'
 import { unwrapPaginate } from '@/utils/response'
@@ -25,7 +25,7 @@ interface EmployeePayload {
   email?: string; is_active?: boolean; role_id?: number | null; hire_date?: string
   username?: string; password?: string
 }
-interface EmployeeSaveResult { id?: number; data?: { id?: number }; [k: string]: unknown }
+interface EmployeeSaveResult { id?: number; data?: { id?: number }; temporary_password?: string | null; [k: string]: unknown }
 interface EmployeeRow extends UserItem {}
 
 export function useOrganization() {
@@ -193,9 +193,16 @@ export function useOrganization() {
         ElMessage.success('员工已更新')
       } else {
         payload.username = form.username
-        payload.password = form.password || '123456'
+        if (form.password) payload.password = form.password
         res = await post('/employees', payload)
-        ElMessage.success('员工已创建，初始密码 ' + (form.password || '123456'))
+        if (res?.temporary_password) {
+          await ElMessageBox.alert(`一次性密码: ${res.temporary_password}`, '员工已创建', {
+            type: 'success',
+            confirmButtonText: '已妥善记录',
+          })
+        } else {
+          ElMessage.success('员工已创建')
+        }
       }
       const savedId = editingEmployee.value?.id || res?.id || res?.data?.id
       if (savedId && skillIds.length) {

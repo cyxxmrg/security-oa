@@ -9,6 +9,7 @@ use App\Models\Position;
 use App\Models\SkillTag;
 use App\Models\Certificate;
 use App\Services\CacheHelper;
+use App\Support\TemporaryPassword;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Http\Requests\Employee\ResetPasswordRequest;
@@ -74,7 +75,7 @@ class EmployeeController extends Controller
         } else {
             $query->where('status', 'active');
         }
-        // V1.1 admin 隔离: 默认排除 system 用户 (业务下拉/列表不显示 admin/<已脱敏>)
+        // V1.1 admin 隔离: 默认排除 system 用户。
         // system 用户 (含 admin) 主动传 include_system=1 才能看到 (用于 userType=system 的管理端)
         if (!$request->boolean('include_system')) {
             $query->where(function ($q) {
@@ -133,10 +134,11 @@ class EmployeeController extends Controller
     public function store(StoreEmployeeRequest $request): JsonResponse
     {
         $data = $request->validated();
-        // V1.2.10: password 必填但前端 dialog 不传, 自动生成默认密码 123456 (强制首次登录改密)
+        $generatedPassword = false;
         if (empty($data['password'])) {
-            $data['password'] = '123456';
+            $data['password'] = TemporaryPassword::generate();
             $data['must_change_password'] = true;
+            $generatedPassword = true;
         }
         // 不要手动 bcrypt — User 模型 casts 已配 'password' => 'hashed' 自动加密
         $data['status'] = 'active';
@@ -167,7 +169,12 @@ class EmployeeController extends Controller
         ]);
         $user->load(['department', 'position', 'profile', 'roles']);
         $this->clearOrgCache();
-        return response()->json(['code' => 0, 'message' => '员工已创建', 'data' => $user]);
+        return response()->json([
+            'code' => 0,
+            'message' => '员工已创建',
+            'data' => $user,
+            'temporary_password' => $generatedPassword ? $data['password'] : null,
+        ]);
     }
 
     public function show(Request $request, User $user): JsonResponse
@@ -255,7 +262,7 @@ class EmployeeController extends Controller
 
     /**
      * 重置员工密码 — POST /api/users/{user}/reset-password
-     * 默认重置为 123456，调用方可传 password 自定义
+     * 未指定时生成一次性随机密码并强制下次登录修改
      * P0-1 安全修复: 只允许 system 账号调用, 防止业务用户改他人密码
      */
     public function resetPassword(ResetPasswordRequest $request, User $user): JsonResponse
@@ -266,8 +273,8 @@ class EmployeeController extends Controller
             return response()->json(['code' => 1003, 'message' => '只有 system 账号可以重置密码'], 403);
         }
         $data = $request->validated();
-        $newPwd = $data['password'] ?? '123456';
-        $user->update(['password' => $newPwd]); // casts:password => hashed 自动加密
+        $newPwd = $data['password'] ?? TemporaryPassword::generate();
+        $user->update(['password' => $newPwd, 'must_change_password' => true]);
         // 撤销 token 强制重新登录
         $user->tokens()->delete();
         return response()->json([
@@ -540,7 +547,7 @@ class EmployeeController extends Controller
     {
         $request->validate(['file' => 'required|file|mimes:csv,xlsx,xls|max:10240']);
         $file = $request->file('file');
-        $success = 0; $failed = 0; $errors = [];
+        $success = 0; $failed = 0; $errors = []; $temporaryPasswords = [];
         if (strtolower($file->getClientOriginalExtension()) !== 'csv') {
             return response()->json(['code' => 1001, 'message' => '请使用 CSV 格式导入'], 422);
         }
@@ -554,23 +561,35 @@ class EmployeeController extends Controller
         foreach (array_slice($rows, 1) as $idx => $r) {
             if (empty($r[0]) || empty($r[1])) { $failed++; continue; }
             try {
-                $user = User::create([
-                    'name'          => trim($r[0]),
-                    'username'      => trim($r[1]),
-                    'password'      => trim($r[2] ?? '123456'),  // User casts 自动 hash
-                    'phone'         => !empty(trim($r[5] ?? '')) ? trim($r[5]) : ('TEL-IMPORT-' . bin2hex(random_bytes(3))),
-                    'email'         => $r[6] ?? null,
-                    'department_id' => is_numeric($r[3] ?? null) ? (int) $r[3] : null,
-                    'position_id'   => is_numeric($r[4] ?? null) ? (int) $r[4] : null,
-                    'status'        => 'active',
-                ]);
-                $user->profile()->create([
-                    'hire_date'        => !empty($r[7]) ? $r[7] : now()->format('Y-m-d'),
-                    'employee_no'      => 'EMP' . str_pad((string) $user->id, 5, '0', STR_PAD_LEFT),
-                    'contract_type'    => 'open',
-                    'base_salary'      => 0,
-                    'salary_allowance' => 0,
-                ]);
+                $providedPassword = trim($r[2] ?? '');
+                if ($providedPassword !== '' && !preg_match('/^(?=.*[A-Za-z])(?=.*\d).{12,64}$/', $providedPassword)) {
+                    throw new \RuntimeException('密码必须为 12-64 位且同时包含字母和数字');
+                }
+                $temporaryPassword = $providedPassword !== '' ? $providedPassword : TemporaryPassword::generate();
+                $user = \Illuminate\Support\Facades\DB::transaction(function () use ($r, $temporaryPassword) {
+                    $created = User::create([
+                        'name'          => trim($r[0]),
+                        'username'      => trim($r[1]),
+                        'password'      => $temporaryPassword,
+                        'must_change_password' => true,
+                        'phone'         => !empty(trim($r[5] ?? '')) ? trim($r[5]) : ('TEL-IMPORT-' . bin2hex(random_bytes(3))),
+                        'email'         => $r[6] ?? null,
+                        'department_id' => is_numeric($r[3] ?? null) ? (int) $r[3] : null,
+                        'position_id'   => is_numeric($r[4] ?? null) ? (int) $r[4] : null,
+                        'status'        => 'active',
+                    ]);
+                    $created->profile()->create([
+                        'hire_date'        => !empty($r[7]) ? $r[7] : now()->format('Y-m-d'),
+                        'employee_no'      => 'EMP' . str_pad((string) $created->id, 5, '0', STR_PAD_LEFT),
+                        'contract_type'    => 'open',
+                        'base_salary'      => 0,
+                        'salary_allowance' => 0,
+                    ]);
+                    return $created;
+                });
+                if ($providedPassword === '') {
+                    $temporaryPasswords[] = ['username' => $user->username, 'password' => $temporaryPassword];
+                }
                 $success++;
             } catch (\Throwable $e) {
                 \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
@@ -578,7 +597,12 @@ class EmployeeController extends Controller
                 $errors[] = "第 " . ($idx + 2) . " 行: " . $e->getMessage();
             }
         }
-        return response()->json(['code' => 0, 'data' => compact('success', 'failed', 'errors')]);
+        return response()->json(['code' => 0, 'data' => [
+            'success' => $success,
+            'failed' => $failed,
+            'errors' => $errors,
+            'temporary_passwords' => $temporaryPasswords,
+        ]]);
     }
 
     // =================== 证书 ===================

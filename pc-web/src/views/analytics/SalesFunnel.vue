@@ -76,7 +76,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { FunnelChart, BarChart, LineChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getSalesFunnel, getPdfUrl } from '@/api/analytics'
+import { getSalesFunnel, exportAnalyticsPdf } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, FunnelChart, BarChart, LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
@@ -135,7 +135,7 @@ async function load() {
   }
 }
 
-function exportPdf() { window.open(getPdfUrl('funnel', 'full'), '_blank') }
+function exportPdf() { void exportAnalyticsPdf('funnel', 'full') }
 onMounted(load)
 </script>
 

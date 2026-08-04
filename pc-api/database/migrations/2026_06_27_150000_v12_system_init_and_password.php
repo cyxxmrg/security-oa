@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *   1. users 加 must_change_password 列 (system 账号首次登录强制改密)
  *   2. 软归档 admin 账号 (username 改 _archived_admin_, 清空 password, status 改 inactive)
  *      — 不物理删除: 保留 audit_logs / approval_records 等 FK 引用
- *   3. 新建 system 账号 (username='system', password='<已脱敏>', must_change_password=true)
+ *   3. 新建 system 账号 (密码来自环境变量或安全随机生成)
  *   4. system_settings 加 system_initialized 标志 (wizard 完成状态)
  *
  * 注意: 必须用 Hash::make() 算密码, 不能写死 bcrypt hash (不同 Laravel 版本盐不同)
@@ -50,9 +50,12 @@ return new class extends Migration
         }
 
         // 3. 新建 system 账号
-        // V1.2.10 安全修复: 密码从 env 读取, 不再硬编码 <已脱敏> 入版本库
+        // 密码从 env 读取，未配置时安全随机生成。
         // V1.2.7 P0-2: 兜底改为随机密码 (env 未设时不会暴露 default 凭据)
-        $systemPwd = env('SYSTEM_INIT_PASSWORD', \Illuminate\Support\Str::random(20));
+        $systemPwd = env('SYSTEM_INIT_PASSWORD', \App\Support\TemporaryPassword::generate());
+        if (!preg_match('/^(?=.*[A-Za-z])(?=.*\d).{12,64}$/', $systemPwd)) {
+            throw new \RuntimeException('SYSTEM_INIT_PASSWORD 必须为 12-64 位且同时包含字母和数字');
+        }
         $systemExists = DB::table('users')->where('username', 'system')->exists();
         if (!$systemExists) {
             $deptId = DB::table('departments')->where('name', '总经办')->value('id');

@@ -170,6 +170,7 @@ Route::prefix('repair-orders/{repairOrderId}/progress-logs')->whereNumber('repai
 // 维修附件
 Route::prefix('repair-orders/{repairOrderId}/attachments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
     Route::get('/', [RepairOrderController::class, 'listAttachments']);
+    Route::get('{id}/download', [RepairOrderController::class, 'downloadAttachment'])->whereNumber('id');
     Route::post('/', [RepairOrderController::class, 'uploadAttachment']);
     Route::delete('{id}', [RepairOrderController::class, 'deleteAttachment'])->whereNumber('id');
 });

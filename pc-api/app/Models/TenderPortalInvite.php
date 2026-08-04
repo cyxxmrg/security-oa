@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * P1-7: 供应商门户一次性邀请 token
+ * 供应商门户短期访问 token。
  */
 class TenderPortalInvite extends Model
 {

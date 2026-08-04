@@ -48,19 +48,22 @@ class CheckPermission
         if (in_array('admin', $userRoles, true)) {
             return $next($request);
         }
-        // 2) spatie Permission 检查
-        // 注意: 实际请求通过 sanctum guard, 但权限注册在 web guard, 必须显式指定
-        $permExists = \Spatie\Permission\Models\Permission::where('name', $permission)
-            ->where('guard_name', 'web')->exists();
-        if (!$permExists) {
+        // 支持 permission:a|b 的任一权限语义，与项目既有路由声明保持一致。
+        $permissions = array_values(array_filter(explode('|', $permission)));
+        $definedPermissions = \Spatie\Permission\Models\Permission::whereIn('name', $permissions)
+            ->where('guard_name', 'web')
+            ->pluck('name')
+            ->all();
+        if ($definedPermissions === []) {
             Log::warning("CheckPermission: 权限 {$permission} 未在 DB 注册, 拒绝访问");
             return $this->deny($request, $permission, 'permission_not_defined');
         }
 
         try {
-            // V0.5.3 临时权限: 用 hasActivePermissionTo 绕开 spatie 5min cache
-            if ($user->hasActivePermissionTo($permission)) {
-                return $next($request);
+            foreach ($definedPermissions as $definedPermission) {
+                if ($user->hasActivePermissionTo($definedPermission)) {
+                    return $next($request);
+                }
             }
         } catch (\Throwable $e) {
             Log::warning("CheckPermission: hasActivePermissionTo 异常: " . $e->getMessage());

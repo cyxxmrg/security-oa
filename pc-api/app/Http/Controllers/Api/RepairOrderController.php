@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\RepairOrderStatus;
 use App\Http\Controllers\Controller;
+use App\Support\PrivateFileStorage;
 use App\Models\RepairAttachment;
 use App\Models\RepairMethod;
 use App\Models\RepairOrder;
@@ -612,7 +613,7 @@ class RepairOrderController extends Controller
                 'id'           => $a->id,
                 'file_name'    => $a->file_name,
                 'file_path'    => $a->file_path,
-                'file_url'     => asset('storage/' . $a->file_path),
+                'file_url'     => "/api/repair-orders/{$repairOrderId}/attachments/{$a->id}/download",
                 'file_type'    => $a->file_type,
                 'category'     => $a->category,
                 'uploaded_by'  => $a->uploaded_by,
@@ -631,8 +632,8 @@ class RepairOrderController extends Controller
 
         $file = $request->file('file');
         $ext = $file->getClientOriginalExtension();
-        $dir = "repairs/{$ro->code}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('att_') . '.' . $ext, 'public');
+        $dir = "private/repairs/{$ro->code}/" . date('Ymd');
+        $path = $file->storeAs($dir, uniqid('att_') . '.' . $ext, 'local');
 
         $att = \App\Models\RepairAttachment::create([
             'repair_order_id' => $ro->id,
@@ -648,7 +649,7 @@ class RepairOrderController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'        => $att->id,
             'file_name' => $att->file_name,
-            'file_url'  => asset('storage/' . $att->file_path),
+            'file_url'  => "/api/repair-orders/{$repairOrderId}/attachments/{$att->id}/download",
         ], 'message' => '上传成功']);
     }
 
@@ -662,9 +663,18 @@ class RepairOrderController extends Controller
         if ($att->uploaded_by !== $user?->id && !$this->isAdmin($user)) {
             return response()->json(['code' => 403, 'message' => '只能删除自己上传的附件'], 403);
         }
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($att->file_path);
+        PrivateFileStorage::delete($att->file_path);
         $att->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
+    }
+
+    public function downloadAttachment(int $repairOrderId, int $id)
+    {
+        $attachment = \App\Models\RepairAttachment::where('repair_order_id', $repairOrderId)->findOrFail($id);
+        return PrivateFileStorage::download($attachment->file_path, $attachment->file_name, [
+            'Content-Type' => $attachment->file_type ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function isAdmin($user): bool

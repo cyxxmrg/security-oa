@@ -67,6 +67,9 @@ class TenderService
             if (!$t->canApprove()) {
                 throw new RuntimeException("当前状态 [{$t->status_label}] 不能审核通过 (要求 pending_review)");
             }
+            if ((int) $t->created_by === (int) Auth::id()) {
+                throw new RuntimeException('不能审核自己创建的招标项目');
+            }
             $t->status       = TenderProject::STATUS_OPEN;
             $t->reviewer_id  = Auth::id();
             $t->reviewed_at  = now();
@@ -91,6 +94,9 @@ class TenderService
             $t = TenderProject::lockForUpdate()->findOrFail($tenderId);
             if (!$t->canReject()) {
                 throw new RuntimeException("当前状态 [{$t->status_label}] 不能驳回 (要求 pending_review)");
+            }
+            if ((int) $t->created_by === (int) Auth::id()) {
+                throw new RuntimeException('不能审核自己创建的招标项目');
             }
             $t->status        = $backToDraft ? TenderProject::STATUS_DRAFT : TenderProject::STATUS_REJECTED;
             $t->reject_reason = $reason;

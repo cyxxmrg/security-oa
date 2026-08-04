@@ -191,6 +191,9 @@ class EmployeeResignationController extends Controller
         if ($resignation->status !== 'pending') {
             return response()->json(['code' => 1001, 'message' => '仅待审批状态可审批'], 422);
         }
+        if ((int) $resignation->created_by === (int) Auth::id() || (int) $resignation->user_id === (int) Auth::id()) {
+            return response()->json(['code' => 1003, 'message' => '离职申请人或目标员工不能审批该申请'], 403);
+        }
         $resignation->update([
             'status' => 'approved',
             'approved_by' => Auth::id(),

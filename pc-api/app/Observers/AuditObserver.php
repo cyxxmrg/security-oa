@@ -2,6 +2,7 @@
 
 namespace App\Observers;
 
+use App\Support\SensitiveDataRedactor;
 use App\Models\Customer;
 use App\Models\EmployeeProfile;
 use App\Models\ExpenseClaim;
@@ -101,7 +102,7 @@ class AuditObserver
 
         $requestData = [];
         if ($type === 'created') {
-            $requestData = $newValues ?? $model->getAttributes();
+            $requestData = SensitiveDataRedactor::redact($newValues ?? $model->getAttributes());
         } elseif ($type === 'updated') {
             $requestData = ['changed' => array_keys($newValues ?? [])];
         }

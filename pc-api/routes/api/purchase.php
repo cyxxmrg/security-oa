@@ -15,35 +15,36 @@ use Illuminate\Support\Facades\Route;
 
 // ========== 招标中心 ==========
 // V1.2.10 补 permission 中间件 (admin 角色有所有权限, 不影响业务管理员)
-Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business', 'permission:purchase.tender'])->group(function () {
+Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business', 'permission:purchase.tender|tender.view|tender.approve|deposit.manage'])->group(function () {
     Route::get('/', [TenderController::class, 'index']);
-    Route::post('/', [TenderController::class, 'store']);
-    Route::get('pending-review', [TenderController::class, 'pendingReview']);
-    Route::post('{id}/publish', [TenderController::class, 'publish'])->whereNumber('id');
-    Route::post('{id}/close', [TenderController::class, 'close'])->whereNumber('id');
-    Route::post('{id}/cancel', [TenderController::class, 'cancel'])->whereNumber('id');
-    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->whereNumber('id');
-    Route::post('{id}/award', [TenderController::class, 'award'])->whereNumber('id');
-    Route::post('{id}/submit-review', [TenderController::class, 'submitReview'])->whereNumber('id');
-    Route::post('{id}/approve', [TenderController::class, 'approve'])->whereNumber('id');
-    Route::post('{id}/reject', [TenderController::class, 'reject'])->whereNumber('id');
-    Route::post('{id}/withdraw', [TenderController::class, 'withdraw'])->whereNumber('id');
-    Route::post('{id}/cancel-v2', [TenderController::class, 'cancelV2'])->whereNumber('id');
-    Route::put('{id}/deposit-rule', [TenderController::class, 'setDepositRule'])->whereNumber('id');
-    Route::get('{id}/deposits', [TenderController::class, 'listDeposits'])->whereNumber('id');
-    Route::post('{id}/deposits', [TenderController::class, 'createDeposit'])->whereNumber('id');
-    Route::post('{id}/deposits/{depositId}/mark-paid', [TenderController::class, 'markDepositPaid'])->whereNumber('id')->whereNumber('depositId');
-    Route::post('{id}/deposits/{depositId}/refund', [TenderController::class, 'refundDeposit'])->whereNumber('id')->whereNumber('depositId');
-    Route::post('{id}/deposits/{depositId}/forfeit', [TenderController::class, 'forfeitDeposit'])->whereNumber('id')->whereNumber('depositId');
+    Route::post('/', [TenderController::class, 'store'])->middleware('permission:tender.create');
+    Route::get('pending-review', [TenderController::class, 'pendingReview'])->middleware('permission:tender.approve');
+    Route::post('{id}/publish', [TenderController::class, 'publish'])->middleware('permission:tender.approve')->whereNumber('id');
+    Route::post('{id}/close', [TenderController::class, 'close'])->middleware('permission:tender.create')->whereNumber('id');
+    Route::post('{id}/cancel', [TenderController::class, 'cancel'])->middleware('permission:tender.cancel')->whereNumber('id');
+    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->middleware('permission:tender.approve')->whereNumber('id');
+    Route::post('{id}/award', [TenderController::class, 'award'])->middleware('permission:tender.award')->whereNumber('id');
+    Route::post('{id}/submit-review', [TenderController::class, 'submitReview'])->middleware('permission:tender.submit')->whereNumber('id');
+    Route::post('{id}/approve', [TenderController::class, 'approve'])->middleware('permission:tender.approve')->whereNumber('id');
+    Route::post('{id}/reject', [TenderController::class, 'reject'])->middleware('permission:tender.approve')->whereNumber('id');
+    Route::post('{id}/withdraw', [TenderController::class, 'withdraw'])->middleware('permission:tender.withdraw')->whereNumber('id');
+    Route::post('{id}/cancel-v2', [TenderController::class, 'cancelV2'])->middleware('permission:tender.cancel')->whereNumber('id');
+    Route::put('{id}/deposit-rule', [TenderController::class, 'setDepositRule'])->middleware('permission:deposit.manage')->whereNumber('id');
+    Route::get('{id}/deposits', [TenderController::class, 'listDeposits'])->middleware('permission:deposit.manage')->whereNumber('id');
+    Route::post('{id}/deposits', [TenderController::class, 'createDeposit'])->middleware('permission:deposit.manage')->whereNumber('id');
+    Route::post('{id}/deposits/{depositId}/mark-paid', [TenderController::class, 'markDepositPaid'])->middleware('permission:deposit.manage')->whereNumber('id')->whereNumber('depositId');
+    Route::post('{id}/deposits/{depositId}/refund', [TenderController::class, 'refundDeposit'])->middleware('permission:deposit.manage')->whereNumber('id')->whereNumber('depositId');
+    Route::post('{id}/deposits/{depositId}/forfeit', [TenderController::class, 'forfeitDeposit'])->middleware('permission:deposit.manage')->whereNumber('id')->whereNumber('depositId');
     Route::get('{id}/downstream', [TenderController::class, 'downstream'])->whereNumber('id');
     Route::get('{id}/bids', [TenderController::class, 'bids'])->whereNumber('id');
-    Route::post('{id}/bids', [TenderController::class, 'storeBid'])->whereNumber('id');
+    Route::post('{id}/bids', [TenderController::class, 'storeBid'])->middleware('permission:tender.create')->whereNumber('id');
     Route::get('{id}/attachments', [TenderController::class, 'listAttachments'])->whereNumber('id');
-    Route::post('{id}/attachments', [TenderController::class, 'uploadAttachment'])->whereNumber('id');
-    Route::delete('{id}/attachments/{attId}', [TenderController::class, 'deleteAttachment'])->whereNumber('id');
+    Route::get('{id}/attachments/{attId}/download', [TenderController::class, 'downloadAttachment'])->whereNumber('id')->whereNumber('attId');
+    Route::post('{id}/attachments', [TenderController::class, 'uploadAttachment'])->middleware('permission:tender.create')->whereNumber('id');
+    Route::delete('{id}/attachments/{attId}', [TenderController::class, 'deleteAttachment'])->middleware('permission:tender.create')->whereNumber('id');
     Route::get('{id}', [TenderController::class, 'show'])->whereNumber('id');
-    Route::put('{id}', [TenderController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [TenderController::class, 'destroy'])->whereNumber('id');
+    Route::put('{id}', [TenderController::class, 'update'])->middleware('permission:tender.create')->whereNumber('id');
+    Route::delete('{id}', [TenderController::class, 'destroy'])->middleware('permission:tender.create')->whereNumber('id');
 });
 
 // ========== 采购协同 8 步流转 ==========
@@ -63,6 +64,7 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', '
     Route::post('contracts', [PurchaseFlowController::class, 'createContract']);
     Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id');
     Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id');
+    Route::get('contracts/{id}/files/{fid}/download', [PurchaseFlowController::class, 'downloadContractFile'])->whereNumber('id')->whereNumber('fid');
     Route::post('contracts/{id}/files', [PurchaseFlowController::class, 'uploadContractFile'])->whereNumber('id');
     Route::delete('contracts/{id}/files/{fid}', [PurchaseFlowController::class, 'deleteContractFile'])->whereNumber('id')->whereNumber('fid');
     Route::get('contracts/{id}/items', [PurchaseFlowController::class, 'listContractItems'])->whereNumber('id');
@@ -74,6 +76,7 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', '
     Route::post('contracts/{id}/tracking', [PurchaseFlowController::class, 'addTracking'])->whereNumber('id');
     Route::get('contracts/{id}/shipping', [PurchaseFlowController::class, 'listShipping'])->whereNumber('id');
     Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id');
+    Route::get('payment-requests/{id}/vouchers/{voucher}/download', [PurchaseFlowController::class, 'downloadPaymentVoucher'])->whereNumber('id')->whereNumber('voucher');
     Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id');
     Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest']);
     Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])->whereNumber('id');
@@ -158,7 +161,9 @@ Route::prefix('external-quotes')->middleware(['auth:sanctum', 'ensure_business',
     Route::get('requests', [ExternalQuoteController::class, 'indexRequests']);
     Route::post('requests', [ExternalQuoteController::class, 'storeRequest']);
     Route::post('requests/{id}/files', [ExternalQuoteController::class, 'uploadRequiredFile'])->whereNumber('id');
+    Route::get('requests/{id}/files/{fileId}/download', [ExternalQuoteController::class, 'downloadRequiredFile'])->whereNumber('id');
     Route::delete('requests/{id}/files', [ExternalQuoteController::class, 'deleteRequiredFile'])->whereNumber('id');
     Route::get('requests/{id}', [ExternalQuoteController::class, 'showRequest']);
     Route::post('upload-attachment', [ExternalQuoteController::class, 'uploadAttachment']);
+    Route::get('files/download', [ExternalQuoteController::class, 'downloadDraftFile']);
 });

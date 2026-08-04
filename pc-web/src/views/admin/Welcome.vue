@@ -436,6 +436,8 @@ async function handleWipeData() {
         )
         // 强制跳登录页 + 清空本地 token
         try {
+          sessionStorage.removeItem('oa_access_token')
+          sessionStorage.removeItem('oa_user_info')
           localStorage.removeItem('oa_access_token')
           localStorage.removeItem('oa_user_info')
         } catch {}

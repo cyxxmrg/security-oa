@@ -31,6 +31,8 @@ class ConstructionTeamMember extends Model
         'left_at'   => 'date',
         'join_date' => 'date',
         'leave_date' => 'date',
+        'id_card' => 'encrypted',
+        'id_number' => 'encrypted',
     ];
 
     public const STATUS_ACTIVE  = 'active';

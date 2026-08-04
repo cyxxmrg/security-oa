@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post } from '@/utils/request'
 import { exportExcelLike } from '@/utils/exporter'
 import { onboardings } from '@/api/modules'
@@ -87,6 +87,7 @@ interface OnboardingShowResult { data?: Onboarding; [k: string]: unknown }
 interface OnboardingListParams { page?: number; per_page?: number; keyword?: string; department_id?: number | null; status?: string; contract_expiring?: number; probation_expiring?: number; [k: string]: unknown }
 interface OnboardingPayload { contract_start_date?: string; contract_end_date?: string; contract_file_id?: number | null; [k: string]: unknown }
 interface UploadResult { id?: number; file_id?: number; data?: { id?: number }; message?: string; [k: string]: unknown }
+interface OnboardingCreateResult { temporary_password?: string | null; [k: string]: unknown }
 interface UploadOpt { file: File; onSuccess?: (res: unknown) => void; onError?: (err: unknown) => void }
 interface ApiError { message?: string; response?: { data?: { message?: string } } }
 
@@ -378,7 +379,6 @@ async function submitWizard() {
         name: formStep1.name,
         phone: formStep1.phone || null,
         email: formStep1.email || null,
-        password: '123456',
       },
       onboarding: {
         hire_date: formStep2.hire_date,
@@ -398,8 +398,15 @@ async function submitWizard() {
         contract_file_id: formStep3.contract_file_id || null,
       },
     }
-    await onboardings.create(payload)
-    ElMessage.success('入职办理成功，初始密码 123456')
+    const result = await onboardings.create(payload) as OnboardingCreateResult
+    if (result?.temporary_password) {
+      await ElMessageBox.alert(`一次性密码: ${result.temporary_password}`, '入职办理成功', {
+        type: 'success',
+        confirmButtonText: '已妥善记录',
+      })
+    } else {
+      ElMessage.success('入职办理成功')
+    }
     wizardVisible.value = false
     loadList()
     loadStats()

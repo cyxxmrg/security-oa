@@ -5,6 +5,7 @@
  * 数据来自物化视图 (凌晨 02:30 刷新), 服务端 5min Redis 缓存
  */
 import { get } from '@/utils/request'
+import { openAuthenticatedFile } from '@/utils/privateFile'
 
 /** 月度营收 */
 export function getRevenue(params?: { start?: string; end?: string; industry?: string }) {
@@ -41,16 +42,8 @@ export function getRefreshStatus() {
   return get('/analytics/refresh-status')
 }
 
-/** PDF 导出 URL (浏览器直接跳转/iframe 触发下载) */
-export function getPdfUrl(report: string, template: 'executive' | 'full' | 'deep' = 'executive') {
-  return `/api/analytics/export/pdf?report=${report}&template=${template}&token=${getToken()}`
-}
-
-/** 从 localStorage 拿 token (用于 PDF iframe 链接) */
-function getToken(): string {
-  try {
-    return localStorage.getItem('access_token') || localStorage.getItem('token') || ''
-  } catch {
-    return ''
-  }
+/** 通过 Bearer Token 获取 PDF，避免令牌进入 URL、代理日志和浏览器历史。 */
+export function exportAnalyticsPdf(report: string, template: 'executive' | 'full' | 'deep' = 'executive') {
+  const url = `/api/analytics/export/pdf?report=${encodeURIComponent(report)}&template=${encodeURIComponent(template)}`
+  return openAuthenticatedFile(url, `OA报表_${report}.pdf`, true)
 }

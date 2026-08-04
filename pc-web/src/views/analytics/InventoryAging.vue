@@ -82,7 +82,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, PieChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getInventoryAging, getPdfUrl } from '@/api/analytics'
+import { getInventoryAging, exportAnalyticsPdf } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, BarChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
@@ -132,7 +132,7 @@ async function load() {
   }
 }
 
-function exportPdf() { window.open(getPdfUrl('inventory', 'full'), '_blank') }
+function exportPdf() { void exportAnalyticsPdf('inventory', 'full') }
 onMounted(load)
 </script>
 

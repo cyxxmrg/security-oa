@@ -15,23 +15,16 @@ use Symfony\Component\HttpFoundation\Response;
  *  - 5 分钟内连续失败 5 次 → 锁 30 分钟
  *  - 锁定后所有 login 请求直接 429, 不走 password 校验
  *  - 登录成功清零失败计数
- *  - 白名单: admin1 / fin_wu / eng_qian / sales_yang 不锁 (演示用)
  */
 class LoginThrottle
 {
     const MAX_ATTEMPTS  = 5;
     const DECAY_MINUTES  = 5;   // 失败计数衰减窗口
     const LOCK_MINUTES   = 30;  // 锁定时长
-    const WHITELIST      = ['admin1', 'fin_wu', 'eng_qian', 'sales_yang'];
 
     public function handle(Request $request, Closure $next): Response
     {
         $username = trim((string) $request->input('username', ''));
-
-        // 白名单跳过
-        if (in_array($username, self::WHITELIST, true)) {
-            return $next($request);
-        }
 
         $lockKey = "login:lock:{$username}";
 

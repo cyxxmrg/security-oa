@@ -39,6 +39,7 @@ class User extends Authenticatable
         'gender' => \App\Enums\Gender::class,
         'is_system' => 'boolean',
         'must_change_password' => 'boolean',
+        'id_card' => 'encrypted',
     ];
 
     // ========== 关联关系 ==========

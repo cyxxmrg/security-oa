@@ -131,19 +131,18 @@ class AuthController extends Controller
             'newPassword'  => [
                 'required',
                 'string',
-                'min:8',
-                'max:32',
+                'min:12',
+                'max:64',
                 'different:oldPassword',
-                // 8-32 位, 至少含字母+数字
-                'regex:/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};:\'",.<>\/?\\|`~]{8,32}$/',
+                'regex:/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};:\'",.<>\/?\\|`~]{12,64}$/',
             ],
         ], [
             'oldPassword.required' => '原密码必填',
             'newPassword.required' => '新密码必填',
-            'newPassword.min'      => '新密码至少 8 位',
-            'newPassword.max'      => '新密码最长 32 位',
+            'newPassword.min'      => '新密码至少 12 位',
+            'newPassword.max'      => '新密码最长 64 位',
             'newPassword.different'=> '新密码不能与原密码相同',
-            'newPassword.regex'    => '新密码必须 8-32 位, 且同时包含字母和数字',
+            'newPassword.regex'    => '新密码必须 12-64 位, 且同时包含字母和数字',
         ]);
 
         // 弱密码黑名单

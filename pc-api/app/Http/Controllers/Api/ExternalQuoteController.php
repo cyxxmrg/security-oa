@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalQuote;
 use App\Models\ExternalQuoteRequest;
 use App\Services\ExternalQuoteService;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -92,13 +93,14 @@ class ExternalQuoteController extends Controller
         $req = \App\Models\ExternalQuoteRequest::findOrFail($id);
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = "external-quotes/{$req->id}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('reqfile_') . ($ext ? ".{$ext}" : ''), 'public');
-        $url  = asset('storage/' . $path);
+        $dir  = "private/external-quotes/{$req->id}/" . date('Ymd');
+        $path = $file->storeAs($dir, uniqid('reqfile_') . ($ext ? ".{$ext}" : ''), 'local');
+        $fileId = uniqid('f_');
+        $url = "/api/external-quotes/requests/{$req->id}/files/{$fileId}/download";
 
         $files = $req->required_files ?? [];
         $files[] = [
-            'id'        => uniqid('f_'),
+            'id'        => $fileId,
             'name'      => $file->getClientOriginalName(),
             'path'      => $path,
             'url'       => $url,
@@ -130,7 +132,7 @@ class ExternalQuoteController extends Controller
             }
         }
         if ($removed && !empty($removed['path'])) {
-            \Storage::disk('public')->delete($removed['path']);
+            PrivateFileStorage::delete($removed['path']);
         }
         $req->required_files = $kept ?: null;
         $req->save();
@@ -145,19 +147,38 @@ class ExternalQuoteController extends Controller
         ]);
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = 'external-quotes/_draft/' . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'public');
+        $dir  = 'private/external-quotes/_draft/' . date('Ymd');
+        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'local');
 
         return response()->json(['code' => 0, 'message' => '已上传', 'data' => [
             'id'            => uniqid('f_'),
             'name'          => $file->getClientOriginalName(),
             'original_name' => $file->getClientOriginalName(),
             'path'          => $path,
-            'url'           => asset('storage/' . $path),
+            'url'           => '/api/external-quotes/files/download?path=' . rawurlencode($path),
             'size'          => $file->getSize(),
             'mime_type'     => $file->getMimeType(),
             'uploaded_at'   => now()->toIso8601String(),
         ]]);
+    }
+
+    public function downloadRequiredFile(int $id, string $fileId)
+    {
+        $request = ExternalQuoteRequest::findOrFail($id);
+        $file = collect($request->required_files ?? [])->firstWhere('id', $fileId);
+        abort_unless($file && !empty($file['path']), 404);
+
+        return PrivateFileStorage::download($file['path'], $file['name'] ?? basename($file['path']), [
+            'Content-Type' => $file['mime'] ?? 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function downloadDraftFile(Request $request)
+    {
+        $path = (string) $request->query('path', '');
+        abort_unless(str_starts_with($path, 'private/external-quotes/_draft/'), 404);
+        return PrivateFileStorage::download($path, basename($path), ['X-Content-Type-Options' => 'nosniff']);
     }
 
     /** 6. 该请求下的所有报价 */

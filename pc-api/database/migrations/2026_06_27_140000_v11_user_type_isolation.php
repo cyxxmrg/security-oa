@@ -15,7 +15,7 @@ return new class extends Migration
      *   - business: 普通员工，参与业务
      *
      * is_system: 简化的 system 标记（与 user_type='system' 等价，方便快速判断）
-     * 永远只会有 1 个 user_type='system' 的账号（admin/<已脱敏>）
+     * 永远只会有 1 个 user_type='system' 的账号。
      */
     public function up(): void
     {

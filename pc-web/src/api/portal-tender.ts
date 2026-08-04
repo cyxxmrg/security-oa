@@ -9,10 +9,14 @@
 // 通用 API 负载类型 — 替代 any, 强制调用方做类型守卫
 export type ApiPayload = Record<string, unknown>;
 
-async function postJson<T = any>(url: string, data?: ApiPayload): Promise<T> {
+function portalAuthHeaders(accessToken?: string): Record<string, string> {
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+}
+
+async function postJson<T = any>(url: string, data?: ApiPayload, accessToken?: string): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...portalAuthHeaders(accessToken) },
     body: data ? JSON.stringify(data) : undefined,
   })
   const json = await res.json()
@@ -25,8 +29,8 @@ async function postJson<T = any>(url: string, data?: ApiPayload): Promise<T> {
   return json.data
 }
 
-async function getJson<T = any>(url: string): Promise<T> {
-  const res = await fetch(url, { method: 'GET' })
+async function getJson<T = any>(url: string, accessToken?: string, extraHeaders: Record<string, string> = {}): Promise<T> {
+  const res = await fetch(url, { method: 'GET', headers: { ...portalAuthHeaders(accessToken), ...extraHeaders } })
   const json = await res.json()
   if (json.code !== 0) {
     const err = new Error(json.message || '请求失败') as Error & { code?: number; data?: unknown }
@@ -73,7 +77,11 @@ export const portalApi = {
 
   /** 我方对该招标的投标 (cookie/session 关联 supplier_id) */
   myBid: (token: string, supplierId: number) =>
-    getJson<PublicBid>(`/api/portal/t/${token}/my-bid?supplier_id=${supplierId}&phone_suffix=${encodeURIComponent(sessionStorage.getItem('portal_phone_suffix') || '')}`),
+    getJson<PublicBid>(
+      `/api/portal/t/${token}/my-bid?supplier_id=${supplierId}`,
+      sessionStorage.getItem('portal_access_token') || '',
+      { 'X-Portal-Phone-Suffix': sessionStorage.getItem('portal_phone_suffix') || '' },
+    ),
 
   /** 提交/更新投标 */
   submitBid: (token: string, data: {
@@ -87,18 +95,24 @@ export const portalApi = {
   }) => postJson<PublicBid>(`/api/portal/t/${token}/bids`, {
     ...data,
     phone_suffix: data.phone_suffix || sessionStorage.getItem('portal_phone_suffix') || '',
-  }),
+  }, sessionStorage.getItem('portal_access_token') || ''),
+
+  access: (phone: string, supplierCode: string) => postJson<{
+    access_token: string
+    supplier_id: number
+    expires_at: string
+  }>('/api/portal/access', { phone, supplier_code: supplierCode }),
 
   /** 供应商用手机号查自己的邀请 */
-  listInvitations: (phone: string) => getJson<{
+  listInvitations: (accessToken: string) => getJson<{
     supplier: { id: number; name: string; phone: string } | null
     invitations: Array<{ id: number; code: string; name: string; status: string; deadline: string; public_token: string }>
-  }>(`/api/portal/invitations?phone=${encodeURIComponent(phone)}`),
+  }>('/api/portal/invitations', accessToken),
 
   /** V0.6.3 供应商门户首页: 供应商档案 + 历史投标 + 简报 */
-  supplierInfo: (phone: string) => getJson<{
+  supplierInfo: (accessToken: string) => getJson<{
     supplier: { id: number; code: string; name: string; phone: string; email?: string; type?: string; status?: string; rating?: number } | null
     stats: { invitation_count: number; bid_count: number; won_count: number; active_tender: number }
     bids: Array<{ id: number; tender_id: number; total_amount: number; status: string; created_at: string }>
-  }>(`/api/portal/supplier/info?phone=${encodeURIComponent(phone)}`),
+  }>('/api/portal/supplier/info', accessToken),
 }

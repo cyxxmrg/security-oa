@@ -3,6 +3,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { openAuthenticatedFile } from '@/utils/privateFile'
 import { purchase } from '@/api/modules'
 import { unwrapList } from '@/utils/response'
 import { purchaseFlow } from '@/api/purchase-flow'
@@ -304,18 +305,12 @@ export function usePurchaseDetail() {
       await loadContractFiles()
     } catch { /* 拦截器已提示 */ }
   }
-  const handlePreviewFile = (row: ContractFile) => {
-    window.open(row.url, '_blank')
+  const handlePreviewFile = async (row: ContractFile) => {
+    try { await openAuthenticatedFile(row.url, row.name) } catch { ElMessage.error('附件打开失败') }
   }
   const handleDownloadFile = async (row: ContractFile) => {
     try {
-      const a = document.createElement('a')
-      a.href = row.url
-      a.download = row.name
-      a.target = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      await openAuthenticatedFile(row.url, row.name, true)
     } catch { ElMessage.error('下载失败') }
   }
   const handleDeleteContractFile = async (row: ContractFile) => {
@@ -379,7 +374,9 @@ export function usePurchaseDetail() {
       await loadPayments()
     } catch { /* 拦截器已提示 */ }
   }
-  const handlePreviewVoucher = (row: PaymentVoucher) => { window.open(row.url, '_blank') }
+  const handlePreviewVoucher = async (row: PaymentVoucher) => {
+    try { await openAuthenticatedFile(row.url, row.name) } catch { ElMessage.error('凭证打开失败') }
+  }
   const handleDownloadVoucher = (row: PaymentVoucher) => handleDownloadFile(row)
 
   // ========== Tab 4: 发货 ==========

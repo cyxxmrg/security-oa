@@ -77,11 +77,11 @@ function isWhitelisted(): boolean {
   return path === '/login' || path.startsWith('/error/') || path.startsWith('/legal/')
 }
 
-function doLogout(reason: string) {
+async function doLogout(reason: string) {
   // 清理 store
   try {
     const userStore = useUserStore()
-    userStore.logout()
+    await userStore.logout()
   } catch { /* 忽略 */ }
   removeToken()
   removeUserInfo()

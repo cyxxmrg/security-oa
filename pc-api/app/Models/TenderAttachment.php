@@ -22,6 +22,6 @@ class TenderAttachment extends Model
 
     public function getUrlAttribute(): string
     {
-        return asset('storage/' . $this->file_path);
+        return url("/api/tenders/{$this->tender_project_id}/attachments/{$this->id}/download");
     }
 }

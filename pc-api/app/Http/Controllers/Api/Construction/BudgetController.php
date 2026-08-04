@@ -127,6 +127,9 @@ class BudgetController extends Controller
         if ($budget->status !== 'draft') {
             return response()->json(['code' => 1, 'msg' => '只有草稿状态可审批'], 422);
         }
+        if ((int) $budget->created_by === (int) $request->user()->id) {
+            return response()->json(['code' => 1, 'msg' => '预算创建人不能审批自己的预算'], 403);
+        }
 
         $budget = $this->service->approveBudget($budget, $request->user()->id);
 

@@ -4,25 +4,23 @@ namespace App\Services;
 
 use App\Models\Supplier;
 use App\Models\TenderPortalInvite;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * P1-7 修复: 供应商门户一次性邀请 token 管理
+ * 供应商门户短期访问 token 管理。
  *
  * 设计目标:
- *  - 用 token 替代 "供应商 portal_supplier_id + 手机号后 4 位" 的单因子弱认证
- *  - token 由 mobile (phone 后 4 位) 签发, 绑定到 supplier_id
- *  - 30 分钟 TTL, 用完即焚 (used_at 一旦写入则永久失效)
+ *  - 使用手机号 + 供应商编号签发。
+ *  - token 绑定 supplier_id，服务端仅保存 SHA-256 摘要。
+ *  - 30 分钟 TTL, 服务端仅保存 token 摘要, used_at 用于主动撤销
  *  - 不暴露 supplier_id 给未认证的查询 (supplierInfo / invitations)
  *
  * 关键方法:
- *  - issue(Supplier, phoneSuffix): 生成并持久化新 token, 返回明文 token + 元数据
- *  - verify(Request, supplierId, phoneSuffix): 校验 token 有效并烧掉, 返回 Supplier|null
- *  - checkAccess(Request, supplierId, phoneSuffix): 不烧 token 的可读检查 (用于 supplierInfo)
+ *  - issue(Supplier, phoneSuffix): 生成并持久化新 token。
+ *  - verify(Request, supplierId, phoneSuffix): 校验 token 及其绑定的供应商。
+ *  - resolveAccess(Request): 从 Bearer Token 解析供应商身份。
  */
 class PortalInviteService
 {
@@ -41,7 +39,7 @@ class PortalInviteService
 
         $invite = TenderPortalInvite::create([
             'supplier_id'       => $supplier->id,
-            'token'             => $plain,
+            'token'             => $this->tokenDigest($plain),
             'phone_suffix_hash' => $hash,
             'ip'                => $request?->ip(),
             'user_agent'        => $request ? substr((string) $request->userAgent(), 0, 255) : null,
@@ -56,7 +54,7 @@ class PortalInviteService
     }
 
     /**
-     * 校验 token + 烧掉 (consume-once)
+     * 校验短期访问 token
      *
      * 校验失败返回 null; 成功返回 Supplier 实例, 并已标记 used_at。
      *
@@ -65,12 +63,12 @@ class PortalInviteService
      */
     public function verify(Request $request, string $supplierId, string $phoneSuffix): ?Supplier
     {
-        $token = (string) ($request->input('access_token') ?? '');
+        $token = $this->tokenFromRequest($request);
         if ($token === '') {
             return null;
         }
 
-        $invite = TenderPortalInvite::where('token', $token)
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
             ->whereNull('used_at')
             ->where('expires_at', '>', now())
             ->first();
@@ -89,9 +87,6 @@ class PortalInviteService
             return null;
         }
 
-        // 标记烧掉
-        $invite->forceFill(['used_at' => now()])->save();
-
         return Supplier::find($invite->supplier_id);
     }
 
@@ -102,12 +97,13 @@ class PortalInviteService
      */
     public function checkAccess(Request $request, string $supplierId): ?Supplier
     {
-        $token = (string) ($request->input('access_token') ?? '');
+        $token = $this->tokenFromRequest($request);
         if ($token === '') {
             return null;
         }
 
-        $invite = TenderPortalInvite::where('token', $token)
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
+            ->whereNull('used_at')
             ->where('expires_at', '>', now())
             ->first();
 
@@ -120,6 +116,21 @@ class PortalInviteService
         return Supplier::find($invite->supplier_id);
     }
 
+    public function resolveAccess(Request $request): ?Supplier
+    {
+        $token = $this->tokenFromRequest($request);
+        if ($token === '') {
+            return null;
+        }
+
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        return $invite ? Supplier::find($invite->supplier_id) : null;
+    }
+
     /**
      * 暴露给前端: 供应商凭手机号 + 后 4 位申请 token
      *
@@ -127,20 +138,17 @@ class PortalInviteService
      *  - supplier 表里的 phone 后 4 位 与 入参 phoneSuffix 一致 → 签发 token
      *  - 失败: 返回 null (调用方 abort 401)
      */
-    public function issueByPhone(string $phone, string $phoneSuffix, ?Request $request = null): ?array
+    public function issueByCredentials(string $phone, string $supplierCode, ?Request $request = null): ?array
     {
-        if (!preg_match('/^[0-9]{4}$/', $phoneSuffix)) {
-            return null;
-        }
         $supplier = Supplier::where('phone', $phone)->first();
-        if (!$supplier) {
+        if (!$supplier || $supplierCode === '' || !hash_equals((string) $supplier->code, $supplierCode)) {
             return null;
         }
         $phoneDigits = preg_replace('/[^0-9]/', '', (string) $supplier->phone);
-        if ($phoneDigits === '' || substr($phoneDigits, -4) !== $phoneSuffix) {
+        if (strlen($phoneDigits) < 4) {
             return null;
         }
-        return $this->issue($supplier, $phoneSuffix, $request);
+        return $this->issue($supplier, substr($phoneDigits, -4), $request) + ['supplier_id' => $supplier->id];
     }
 
     /**
@@ -149,5 +157,16 @@ class PortalInviteService
     private function hashSuffix(string $suffix): string
     {
         return hash_hmac('sha256', $suffix, (string) config('app.key', 'oa-portal-salt-fallback'));
+    }
+
+    private function tokenDigest(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    protected function tokenFromRequest(Request $request): string
+    {
+        // Body fallback keeps old clients working while new clients avoid leaking tokens in URLs.
+        return (string) ($request->bearerToken() ?: $request->input('access_token', ''));
     }
 }

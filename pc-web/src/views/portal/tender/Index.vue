@@ -13,6 +13,9 @@
         <el-form-item label="预留手机号">
           <el-input v-model="form.phone" placeholder="11位手机号" size="large" clearable maxlength="11" />
         </el-form-item>
+        <el-form-item label="供应商编号">
+          <el-input v-model="form.supplierCode" placeholder="请输入邀请中提供的供应商编号" size="large" clearable maxlength="64" />
+        </el-form-item>
         <el-button type="primary" size="large" :loading="loading" @click="onQuery" style="width: 100%">
           查看我的邀请
         </el-button>
@@ -67,7 +70,7 @@ import { portalApi } from '@/api/portal-tender'
 const router = useRouter()
 const loading = ref(false)
 const result = ref<Awaited<ReturnType<typeof portalApi.listInvitations>> | null>(null)
-const form = reactive({ phone: '' })
+const form = reactive({ phone: '', supplierCode: '' })
 
 const fmt = (s?: string) => s ? s.replace('T', ' ').slice(0, 16) : '-'
 const statusType = (s: string) => ({
@@ -78,16 +81,26 @@ const onQuery = async () => {
   if (!/^1\d{10}$/.test(form.phone)) {
     return ElMessage.warning('请输入 11 位有效手机号')
   }
+  if (!form.supplierCode.trim()) return ElMessage.warning('请输入供应商编号')
   loading.value = true
   try {
-    result.value = await portalApi.listInvitations(form.phone)
+    const access = await portalApi.access(form.phone, form.supplierCode.trim())
+    sessionStorage.setItem('portal_access_token', access.access_token)
+    sessionStorage.setItem('portal_supplier_id', String(access.supplier_id))
+    result.value = await portalApi.listInvitations(access.access_token)
     sessionStorage.setItem('portal_phone_suffix', form.phone.slice(-4))
   } catch (e: unknown) {
     ElMessage.error(e?.message || '查询失败')
   } finally { loading.value = false }
 }
 
-const onReset = () => { result.value = null; form.phone = '' }
+const onReset = () => {
+  result.value = null
+  form.phone = ''
+  form.supplierCode = ''
+  sessionStorage.removeItem('portal_access_token')
+  sessionStorage.removeItem('portal_supplier_id')
+}
 
 const goBid = (inv: Record<string, unknown>) => {
   router.push(`/portal/tender/${inv.public_token}?supplier=${result.value?.supplier?.id}`)

@@ -87,7 +87,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getRevenue, getSalesFunnel, getProjectHealth, getCustomerRfm, getInventoryAging, getFinancePnl, getRefreshStatus, getPdfUrl } from '@/api/analytics'
+import { getRevenue, getSalesFunnel, getProjectHealth, getCustomerRfm, getInventoryAging, getFinancePnl, getRefreshStatus, exportAnalyticsPdf } from '@/api/analytics'
 
 const router = useRouter()
 const loading = ref(false)
@@ -231,11 +231,11 @@ async function refreshAll() {
 }
 
 function exportFullPdf() {
-  window.open(getPdfUrl('full', 'full'), '_blank')
+  void exportAnalyticsPdf('full', 'full')
 }
 
 function exportTemplate(template: 'executive' | 'full' | 'deep') {
-  window.open(getPdfUrl('full', template), '_blank')
+  void exportAnalyticsPdf('full', template)
 }
 
 onMounted(refreshAll)

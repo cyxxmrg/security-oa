@@ -77,7 +77,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, PieChart, HeatmapChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent, VisualMapComponent } from 'echarts/components'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getCustomerRfm, getPdfUrl } from '@/api/analytics'
+import { getCustomerRfm, exportAnalyticsPdf } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, BarChart, PieChart, HeatmapChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, VisualMapComponent])
@@ -138,7 +138,7 @@ async function load() {
   }
 }
 
-function exportPdf() { window.open(getPdfUrl('rfm', 'full'), '_blank') }
+function exportPdf() { void exportAnalyticsPdf('rfm', 'full') }
 onMounted(load)
 </script>
 

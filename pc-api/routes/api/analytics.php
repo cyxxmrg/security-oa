@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 | 权限: analytics.view (spatie permission)
 */
 
-Route::middleware(['auth:sanctum'])->prefix('analytics')->group(function () {
+Route::middleware(['auth:sanctum', 'permission:analytics.view'])->prefix('analytics')->group(function () {
     // 数据接口
     Route::get('revenue',         [AnalyticsController::class, 'revenue']);
     Route::get('sales-funnel',    [AnalyticsController::class, 'salesFunnel']);
@@ -26,6 +26,6 @@ Route::middleware(['auth:sanctum'])->prefix('analytics')->group(function () {
     // 物化视图状态 (dashboard 顶部 "数据更新于 XX")
     Route::get('refresh-status',  [AnalyticsController::class, 'refreshStatus']);
 
-    // PDF 导出 (无 auth 因为浏览器 iframe 下载, 但需要 token query)
+    // PDF 导出同样使用 Bearer Token，前端以受保护的 Blob 下载。
     Route::get('export/pdf',      [AnalyticsPdfController::class, 'export']);
 });

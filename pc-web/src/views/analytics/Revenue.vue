@@ -87,7 +87,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, BarChart, PieChart, ScatterChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent, ToolboxComponent, DataZoomComponent } from 'echarts/components'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getRevenue, getPdfUrl, getRefreshStatus } from '@/api/analytics'
+import { getRevenue, exportAnalyticsPdf, getRefreshStatus } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, LineChart, BarChart, PieChart, ScatterChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, ToolboxComponent, DataZoomComponent])
@@ -189,7 +189,7 @@ async function load() {
 function reload() { load() }
 
 function exportPdf() {
-  window.open(getPdfUrl('revenue', 'full'), '_blank')
+  void exportAnalyticsPdf('revenue', 'full')
 }
 
 onMounted(async () => {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\PrivateFileStorage;
 use App\Models\TenderProject;
 use App\Models\TenderBid;
 use App\Models\TenderAttachment;
@@ -126,11 +127,14 @@ class TenderController extends Controller
         return response()->json(['code' => 0, 'data' => $t]);
     }
 
-    public function publish(int $id): JsonResponse
+    public function publish(Request $request, int $id): JsonResponse
     {
         $t = TenderProject::findOrFail($id);
         if ($t->status !== 'draft') {
             return response()->json(['code' => 1001, 'message' => '仅草稿状态可发布'], 422);
+        }
+        if ((int) $t->created_by === (int) $request->user()->id) {
+            return response()->json(['code' => 1010, 'message' => '不能审核自己创建的招标项目'], 403);
         }
         $t->status     = 'bidding';
         $t->publish_at = now();
@@ -492,8 +496,8 @@ class TenderController extends Controller
 
         // 统一上传服务 (P1 重构): 自动 extension + 真实 MIME 双重校验 + SHA256
         $result = $uploader->store($request, 'file', [
-            'disk'         => 'public',
-            'subdir'       => "tenders/{$t->id}/" . date('Ymd'),
+            'disk'         => 'local',
+            'subdir'       => "private/tenders/{$t->id}/" . date('Ymd'),
             'allowed_ext'  => ['pdf','doc','docx','xls','xlsx','jpg','jpeg','png','zip','rar','dwg'],
             'allowed_mime' => ['application/pdf','application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -524,10 +528,23 @@ class TenderController extends Controller
         return response()->json(['code' => 0, 'data' => $list]);
     }
 
+    public function downloadAttachment(int $id, int $att)
+    {
+        $attachment = TenderAttachment::where('tender_project_id', $id)
+            ->whereNull('tender_bid_id')
+            ->findOrFail($att);
+        return PrivateFileStorage::download($attachment->file_path, $attachment->file_name, [
+            'Content-Type' => $attachment->mime_type ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function deleteAttachment(int $id, int $att): JsonResponse
     {
-        $a = TenderAttachment::where('tender_project_id', $id)->findOrFail($att);
-        \Storage::disk('public')->delete($a->file_path);
+        $a = TenderAttachment::where('tender_project_id', $id)
+            ->whereNull('tender_bid_id')
+            ->findOrFail($att);
+        PrivateFileStorage::delete($a->file_path);
         $a->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }

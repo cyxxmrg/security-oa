@@ -42,12 +42,6 @@
               </el-form-item>
             </el-col>
           </el-row>
-          <el-form-item label="默认密码">
-            <el-input value="123456" disabled />
-            <div style="font-size: 12px; color: #909399; margin-top: 4px;">
-              初始密码为 123456，员工首次登录后请及时修改
-            </div>
-          </el-form-item>
         </el-form>
       </div>
 

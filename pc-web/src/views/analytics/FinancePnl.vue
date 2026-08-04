@@ -83,7 +83,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import { getFinancePnl, getPdfUrl } from '@/api/analytics'
+import { getFinancePnl, exportAnalyticsPdf } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, BarChart, LineChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
@@ -154,7 +154,7 @@ async function load() {
   }
 }
 
-function exportPdf() { window.open(getPdfUrl('pnl', 'full'), '_blank') }
+function exportPdf() { void exportAnalyticsPdf('pnl', 'full') }
 onMounted(load)
 watch(dateRange, () => load())
 </script>

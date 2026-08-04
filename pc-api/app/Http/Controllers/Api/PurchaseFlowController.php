@@ -13,6 +13,7 @@ use App\Models\PurchaseShipment;
 use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
 use App\Services\PurchaseFlowService;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -316,7 +317,7 @@ class PurchaseFlowController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'   => $record->id,
             'name' => $record->file_name,
-            'url'  => '/storage/' . $record->file_path,
+            'url'  => "/api/purchase-flow/contracts/{$id}/files/{$record->id}/download",
             'size' => $record->size,
         ], 'message' => '合同附件已上传']);
     }
@@ -326,6 +327,15 @@ class PurchaseFlowController extends Controller
     {
         $this->flow->deleteContractFile($id, $fid, $request->user());
         return response()->json(['code' => 0, 'message' => '附件已删除']);
+    }
+
+    public function downloadContractFile(int $id, int $fid)
+    {
+        $file = \App\Models\PurchaseContractFile::where('contract_id', $id)->findOrFail($fid);
+        return PrivateFileStorage::download($file->file_path, $file->file_name, [
+            'Content-Type' => $file->mime ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /** 列出合同清单 */
@@ -393,7 +403,7 @@ class PurchaseFlowController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'   => $record->id,
             'name' => $record->file_name,
-            'url'  => '/storage/' . $record->file_path,
+            'url'  => "/api/purchase-flow/payment-requests/{$id}/vouchers/{$record->id}/download",
             'size' => $record->size,
         ], 'message' => '付款凭证已上传']);
     }
@@ -403,6 +413,15 @@ class PurchaseFlowController extends Controller
     {
         $rows = $this->flow->listPaymentVouchers($id);
         return response()->json(['code' => 0, 'data' => $rows]);
+    }
+
+    public function downloadPaymentVoucher(int $id, int $voucher)
+    {
+        $file = \App\Models\PurchasePaymentVoucher::where('payment_request_id', $id)->findOrFail($voucher);
+        return PrivateFileStorage::download($file->file_path, $file->file_name, [
+            'Content-Type' => $file->mime ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /** 设置发货预期 (按合同清单行拆分) */

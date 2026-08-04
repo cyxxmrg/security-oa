@@ -8,13 +8,13 @@ use App\Models\EmployeeProfile;
 use App\Models\User;
 use App\Models\Department;
 use App\Models\Position;
+use App\Support\TemporaryPassword;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
 class EmployeeOnboardingController extends Controller
@@ -106,8 +106,9 @@ class EmployeeOnboardingController extends Controller
             'user.password' => [
                 'nullable',
                 'string',
-                'min:6',  // V1.2.10 放宽
-                'max:32',
+                'min:12',
+                'max:64',
+                'regex:/^(?=.*[A-Za-z])(?=.*\d).+$/',
             ],
 
             'onboarding.hire_date'           => 'required|date_format:Y-m-d',
@@ -131,8 +132,10 @@ class EmployeeOnboardingController extends Controller
             'onboarding.remark'              => 'nullable|string|max:1000',
         ]);
 
+        $generatedPassword = empty($data['user']['password']);
+        $temporaryPassword = $data['user']['password'] ?? TemporaryPassword::generate();
         try {
-            $result = DB::transaction(function () use ($data) {
+            $result = DB::transaction(function () use ($data, $temporaryPassword) {
                 $u = $data['user'];
                 $o = $data['onboarding'];
 
@@ -155,7 +158,8 @@ class EmployeeOnboardingController extends Controller
                     'name'     => $u['name'],
                     'phone'    => $userPhone,
                     'email'    => $u['email'] ?? null,
-                    'password' => Hash::make($u['password'] ?? 'Welcome2026!'),
+                    'password' => Hash::make($temporaryPassword),
+                    'must_change_password' => true,
                     'is_active' => true,
                     'status'   => 'active',
                 ]);
@@ -202,8 +206,9 @@ class EmployeeOnboardingController extends Controller
 
             return response()->json([
                 'code' => 0,
-                'message' => '入职办理成功 (默认密码 Welcome2026!, 请提醒员工尽快修改)',
+                'message' => '入职办理成功',
                 'data' => $result,
+                'temporary_password' => $generatedPassword ? $temporaryPassword : null,
             ], 201);
         } catch (\Throwable $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);

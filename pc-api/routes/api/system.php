@@ -266,25 +266,25 @@ Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_bu
 });
 
 // 质保期保证金
-Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.deposit.view'])->group(function () {
     Route::get('/', [WarrantyDepositController::class, 'index']);
-    Route::post('/', [WarrantyDepositController::class, 'store']);
-    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->where('id', '[0-9]+');
-    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->where('id', '[0-9]+');
-    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->where('id', '[0-9]+');
+    Route::post('/', [WarrantyDepositController::class, 'store'])->middleware('permission:warranty.deposit.manage');
+    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->middleware('permission:warranty.deposit.manage')->where('id', '[0-9]+');
+    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->middleware('permission:warranty.deposit.manage')->where('id', '[0-9]+');
+    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->middleware('permission:warranty.deposit.manage')->where('id', '[0-9]+');
     Route::get('/{id}', [WarrantyDepositController::class, 'show'])->where('id', '[0-9]+');
 });
 
 // ========== 施工预算 ==========
-Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business', 'permission:construction.budget.view'])->group(function () {
     Route::get('/', [BudgetController::class, 'index']);
     Route::get('/summary/{projectId}', [BudgetController::class, 'summary']);
-    Route::post('/', [BudgetController::class, 'store']);
+    Route::post('/', [BudgetController::class, 'store'])->middleware('permission:construction.budget.manage');
     Route::get('/{id}', [BudgetController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [BudgetController::class, 'update'])->where('id', '[0-9]+');
-    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->where('id', '[0-9]+');
-    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->where('id', '[0-9]+');
-    Route::delete('/{id}', [BudgetController::class, 'destroy'])->where('id', '[0-9]+');
+    Route::put('/{id}', [BudgetController::class, 'update'])->middleware('permission:construction.budget.manage')->where('id', '[0-9]+');
+    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->middleware('permission:construction.budget.approve')->where('id', '[0-9]+');
+    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->middleware('permission:construction.budget.manage')->where('id', '[0-9]+');
+    Route::delete('/{id}', [BudgetController::class, 'destroy'])->middleware('permission:construction.budget.manage')->where('id', '[0-9]+');
 });
 
 // ========== 施工团队 ==========

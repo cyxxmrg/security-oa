@@ -35,6 +35,11 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'employee.skill',  'label' => '技能标签管理'],
             // P0-1 安全修复: 用户管理 (改任意用户、reset 密码等高敏操作) 必须有 user.manage 权限
             ['name' => 'user.manage',     'label' => '用户管理（重置密码 / 改 roles）'],
+            ['name' => 'employee.onboarding.manage',  'label' => '入职档案管理'],
+            ['name' => 'employee.resignation.view',   'label' => '离职档案查看'],
+            ['name' => 'employee.resignation.manage', 'label' => '离职申请经办'],
+            ['name' => 'employee.resignation.approve','label' => '离职申请审批'],
+            ['name' => 'employee.resignation.complete','label' => '离职办结'],
         ],
         '考勤管理' => [
             ['name' => 'attendance.view',    'label' => '考勤总览'],
@@ -42,6 +47,8 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'attendance.leave',   'label' => '请假审批'],
             ['name' => 'attendance.overtime','label' => '加班审批'],
             ['name' => 'attendance.report',  'label' => '考勤报表'],
+            ['name' => 'schedule.view',       'label' => '排班查看'],
+            ['name' => 'schedule.manage',     'label' => '排班管理'],
         ],
         '项目管理' => [
             ['name' => 'project.view',        'label' => '项目列表查看'],
@@ -50,6 +57,9 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'project.assign',      'label' => '任务分配管理'],
             ['name' => 'project.report',      'label' => '项目报表'],
             ['name' => 'project.report.own',  'label' => '仅看我负责的项目报表'],
+            ['name' => 'construction.budget.view',    'label' => '施工预算查看'],
+            ['name' => 'construction.budget.manage',  'label' => '施工预算编制'],
+            ['name' => 'construction.budget.approve', 'label' => '施工预算审批'],
         ],
         '客户管理' => [
             ['name' => 'customer.view',  'label' => '客户列表查看'],
@@ -61,6 +71,9 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'finance.receive',  'label' => '应收账款'],
             ['name' => 'finance.pay',      'label' => '应付账款'],
             ['name' => 'finance.approve',  'label' => '报销审批'],
+            ['name' => 'warranty.deposit.view',   'label' => '质保金查看'],
+            ['name' => 'warranty.deposit.manage', 'label' => '质保金收退与没收'],
+            ['name' => 'analytics.view',           'label' => '经营分析查看'],
         ],
         '库存管理' => [
             ['name' => 'inventory.view',     'label' => '库存总览'],
@@ -163,7 +176,7 @@ class PermissionRoleSeeder extends Seeder
                 // V1.0: 加 disk.view (所有员工能看网盘)
                 // V1.0.2: 加 inventory.view (所有员工能查看库存)
                 'perms' => array_values(array_filter($allPerms, fn($n) =>
-                    str_starts_with($n, 'attendance.') ||
+                    in_array($n, ['attendance.view', 'attendance.record', 'schedule.view'], true) ||
                     str_starts_with($n, 'approval.mine') ||
                     $n === 'disk.view' ||
                     $n === 'inventory.view'
@@ -182,7 +195,11 @@ class PermissionRoleSeeder extends Seeder
                 // attendance.* / approval.mine / disk.view / inventory.view 通过继承 user 自动获得
                 'perms' => array_values(array_filter($allPerms, fn($n) =>
                     str_starts_with($n, 'project.') ||
-                    str_starts_with($n, 'employee.') ||
+                    str_starts_with($n, 'employee.') && $n !== 'employee.resignation.complete' ||
+                    in_array($n, ['attendance.leave', 'attendance.overtime', 'attendance.report'], true) ||
+                    $n === 'schedule.manage' ||
+                    str_starts_with($n, 'construction.budget.') && $n !== 'construction.budget.approve' ||
+                    $n === 'analytics.view' ||
                     str_starts_with($n, 'customer.') ||
                     str_starts_with($n, 'sales.') ||
                     str_starts_with($n, 'vehicle.') ||
@@ -203,6 +220,8 @@ class PermissionRoleSeeder extends Seeder
                 'perms' => array_values(array_filter($allPerms, fn($n) =>
                     str_starts_with($n, 'finance.') ||
                     $n === 'deposit.manage' ||
+                    str_starts_with($n, 'warranty.deposit.') ||
+                    in_array($n, ['construction.budget.view', 'construction.budget.approve', 'employee.resignation.view', 'analytics.view', 'tender.view'], true) ||
                     $n === 'tender.approve' ||
                     $n === 'expense.approve'
                 )),

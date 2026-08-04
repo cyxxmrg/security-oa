@@ -838,8 +838,7 @@ class PurchaseFlowService
 
     /**
      * 上传合同文件 (PDF)
-     * 落盘到 storage/app/public/purchase/contracts/{contract_id}/
-     * 前端访问路径: http://host:8081/storage/purchase/contracts/{id}/xxx.pdf
+     * 落盘到私有存储，仅通过鉴权下载接口访问。
      */
     public function uploadContractFile(int $contractId, \Illuminate\Http\UploadedFile $file, ?User $user = null): PurchaseContractFile
     {
@@ -847,8 +846,8 @@ class PurchaseFlowService
         $uploader = app(FileUploadService::class);
         $fakeReq = \Illuminate\Http\Request::create('/', 'POST', [], [], ['file' => $file]);
         $result = $uploader->store($fakeReq, 'file', [
-            'disk'         => 'public',
-            'subdir'       => "purchase/contracts/{$contractId}",
+            'disk'         => 'local',
+            'subdir'       => "private/purchase/contracts/{$contractId}",
             'allowed_ext'  => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
             'allowed_mime' => ['application/pdf', 'image/jpeg', 'image/png',
                 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
@@ -878,7 +877,7 @@ class PurchaseFlowService
             return [
                 'id'        => $f->id,
                 'name'      => $f->file_name,
-                'url'       => '/storage/' . $f->file_path,
+                'url'       => "/api/purchase-flow/contracts/{$f->contract_id}/files/{$f->id}/download",
                 'size'      => $f->size,
                 'size_human'=> $f->size >= 1048576 ? round($f->size / 1048576, 2) . ' MB' : round($f->size / 1024, 1) . ' KB',
                 'mime'      => $f->mime,
@@ -891,9 +890,7 @@ class PurchaseFlowService
     {
         DB::transaction(function () use ($contractId, $fileId, $user) {
             $f = PurchaseContractFile::where('contract_id', $contractId)->where('id', $fileId)->firstOrFail();
-            // 删除物理文件
-            $abs = storage_path('app/public/' . $f->file_path);
-            if (is_file($abs)) @unlink($abs);
+            \App\Support\PrivateFileStorage::delete($f->file_path);
             $label = $f->file_name;
             $f->delete();
             $this->log(self::ENTITY_CONTRACT, $contractId, null, 'delete_file', 'delete_file', $user, "删除附件: {$label}");
@@ -902,7 +899,7 @@ class PurchaseFlowService
 
     /**
      * 上传付款凭证 (PNG/JPEG/PDF)
-     * 落盘到 storage/app/public/purchase/vouchers/{payment_request_id}/
+     * 落盘到私有存储，仅通过鉴权下载接口访问。
      */
     public function uploadPaymentVoucher(int $paymentRequestId, \Illuminate\Http\UploadedFile $file, ?User $user = null, ?string $remark = null): PurchasePaymentVoucher
     {
@@ -910,8 +907,8 @@ class PurchaseFlowService
         $uploader = app(FileUploadService::class);
         $fakeReq = \Illuminate\Http\Request::create('/', 'POST', [], [], ['file' => $file]);
         $result = $uploader->store($fakeReq, 'file', [
-            'disk'         => 'public',
-            'subdir'       => "purchase/vouchers/{$paymentRequestId}",
+            'disk'         => 'local',
+            'subdir'       => "private/purchase/vouchers/{$paymentRequestId}",
             'allowed_ext'  => ['pdf', 'jpg', 'jpeg', 'png'],
             'allowed_mime' => ['application/pdf', 'image/jpeg', 'image/png'],
             'max_size'     => 10240,
@@ -941,7 +938,7 @@ class PurchaseFlowService
             return [
                 'id'        => $f->id,
                 'name'      => $f->file_name,
-                'url'       => '/storage/' . $f->file_path,
+                'url'       => "/api/purchase-flow/payment-requests/{$f->payment_request_id}/vouchers/{$f->id}/download",
                 'size'      => $f->size,
                 'size_human'=> $f->size >= 1048576 ? round($f->size / 1048576, 2) . ' MB' : round($f->size / 1024, 1) . ' KB',
                 'mime'      => $f->mime,

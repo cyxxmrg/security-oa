@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\SensitiveDataRedactor;
 use App\Services\ErrorReporter;
 use Closure;
 use Illuminate\Http\Request;
@@ -104,17 +105,7 @@ class AuditLogger
         $user = Auth::user();
         $userId = $user?->id;
 
-        // 敏感字段脱敏（password / token / oldPassword / newPassword / _token）
-        $payload = $request->all();
-        foreach (['password', 'oldPassword', 'newPassword', '_token', 'csrf_token'] as $key) {
-            if (isset($payload[$key])) {
-                $payload[$key] = '***';
-            }
-        }
-        // 嵌套字段也脱敏（onboarding.user.password 等）
-        if (isset($payload['user']) && is_array($payload['user']) && isset($payload['user']['password'])) {
-            $payload['user']['password'] = '***';
-        }
+        $payload = SensitiveDataRedactor::redact($request->all());
 
         DB::table('audit_logs')->insert([
             'user_id'       => $userId,

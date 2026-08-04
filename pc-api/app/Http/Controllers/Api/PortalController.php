@@ -8,6 +8,7 @@ use App\Models\TenderBid;
 use App\Models\TenderAttachment;
 use App\Models\Supplier;
 use App\Services\PortalInviteService;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -54,7 +55,9 @@ class PortalController extends Controller
             'open_at'         => $t->open_at?->toIso8601String(),
             'project'         => $t->project ? ['id' => $t->project->id, 'name' => $t->project->name] : null,
             'attachments'     => $atts->map(fn($a) => [
-                'id' => $a->id, 'name' => $a->file_name, 'url' => $a->url,
+                'id' => $a->id,
+                'name' => $a->file_name,
+                'url' => url("/api/portal/t/{$token}/attachments/{$a->id}"),
                 'size' => $a->file_size, 'mime' => $a->mime_type, 'category' => $a->category,
             ]),
             'public_token'    => $t->public_token,
@@ -178,8 +181,8 @@ class PortalController extends Controller
         $bid = $t->bids()->where('id', $data['bid_id'])->where('supplier_id', $data['supplier_id'])->firstOrFail();
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = "tenders/{$t->id}/bids/{$bid->id}";
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'public');
+        $dir  = "private/tenders/{$t->id}/bids/{$bid->id}";
+        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'local');
         $att  = TenderAttachment::create([
             'tender_project_id' => $t->id,
             'tender_bid_id'     => $bid->id,
@@ -194,16 +197,31 @@ class PortalController extends Controller
         return response()->json(['code' => 0, 'data' => $att]);
     }
 
+    public function downloadPublicAttachment(string $token, int $attachment)
+    {
+        $tender = TenderProject::where('public_token', $token)->firstOrFail();
+        abort_unless(in_array($tender->status, ['bidding', 'published', 'evaluating', 'awarded', 'closed'], true), 403);
+        $file = TenderAttachment::where('tender_project_id', $tender->id)
+            ->whereNull('tender_bid_id')
+            ->where('visibility', 'public')
+            ->findOrFail($attachment);
+
+        return PrivateFileStorage::download($file->file_path, $file->file_name, [
+            'Content-Type' => $file->mime_type ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     /**
-     * P1-7 修复: 双因子认证 (一次性 token + 手机号后 4 位)
+     * 短期 token + 手机号后 4 位的供应商访问校验。
      *
      *  - 前端必须先用 supplierInfo / invitations 拿到 access_token (签发时校验后 4 位)
      *  - 投标/上传/查我方投标 都必须同时带 access_token + phone_suffix
-     *  - token 通过验证后立即烧掉 (used_at), 防止重放
+     *  - token 在 30 分钟内可用，可通过 used_at 主动撤销
      */
     private function verifySupplierAccess(Request $request, int $supplierId): ?JsonResponse
     {
-        $suffix = (string) $request->input('phone_suffix', '');
+        $suffix = (string) ($request->header('X-Portal-Phone-Suffix') ?: $request->input('phone_suffix', ''));
         if (!preg_match('/^[0-9]{4}$/', $suffix)) {
             return response()->json(['code' => 1004, 'message' => '请提供供应商预留手机号后 4 位'], 422);
         }
@@ -213,7 +231,7 @@ class PortalController extends Controller
             return response()->json(['code' => 1005, 'message' => '供应商身份无效'], 404);
         }
 
-        $token = (string) $request->input('access_token', '');
+        $token = (string) ($request->bearerToken() ?: $request->input('access_token', ''));
         if ($token === '') {
             return response()->json(['code' => 1007, 'message' => '缺少 access_token, 请先调用 access 端点获取'], 401);
         }
@@ -229,20 +247,20 @@ class PortalController extends Controller
     }
 
     /**
-     * P1-7 修复: 供应商凭手机号 + 后 4 位申请一次性 access_token
+     * 供应商凭手机号 + 供应商编号申请短期 access_token
      *
-     * POST /api/portal/access  body: { phone, phone_suffix }
+     * POST /api/portal/access  body: { phone, supplier_code }
      * 返回: { access_token, expires_in, ttl_minutes }
      */
     public function access(Request $request): JsonResponse
     {
         $data = $request->validate([
             'phone'        => 'required|string|max:32',
-            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+            'supplier_code' => 'required|string|max:64',
         ]);
         /** @var PortalInviteService $inviter */
         $inviter = app(PortalInviteService::class);
-        $issued = $inviter->issueByPhone($data['phone'], $data['phone_suffix'], $request);
+        $issued = $inviter->issueByCredentials($data['phone'], $data['supplier_code'], $request);
         if (!$issued) {
             return response()->json(['code' => 1010, 'message' => '供应商身份校验失败'], 403);
         }
@@ -253,6 +271,7 @@ class PortalController extends Controller
                 'expires_in'   => $issued['ttl_minutes'] * 60,
                 'expires_at'   => $issued['expires_at']->toIso8601String(),
                 'ttl_minutes'  => $issued['ttl_minutes'],
+                'supplier_id'  => $issued['supplier_id'],
             ],
         ]);
     }
@@ -264,14 +283,9 @@ class PortalController extends Controller
      */
     public function invitations(Request $request): JsonResponse
     {
-        $phone = $request->input('phone');
-        if (!$phone) {
-            return response()->json(['code' => 1001, 'message' => '请提供手机号'], 422);
-        }
-        // 找供应商 (按联系人手机号匹配, 简化用 supplier.phone)
-        $supplier = Supplier::where('phone', $phone)->first();
+        $supplier = app(PortalInviteService::class)->resolveAccess($request);
         if (!$supplier) {
-            return response()->json(['code' => 0, 'data' => ['supplier' => null, 'invitations' => []]]);
+            return response()->json(['code' => 1007, 'message' => '访问令牌无效或已过期'], 401);
         }
         // 该供应商被邀请的招标 (在 invited_supplier_ids 数组中)
         $list = TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)
@@ -304,13 +318,9 @@ class PortalController extends Controller
      */
     public function supplierInfo(Request $request): JsonResponse
     {
-        $phone = $request->input('phone');
-        if (!$phone) {
-            return response()->json(['code' => 1001, 'message' => '请提供手机号'], 422);
-        }
-        $supplier = Supplier::where('phone', $phone)->first();
+        $supplier = app(PortalInviteService::class)->resolveAccess($request);
         if (!$supplier) {
-            return response()->json(['code' => 0, 'data' => ['supplier' => null, 'bids' => [], 'stats' => []]]);
+            return response()->json(['code' => 1007, 'message' => '访问令牌无效或已过期'], 401);
         }
 
         // 历史投标 (脱敏: 只返回 id/status/created_at, 不返回 total_amount/tender_id)
