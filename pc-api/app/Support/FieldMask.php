@@ -65,7 +65,7 @@ class FieldMask
         try {
             $userRoles = $user->roles->pluck('name')->all();
         } catch (\Throwable $e) {
-            \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
+            self::logFailure(__METHOD__, $e);
         }
 
         // DB 中该 module 的 allowed_roles 配 (默认 'admin')
@@ -138,7 +138,7 @@ class FieldMask
                 return $out;
             });
         } catch (\Throwable $e) {
-            \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
+            self::logFailure(__METHOD__, $e);
             // facade 没初始化 (unit test) → 返回空, 走 fallback
             return [];
         }
@@ -152,7 +152,7 @@ class FieldMask
         try {
             Cache::forget('field_masks:all');
         } catch (\Throwable $e) {
-            \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
+            self::logFailure(__METHOD__, $e);
             // ignore
         }
     }
@@ -193,5 +193,17 @@ class FieldMask
             }
         }
         return $row;
+    }
+
+    private static function logFailure(string $method, \Throwable $e): void
+    {
+        try {
+            Log::error($method . ': catch', [
+                'msg' => $e->getMessage(),
+                'file' => $e->getFile() . ':' . $e->getLine(),
+            ]);
+        } catch (\Throwable) {
+            // Pure unit tests intentionally run without a Laravel facade root.
+        }
     }
 }

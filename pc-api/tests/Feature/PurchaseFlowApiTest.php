@@ -40,7 +40,7 @@ class PurchaseFlowApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->routeFile = __DIR__ . '/../../routes/api.php';
+        $this->routeFile = __DIR__ . '/../../routes/api/purchase.php';
     }
 
     /**
@@ -50,7 +50,7 @@ class PurchaseFlowApiTest extends TestCase
     {
         $content = file_get_contents($this->routeFile);
         // 提取 prefix('purchase-flow') ... }); 段
-        if (!preg_match("/prefix\('purchase-flow'\)->group\(function\s*\(\)\s*\{(.*?)\n    \}\);/s", $content, $m)) {
+        if (!preg_match("/prefix\('purchase-flow'\).*?->group\(function\s*\(\)\s*\{(.*?)\n\}\);/s", $content, $m)) {
             $this->fail("未找到 purchase-flow 路由段");
         }
         $block = $m[1];
@@ -188,7 +188,7 @@ class PurchaseFlowApiTest extends TestCase
     public function test_routes_use_wherenumber_for_ids(): void
     {
         $content = file_get_contents($this->routeFile);
-        if (!preg_match("/prefix\('purchase-flow'\)->group\(function\s*\(\)\s*\{(.*?)\n    \}\);/s", $content, $m)) {
+        if (!preg_match("/prefix\('purchase-flow'\).*?->group\(function\s*\(\)\s*\{(.*?)\n\}\);/s", $content, $m)) {
             $this->fail('purchase-flow 段未找到');
         }
         $block = $m[1];

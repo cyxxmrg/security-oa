@@ -41,7 +41,7 @@ class ScheduleConflictTest extends TestCase
      */
     private function fixtures(): array
     {
-        $user = User::create([
+        $user = User::withoutEvents(fn () => User::create([
             'name'      => '排班测试员',
             'username'  => 'sched_test_' . uniqid(),
             'email'     => 'sched@test.local',
@@ -49,7 +49,7 @@ class ScheduleConflictTest extends TestCase
             'password'  => bcrypt('test123'),
             'user_type' => 'business',
             'status'    => 'active',
-        ]);
+        ]));
 
         $dayShift = Shift::create([
             'name'      => '白班',
@@ -110,7 +110,7 @@ class ScheduleConflictTest extends TestCase
     public function test_batch_save_multiple_users_same_date(): void
     {
         $f = $this->fixtures();
-        $user2 = User::create([
+        $user2 = User::withoutEvents(fn () => User::create([
             'name'      => '排班测试员 2',
             'username'  => 'sched_test_2_' . uniqid(),
             'phone'     => '13900000003',
@@ -118,15 +118,24 @@ class ScheduleConflictTest extends TestCase
             'password'  => bcrypt('test123'),
             'user_type' => 'business',
             'status'    => 'active',
-        ]);
+        ]));
 
-        // V1.2.7 P2-4 fix: 用 fresh date 避免与之前 test_batch_save_same_user_same_date 的
-        // user1+date='2026-07-01' 残留冲突 (RefreshDatabase + 嵌套事务在 PG 下行为微妙)
         $r = $this->svc->batchSave([
             ['user_id' => $f['user']->id,    'shift_id' => $f['dayShift']->id,   'date' => '2026-08-15'],
             ['user_id' => $user2->id,         'shift_id' => $f['nightShift']->id, 'date' => '2026-08-15'],
         ]);
-        $this->assertEquals(2, $r['created']);
+        $rows = Schedule::whereDate('date', '2026-08-15')
+            ->orderBy('user_id')
+            ->get(['user_id', 'shift_id'])
+            ->toArray();
+        $context = json_encode([
+            'user_ids' => [$f['user']->id, $user2->id],
+            'result' => $r,
+            'rows' => $rows,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $this->assertNotSame($f['user']->id, $user2->id, "测试用户 ID 必须不同: {$context}");
+        $this->assertEquals(2, $r['created'], "两个用户应各创建一条排班: {$context}");
         $this->assertEquals(0, $r['updated']);
     }
 

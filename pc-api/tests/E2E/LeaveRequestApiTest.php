@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V1.2.7 P1 - 请假申请 Feature 测试
@@ -15,7 +13,7 @@ use PHPUnit\Framework\TestCase;
  *
  * 与 AuthApiTest 一致：跑在 117 上, 直接 HTTP 调真实 API
  */
-class LeaveRequestApiTest extends TestCase
+class LeaveRequestApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -33,6 +31,7 @@ class LeaveRequestApiTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         self::doFlush();
     }
 

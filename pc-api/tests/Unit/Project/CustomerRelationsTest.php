@@ -25,8 +25,8 @@ class CustomerRelationsTest extends TestCase
 
         // V0.4.10 D2 补的关系
         $this->assertContains('opportunities', $methods, 'Customer::opportunities 缺失');
-        $this->assertContains('leads', $methods, 'Customer::leads 缺失');
         $this->assertContains('warranties', $methods, 'Customer::warranties 缺失');
+        $this->assertNotContains('leads', $methods, 'V1.2.12 已删除 leads 表及关系');
 
         // 老关系保留
         $this->assertContains('contacts', $methods);

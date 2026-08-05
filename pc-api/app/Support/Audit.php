@@ -44,8 +44,7 @@ class Audit
                     'action' => $action,
                     'context' => $context,
                 ]);
-            } catch (\Throwable $e2) {
-                \Log::error(__METHOD__ . ': catch', ['msg' => $e2->getMessage(), 'file' => $e2->getFile() . ':' . $e2->getLine()]);
+            } catch (\Throwable) {
                 // Log facade 也没初始化 (unit test), 完全静默
             }
             return null;

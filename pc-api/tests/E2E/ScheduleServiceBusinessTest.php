@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V1.2.7 P1-2 - ScheduleService 业务级测试 (HTTP API)
@@ -15,7 +13,7 @@ use PHPUnit\Framework\TestCase;
  *
  * 跑在 117 上, 直接 HTTP 调真实 API (沿用 LeaveRequestApiTest 模式)
  */
-class ScheduleServiceBusinessTest extends TestCase
+class ScheduleServiceBusinessTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -26,6 +24,7 @@ class ScheduleServiceBusinessTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         self::$tokens = [];
     }
 

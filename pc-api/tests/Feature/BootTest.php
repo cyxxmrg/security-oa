@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Support\Str;
 use ReflectionClass;
-use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
 
 /**
  * V0.4.10 A2 - Laravel Kernel boot 端到端测试
@@ -13,12 +13,6 @@ use Illuminate\Support\Facades\DB;
  */
 class BootTest extends TestCase
 {
-    public static function setUpBeforeClass(): void
-    {
-        // 引导 Laravel app, 让模型 boot / scope / helper 真跑
-        require_once __DIR__ . '/../bootstrap.php';
-    }
-
     public function test_customer_model_booted(): void
     {
         $c = new \App\Models\Customer();

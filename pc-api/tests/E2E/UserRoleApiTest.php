@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V0.5.1 - 用户管理 + 权限继承 + 字段脱敏 集成测试
@@ -10,7 +8,7 @@ use PHPUnit\Framework\TestCase;
  *
  * 技巧: 每个用例新 login 前, 通过唯一 username 旁路 throttle
  */
-class UserRoleApiTest extends TestCase
+class UserRoleApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -20,6 +18,7 @@ class UserRoleApiTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         self::doFlush();
         self::$lastFlush = time();
     }

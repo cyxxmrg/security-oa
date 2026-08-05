@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests\E2E;
 
 /**
  * V0.5.2 - 角色矩阵 + 字段脱敏管理 + Audit log 集成测试
  * 走纯 HTTP curl, 与 UserRoleApiTest 同风格
  */
-class PermissionMatrixApiTest extends \PHPUnit\Framework\TestCase
+class PermissionMatrixApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -16,6 +16,7 @@ class PermissionMatrixApiTest extends \PHPUnit\Framework\TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         self::doFlush();
         self::$lastFlush = time();
     }

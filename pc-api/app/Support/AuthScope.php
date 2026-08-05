@@ -53,7 +53,7 @@ class AuthScope
             if (in_array(self::ROLE_MANAGER, $roleNames, true)) return self::ROLE_MANAGER;
             if (in_array(self::ROLE_USER, $roleNames, true))    return self::ROLE_USER;
         } catch (\Throwable $e) {
-            \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
+            self::logFailure(__METHOD__, $e);
             // spatie 关系未就绪时继续 fallback
         }
 
@@ -92,5 +92,17 @@ class AuthScope
             "(EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
             $outerTable, $userId, $userId
         );
+    }
+
+    private static function logFailure(string $method, \Throwable $e): void
+    {
+        try {
+            Log::error($method . ': catch', [
+                'msg' => $e->getMessage(),
+                'file' => $e->getFile() . ':' . $e->getLine(),
+            ]);
+        } catch (\Throwable) {
+            // Pure unit tests intentionally run without a Laravel facade root.
+        }
     }
 }

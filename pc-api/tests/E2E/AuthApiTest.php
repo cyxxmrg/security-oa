@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V0.4.10 A3 - Auth/Login/Throttle Feature 测试
@@ -12,7 +10,7 @@ use PHPUnit\Framework\TestCase;
  *
  * 用例: 8 个
  */
-class AuthApiTest extends TestCase
+class AuthApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
     private const USERS = [
@@ -32,6 +30,7 @@ class AuthApiTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         // 整 suite 跑前清一次
         self::doFlush();
     }
