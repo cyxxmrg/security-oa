@@ -494,4 +494,27 @@ async function handleLogin() {
   60% { transform: translateX(-2px); }
   80% { transform: translateX(2px); }
 }
+
+@media (max-width: 768px) {
+  .login-container {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .login-left {
+    display: none;
+  }
+
+  .login-right {
+    width: 100%;
+    min-width: 0;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+
+  .login-form-wrapper {
+    width: 100%;
+    max-width: 380px;
+  }
+}
 </style>
