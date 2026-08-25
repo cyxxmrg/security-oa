@@ -289,10 +289,11 @@ class CustomerService
 
     public function customerDevices(Request $request, Customer $customer)
     {
+        // V1.4.2 fix: service_orders 表的设备外键列是 customer_device_id (曾误写 device_id 导致 500)
         return ServiceOrder::with('device:id,name,code,brand,model')
             ->where('customer_id', $customer->id)
-            ->whereNotNull('device_id')
-            ->select('id', 'device_id', 'order_no', 'status', 'created_at')
+            ->whereNotNull('customer_device_id')
+            ->select('id', 'customer_device_id', 'order_no', 'status', 'created_at')
             ->orderBy('created_at', 'desc')
             ->get();
     }
