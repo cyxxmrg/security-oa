@@ -20,7 +20,7 @@ import { Document, Check, RefreshLeft } from '@element-plus/icons-vue'
 defineProps<{
   title: string
   hint: string
-  settings: Record<string, unknown>
+  settings: Record<string, any>
   saving: boolean
 }>()
 const emit = defineEmits<{
