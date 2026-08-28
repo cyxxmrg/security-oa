@@ -127,7 +127,7 @@
           <el-descriptions-item v-if="detailTarget.remark" label="备注" :span="3">{{ detailTarget.remark }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ detailTarget.created_at || '-' }}</el-descriptions-item>
           <el-descriptions-item label="更新时间" :span="2">{{ detailTarget.updated_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="关联项目">{{ detailTarget.project?.name || (detailTarget.project_id ? '#'+detailTarget.project_id : '-') }}</el-descriptions-item>
+          <el-descriptions-item label="关联项目">{{ projectLabel(detailTarget) }}</el-descriptions-item>
         </el-descriptions>
       </template>
     </el-dialog>
@@ -150,7 +150,7 @@ import { teamApi } from '@/api/construction'
 import { getUserList } from '@/api/modules'
 import { unwrapList } from '@/utils/response'
 import TeamFormDialog from './components/TeamFormDialog.vue'
-import type { Team, TeamRef, UserRef, ProjectOption } from '../types'
+import type { Team, TeamRef, UserRef, UserOption, ProjectOption } from '../types'
 
 const router = useRouter()
 
@@ -159,7 +159,11 @@ const typeOptions = [
   { value: 'external', label: '外包团队' },
   { value: 'mixed',    label: '混合团队' },
 ]
-const typeLabel = (k: string) => typeOptions.find(t => t.value === k)?.label || k || '-'
+const typeLabel = (k: string | null | undefined) => typeOptions.find(t => t.value === k)?.label || k || '-'
+const projectLabel = (team: Team) => {
+  const project = team.project as { name?: string } | null | undefined
+  return project?.name || (team.project_id ? `#${team.project_id}` : '-')
+}
 
 const loading = ref(false)
 const page = ref(1)
@@ -210,7 +214,7 @@ const loadList = async () => {
     if (searchForm.keyword) params.keyword = searchForm.keyword
     const res = await teamApi.list(params)
     // V0.6.3: res = {code, data: paginator}; paginator.data = teams[]
-    list.value = unwrapList(res)
+    list.value = unwrapList(res) as Team[]
   } catch {
     list.value = []
   } finally {
@@ -221,7 +225,7 @@ const loadList = async () => {
 const loadUsers = async () => {
   try {
     const res = await getUserList({ per_page: 500 })
-    userOptions.value = unwrapList(res)
+    userOptions.value = unwrapList(res) as UserOption[]
   } catch {
     userOptions.value = []
   }
@@ -236,8 +240,8 @@ const handleReset = () => {
   loadList()
 }
 
-const goDetail = (row: Team) => {
-  detailTarget.value = row
+const goDetail = (row: Record<string, unknown>) => {
+  detailTarget.value = row as Team
   detailDialogVisible.value = true
 }
 
@@ -254,8 +258,8 @@ const handleAdd = () => {
   showFormDialog.value = true
 }
 
-const handleEdit = (row: Team) => {
-  editingTeam.value = row
+const handleEdit = (row: Record<string, unknown>) => {
+  editingTeam.value = row as Team
   showFormDialog.value = true
 }
 
@@ -275,16 +279,17 @@ const handleSave = async (payload: Record<string, unknown>) => {
 }
 
 // === 删除（硬删） ===
-const handleDelete = async (row: Team) => {
+const handleDelete = async (row: Record<string, unknown>) => {
+  const team = row as Team
   try {
     await ElMessageBox.confirm(
-      `确认彻底删除团队「${row.team_name}」？此操作不可恢复。`,
+      `确认彻底删除团队「${String(team.team_name || team.name)}」？此操作不可恢复。`,
       '删除确认',
       { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
     )
   } catch { return }
   try {
-    await teamApi.remove(row.id)
+    await teamApi.remove(Number(team.id))
     ElMessage.success('已删除')
     await loadList()
     if (pagedList.value.length === 0 && page.value > 1) page.value -= 1
@@ -292,13 +297,14 @@ const handleDelete = async (row: Team) => {
 }
 
 // === 停用 / 启用 ===
-const handleToggleStatus = async (row: Team, status: string) => {
+const handleToggleStatus = async (row: Record<string, unknown>, status: string) => {
+  const team = row as Team
   const label = status === 'inactive' ? '停用' : '启用'
   try {
-    await ElMessageBox.confirm(`确认${label}团队「${row.team_name}」？`, label + '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认${label}团队「${String(team.team_name || team.name)}」？`, label + '确认', { type: 'warning' })
   } catch { return }
   try {
-    await teamApi.update(row.id, { status })
+    await teamApi.update(Number(team.id), { status })
     ElMessage.success(`团队已${label}`)
     loadList()
   } catch { /* 拦截器已提示 */ }

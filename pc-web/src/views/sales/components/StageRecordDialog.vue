@@ -183,7 +183,7 @@ interface StageField {
   options?: { value: string; label: string }[]
 }
 
-interface Record {
+interface StageRecord {
   id?: number; stage: string; data: Record<string, unknown>
   note?: string; entered_at?: string
   next_assignee_id?: number | null; next_assignee_name?: string | null; next_due_at?: string | null
@@ -200,7 +200,7 @@ const props = defineProps<{
   visible: boolean
   oppId: number | string
   stage: string
-  record: Record | null
+  record: StageRecord | null
   stageSchema: Record<string, Record<string, StageField>>
   loading: boolean
 }>()
@@ -216,7 +216,7 @@ const formRef = ref<FormInstance | null>(null)
 const formData = ref<FormState>({ data: {}, note: '', entered_at: '', next_assignee_id: null, next_due_at: '' })
 
 const dialogTitle = computed(() => props.record ? `编辑「${stageLabel(props.stage)}」阶段记录` : `录入「${stageLabel(props.stage)}」阶段数据`)
-const currentSchema = computed(() => props.stageSchema[props.stage] || {})
+const currentSchema = computed<Record<string, StageField>>(() => props.stageSchema[props.stage] || {})
 
 const rules = computed<FormRules>(() => {
   const r: FormRules = { 'data.*': [{ required: false, trigger: 'blur' }] }
