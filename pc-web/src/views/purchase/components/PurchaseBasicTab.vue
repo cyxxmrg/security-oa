@@ -37,7 +37,7 @@
 <script setup lang="ts">
 
 defineProps<{
-  order: Record<string, unknown>
+  order: Record<string, any>
   loadingBasic: boolean
 }>()
 
@@ -45,11 +45,11 @@ defineEmits<{
   'go-tender': [tenderId: number]
 }>()
 
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatMoney = (n: any) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 const STATUS_LABELS: Record<string, string> = { draft: '草稿', pending: '待审批', approved: '已审批', fulfilled: '已完成', rejected: '已驳回', cancelled: '已取消' }
-const STATUS_TYPES: Record<string, string> = { draft: 'info', pending: 'warning', approved: 'success', fulfilled: 'success', rejected: 'danger', cancelled: 'info' }
+const STATUS_TYPES: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { draft: 'info', pending: 'warning', approved: 'success', fulfilled: 'success', rejected: 'danger', cancelled: 'info' }
 const orderStatusLabel = (s: string): string => STATUS_LABELS[s] || s || '-'
-const orderStatusTagType = (s: string): string => STATUS_TYPES[s] || ''
+const orderStatusTagType = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => STATUS_TYPES[s] || 'info'
 </script>
 
 <style scoped>

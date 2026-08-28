@@ -99,7 +99,7 @@ function eventColor(ev: FollowEvent): string {
   return '#534AB7'
 }
 
-function statusLabel(s: string): string {
+function statusLabel(s: string | null | undefined): string {
   const st = String(s || 'planned')
   const map: Record<string, string> = {
     planned: '计划中', completed: '已完成', done: '已完成',
@@ -110,7 +110,7 @@ function statusLabel(s: string): string {
   return map[st] || st
 }
 
-function statusTagType(s: string): 'success' | 'primary' | 'warning' | 'danger' | 'info' {
+function statusTagType(s: string | null | undefined): 'success' | 'primary' | 'warning' | 'danger' | 'info' {
   const st = String(s || '')
   if (st === 'completed' || st === 'done')    return 'success'
   if (st === 'in_progress' || st === 'doing') return 'warning'
@@ -119,7 +119,7 @@ function statusTagType(s: string): 'success' | 'primary' | 'warning' | 'danger' 
   return 'primary'
 }
 
-function followTypeLabel(t: string): string {
+function followTypeLabel(t: string | null | undefined): string {
   const map: Record<string, string> = {
     phone: '电话拜访', visit: '上门拜访', wechat: '微信沟通', email: '邮件', other: '其他',
     call: '电话', online: '微信', '微信': '微信', '电话': '电话', '上门': '上门',

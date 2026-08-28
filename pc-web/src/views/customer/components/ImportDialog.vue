@@ -29,7 +29,7 @@ const close = () => emit('update:visible', false)
 const uploadRef = ref()
 const file = ref<File | null>(null)
 const handleChange = (f: UploadFile) => {
-  file.value = f.raw
+  file.value = f.raw || null
 }
 
 const handleConfirm = () => {

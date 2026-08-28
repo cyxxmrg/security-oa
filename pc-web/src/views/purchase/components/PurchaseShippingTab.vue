@@ -42,8 +42,8 @@ defineEmits<{
   (e: 'load-shipping'): void
 }>()
 
-const SHIP_STATUS_TYPES: Record<string, string> = { planned: 'info', shipped: 'warning', in_transit: 'warning', arrived: 'success', received: 'success' }
-const shippingStatusType = (s: string): string => SHIP_STATUS_TYPES[s] || ''
+const SHIP_STATUS_TYPES: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { planned: 'info', shipped: 'warning', in_transit: 'warning', arrived: 'success', received: 'success' }
+const shippingStatusType = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => SHIP_STATUS_TYPES[s] || 'info'
 </script>
 
 <style scoped>

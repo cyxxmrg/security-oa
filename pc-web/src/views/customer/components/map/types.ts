@@ -78,6 +78,8 @@ export function normalizeCustomer(c: Record<string, any>): MapCustomer {
     ? { x: 15 + ((c.longitude + 180) / 360) * 70, y: 15 + ((90 - c.latitude) / 180) * 70 }
     : fakeXY(c.id)
   return {
+    id: Number(c.id),
+    name: String(c.name || ''),
     ...c,
     color: avatarColor(c.id),
     mapX: Math.round(xy.x),

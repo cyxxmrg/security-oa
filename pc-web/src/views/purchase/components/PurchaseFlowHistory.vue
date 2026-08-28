@@ -45,7 +45,7 @@ const props = defineProps<{
 }>()
 
 const loading = ref(false)
-const history = ref<Record<string, unknown>[]>([])
+const history = ref<Record<string, any>[]>([])
 
 const loadHistory = async () => {
   if (!props.entityId) return
@@ -96,17 +96,17 @@ const statusLabel = (status: string | null) => {
   return m[status] || status
 }
 
-const getTimelineType = (action: string) => {
+const getTimelineType = (action: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
   if (action === 'approve' || action === 'sign' || action === 'execute') return 'success'
   if (action === 'reject') return 'danger'
   if (action === 'create' || action === 'submit') return 'primary'
   return 'info'
 }
 
-const getActionTagType = (action: string) => {
+const getActionTagType = (action: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
   if (action === 'approve' || action === 'sign') return 'success'
   if (action === 'reject') return 'danger'
-  if (action === 'create' || action === 'submit') return ''
+  if (action === 'create' || action === 'submit') return 'primary'
   return 'info'
 }
 
