@@ -17,8 +17,8 @@
       <el-table-column prop="description" label="岗位描述" min-width="240" />
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" :icon="Edit" @click="emit('edit', row)">编辑</el-button>
-          <el-popconfirm :title="`确定删除岗位「${row.name}」?`" @confirm="emit('delete', row)">
+          <el-button link type="primary" size="small" :icon="Edit" @click="emit('edit', toPosition(row))">编辑</el-button>
+          <el-popconfirm :title="`确定删除岗位「${row.name}」?`" @confirm="emit('delete', toPosition(row))">
             <template #reference>
               <el-button link type="danger" size="small" :icon="Delete">删除</el-button>
             </template>
@@ -68,6 +68,7 @@ const emit = defineEmits<{
   (e: 'pageChange', p: number): void
   (e: 'sizeChange', s: number): void
 }>()
+const toPosition = (row: unknown): PositionRow => row as PositionRow
 </script>
 
 <style lang="scss" scoped>

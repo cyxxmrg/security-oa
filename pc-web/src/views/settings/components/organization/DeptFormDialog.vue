@@ -57,7 +57,7 @@ defineProps<{
   visible: boolean
   title: string
   form: DeptForm
-  employeeList: Record<string, unknown>[]
+  employeeList: Array<{ id: number; name: string; username?: string }>
   saving: boolean
 }>()
 const emit = defineEmits<{

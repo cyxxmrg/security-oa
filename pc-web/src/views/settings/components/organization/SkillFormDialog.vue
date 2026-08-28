@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ visible: boolean; title: string; form: Record<string, unknown>; saving: boolean }>()
+defineProps<{ visible: boolean; title: string; form: { name: string; category: string; color: string; description: string }; saving: boolean }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
   (e: 'save'): void

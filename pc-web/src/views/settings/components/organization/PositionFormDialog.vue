@@ -40,11 +40,21 @@
 </template>
 
 <script setup lang="ts">
+interface PositionForm {
+  name: string
+  department_id: number | null
+  level: string
+  description: string
+  sort_order: number
+}
+
+interface DeptOption { id: number; name: string }
+
 defineProps<{
   visible: boolean
   title: string
-  form: Record<string, unknown>
-  deptList: Record<string, unknown>[]
+  form: PositionForm
+  deptList: DeptOption[]
   saving: boolean
 }>()
 const emit = defineEmits<{
