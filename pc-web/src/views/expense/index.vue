@@ -30,16 +30,16 @@
         :can-delete="canDelete"
         :can-pay="canPay"
         :expense-status-type="expenseStatusType"
-        :format-date="formatDate"
+        :format-date="formatDateCompat"
         :expense-category-label="expenseCategoryLabel"
         :common-status-label="commonStatusLabel"
         @search="loadList"
         @reset="resetSearch"
         @apply="switchApply"
-        @view="handleView"
-        @cancel="handleCancel"
-        @delete="handleDelete"
-        @pay="handlePay"
+        @view="handleViewCompat"
+        @cancel="handleCancelCompat"
+        @delete="handleDeleteCompat"
+        @pay="handlePayCompat"
         @size-change="(s: number) => { pagination.per_page = s; loadList(1) }"
       />
     </div>
@@ -127,7 +127,7 @@
       :row="detailRow"
       :loading="detailLoading"
       :status-type="expenseStatusType"
-      :format-date="formatDate"
+      :format-date="formatDateCompat"
       :can-cancel="canCancel"
       :can-delete="canDelete"
       :can-pay="canPay"
@@ -168,6 +168,12 @@ const {
   showPayDialog, payTarget, payLoading, payForm, handlePay, confirmPay,
   expenseCategoryLabel, commonStatusLabel,
 } = useExpense()
+
+const formatDateCompat = (value?: string | null) => formatDate(value || undefined)
+const handleViewCompat = (row: any) => handleView(row)
+const handleCancelCompat = (row: any) => handleCancel(row)
+const handleDeleteCompat = (row: any) => handleDelete(row)
+const handlePayCompat = (row: any) => handlePay(row)
 </script>
 
 <style lang="scss" scoped>
