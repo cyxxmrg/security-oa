@@ -18,10 +18,10 @@ export function useTenderDetail() {
   const detail = ref<TenderProject | null>(null)
   const bids = ref<TenderBid[]>([])
   const attachments = ref<TenderAttachment[]>([])
-  const downstream = ref<Record<string, unknown> | null>(null)
+  const downstream = ref<any>(null)
   const deposits = ref<TenderDeposit[]>([])
   const depositRule = ref<TenderDepositRule | null>(null)
-  const depositSummary = ref<Record<string, unknown>>({})
+  const depositSummary = ref<any>({})
   const loading = ref(false)
   const loadingBids = ref(false)
   const loadingDeposits = ref(false)
@@ -48,7 +48,7 @@ export function useTenderDetail() {
   const showDepositRuleDialog = ref(false)
   const showRefundDialog = ref(false)
   const showForfeitDialog = ref(false)
-  const depositRuleForm = ref<Record<string, unknown>>({
+  const depositRuleForm = ref<any>({
     required: true,
     amount: 5000,
     deadline_hours_before_open: 24,
@@ -56,11 +56,11 @@ export function useTenderDetail() {
     bank_account: '',
     note: '',
   })
-  const refundForm = ref<Record<string, unknown>>({
+  const refundForm = ref<any>({
     depositId: 0, supplierName: '', originalAmount: 0,
     refund_amount: 0, method: 'bank_transfer', reason: '',
   })
-  const forfeitForm = ref<Record<string, unknown>>({ depositId: 0, supplierName: '', amount: 0, reason: '' })
+  const forfeitForm = ref<any>({ depositId: 0, supplierName: '', amount: 0, reason: '' })
 
   // ============== 计算属性 ==============
   const publicUrl = computed(() => {
@@ -71,19 +71,19 @@ export function useTenderDetail() {
   // 状态机权限 — V0.6.5 Sprint 4
   const canEdit = computed(() => detail.value?.status === 'draft')
   const canSubmitReview = computed(() => detail.value?.status === 'draft')
-  const canApprove = computed(() => detail.value?.status === 'pending_review')
-  const canReject = computed(() => detail.value?.status === 'pending_review')
-  const canWithdraw = computed(() => detail.value?.status === 'open' && bids.value.length === 0)
+  const canApprove = computed(() => (detail.value?.status as string) === 'pending_review')
+  const canReject = computed(() => (detail.value?.status as string) === 'pending_review')
+  const canWithdraw = computed(() => (detail.value?.status as string) === 'open' && bids.value.length === 0)
   const canCancelV2 = computed(() => ['draft', 'pending_review', 'open'].includes(detail.value?.status || ''))
   const canEditDepositRule = computed(() =>
     detail.value && !['closed', 'cancelled', 'withdrawn'].includes(detail.value.status))
 
   // V0.6.0 旧按钮 (向后兼容, 标记「旧」字样)
   const canPublish = computed(() => detail.value?.status === 'draft')
-  const canEvaluate = computed(() => detail.value?.status === 'open')
-  const canAward = computed(() => detail.value?.status === 'open')
-  const canClose = computed(() => ['open', 'closed'].includes(detail.value?.status || ''))
-  const canCancel = computed(() => ['draft', 'open'].includes(detail.value?.status || ''))
+  const canEvaluate = computed(() => (detail.value?.status as string) === 'open')
+  const canAward = computed(() => (detail.value?.status as string) === 'open')
+  const canClose = computed(() => ['open', 'closed'].includes((detail.value?.status as string) || ''))
+  const canCancel = computed(() => ['draft', 'open'].includes((detail.value?.status as string) || ''))
 
   // ============== 数据加载 ==============
   const loadDetail = async () => {
@@ -122,9 +122,9 @@ export function useTenderDetail() {
     loadingDeposits.value = true
     try {
       const res = await tender.listDeposits(Number(id.value))
-      const payload = unwrapStats<{ rule?: Record<string, unknown>; deposits?: Record<string, unknown>[]; summary?: Record<string, unknown> }>(res)
+      const payload = unwrapStats<any>(res)
       depositRule.value = payload?.rule || null
-      deposits.value = Array.isArray(payload?.deposits) ? payload.deposits : []
+      deposits.value = Array.isArray(payload?.deposits) ? payload.deposits as TenderDeposit[] : []
       depositSummary.value = payload?.summary || {}
     } catch {
       deposits.value = []
@@ -172,7 +172,7 @@ export function useTenderDetail() {
     return true
   }
 
-  const onUpload = async (opt: Record<string, unknown>) => {
+  const onUpload = async (opt: any) => {
     const fd = new FormData()
     fd.append('file', opt.file)
     fd.append('category', 'tender_doc')
@@ -181,7 +181,7 @@ export function useTenderDetail() {
       await tender.uploadAttachment(Number(id.value), fd)
       ElMessage.success('已上传')
       await loadAttachments()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '上传失败')
     }
   }
@@ -203,7 +203,7 @@ export function useTenderDetail() {
       await tender.submitReview(Number(id.value))
       ElMessage.success('已提交审核')
       await loadAll()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '提交失败')
     }
   }
@@ -213,7 +213,7 @@ export function useTenderDetail() {
       await tender.approve(Number(id.value))
       ElMessage.success('审核通过, 已发布')
       await loadAll()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '审核失败')
     }
   }
@@ -228,7 +228,7 @@ export function useTenderDetail() {
       showRejectDialog.value = false
       rejectForm.value = { reason: '', backToDraft: true }
       await loadAll()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '驳回失败')
     }
   }
@@ -243,7 +243,7 @@ export function useTenderDetail() {
       showWithdrawDialog.value = false
       withdrawForm.value = { reason: '' }
       await loadAll()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '撤回失败')
     }
   }
@@ -258,7 +258,7 @@ export function useTenderDetail() {
       showCancelV2Dialog.value = false
       cancelV2Form.value = { reason: '' }
       await loadAll()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '废标失败')
     }
   }
@@ -274,7 +274,7 @@ export function useTenderDetail() {
       ElMessage.success('已设置保证金规则')
       showDepositRuleDialog.value = false
       await loadDeposits()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '保存失败')
     }
   }
@@ -284,7 +284,7 @@ export function useTenderDetail() {
       await tender.markDepositPaid(Number(id.value), row.id)
       ElMessage.success('已确认收款')
       await loadDeposits()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '操作失败')
     }
   }
@@ -313,7 +313,7 @@ export function useTenderDetail() {
       ElMessage.success('已退还')
       showRefundDialog.value = false
       await loadDeposits()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '退款失败')
     }
   }
@@ -336,7 +336,7 @@ export function useTenderDetail() {
       ElMessage.success('已没收')
       showForfeitDialog.value = false
       await loadDeposits()
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '操作失败')
     }
   }
