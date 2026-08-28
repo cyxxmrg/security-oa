@@ -97,10 +97,10 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
-const maintenanceData = ref<Record<string, unknown> | null>(null)
+const maintenanceData = ref<any>(null)
 const maintenanceLoading = ref(false)
 
-const STATUS_TAG: Record<string, { type: string; label: string }> = {
+const STATUS_TAG: Record<string, { type: 'success' | 'primary' | 'info' | 'warning' | 'danger'; label: string }> = {
   pending:    { type: 'info',    label: '待派单' },
   assigned:   { type: 'primary', label: '已派单' },
   in_progress:{ type: 'warning', label: '进行中' },

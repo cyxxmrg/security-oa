@@ -36,9 +36,9 @@
           <el-card shadow="hover" style="height: 100%">
             <template #header><span style="font-weight: 600">项目阶段分布</span></template>
             <div v-if="overview.project_stage_distribution" class="stage-grid">
-              <div v-for="(count, stage) in overview.project_stage_distribution" :key="stage" class="stage-item" :style="{ borderColor: stageColor(stage) }">
-                <div :style="{ color: stageColor(stage), fontSize: '22px', fontWeight: 700 }">{{ count }}</div>
-                <div style="color: #606266; font-size: 13px; margin-top: 4px">{{ stageLabel(stage) }}</div>
+              <div v-for="(count, stage) in overview.project_stage_distribution" :key="stage" class="stage-item" :style="{ borderColor: stageColor(String(stage)) }">
+                <div :style="{ color: stageColor(String(stage)), fontSize: '22px', fontWeight: 700 }">{{ count }}</div>
+                <div style="color: #606266; font-size: 13px; margin-top: 4px">{{ stageLabel(String(stage)) }}</div>
               </div>
             </div>
           </el-card>
@@ -154,7 +154,7 @@
             <template #header><span style="font-weight: 600">设备状态</span></template>
             <div v-if="overview.device_status" class="device-grid">
               <div v-for="(count, status) in overview.device_status" :key="status" class="device-item">
-                <el-icon :size="20" :color="deviceColor(status)"><Monitor /></el-icon>
+                <el-icon :size="20" :color="deviceColor(String(status))"><Monitor /></el-icon>
                 <div class="device-count">{{ count }}</div>
                 <div class="device-label">{{ deviceStatusLabel(String(status)) }}</div>
               </div>
@@ -246,7 +246,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 echarts.use([PieChart, BarChart, LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 const loading = ref(false)
-const overview = ref<Record<string, unknown> | null>(null)
+const overview = ref<any>(null)
 const generatedAt = ref('')
 
 const kpiCards = computed(() => {
@@ -316,16 +316,19 @@ const deviceStatusLabel = (s: string) => ({
   scrapped: '已报废',
 } as Record<string, string>)[s] || s
 
-const activityTypeColor = (t: string) => ({
-  approval: 'primary', log: 'success', warranty: 'warning', project: 'info',
-} as Record<string, string>)[t] || 'info'
+const activityTypeColor = (t: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
+  const colors: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = {
+    approval: 'primary', log: 'success', warranty: 'warning', project: 'info',
+  }
+  return colors[t] || 'info'
+}
 
 const activityTypeLabel = (t: string) => ({
   approval: '审批', log: '日志', warranty: '质保', project: '项目',
 } as Record<string, string>)[t] || t
 
-const fmt = (v: Record<string, unknown>) => {
-  const n = parseFloat(v) || 0
+const fmt = (v: string | number | null | undefined) => {
+  const n = Number(v) || 0
   return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
@@ -339,8 +342,8 @@ async function loadAll() {
     // V0.4.8 C2: 渲染图表
     await nextTick()
     renderCharts()
-  } catch (e: unknown) {
-    ElMessage.error('加载总览失败: ' + (e.message || 'unknown'))
+  } catch (e: any) {
+    ElMessage.error('加载总览失败: ' + (e?.message || 'unknown'))
   } finally {
     loading.value = false
   }

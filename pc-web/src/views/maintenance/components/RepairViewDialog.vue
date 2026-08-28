@@ -140,7 +140,7 @@ const props = defineProps<{ modelValue: boolean; roId: number | null }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 const visible = computed({ get: () => props.modelValue, set: (v) => { if (!v) ro.value = null; emit('update:modelValue', v) } })
 
-const ro = ref<Record<string, unknown> | null>(null)
+const ro = ref<any>(null)
 const activeTab = ref('basic')
 const showShipOut = ref(false)
 const showAddMethod = ref(false)
