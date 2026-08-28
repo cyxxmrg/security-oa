@@ -236,7 +236,7 @@ Route::prefix('knowledge')->middleware(['auth:sanctum', 'ensure_business'])->gro
 // ========== 数据备份 (通用) ==========
 // P0-4 安全修复: 加 permission:system.backup, 防止业务用户下载/触发备份/清空备份
 // V1.2.8n: 每个子路由单独 withoutMiddleware('ensure_business'), group 链式无效
-Route::prefix('backups')->middleware(['auth:sanctum', 'permission:system.backup'])->group(function () {
+Route::prefix('backups')->middleware(['auth:sanctum', 'ensure_system', 'permission:system.backup'])->group(function () {
     Route::get('/', [BackupController::class, 'index'])->withoutMiddleware('ensure_business');
     Route::post('/', [BackupController::class, 'store'])->withoutMiddleware('ensure_business');
     Route::get('schedule', [BackupController::class, 'schedule'])->withoutMiddleware('ensure_business');
@@ -248,7 +248,7 @@ Route::prefix('backups')->middleware(['auth:sanctum', 'permission:system.backup'
 // 现在至少需要 auth:sanctum + permission:system.backup, 匿名不能再 trigger 备份
 // 外部 cron 触发改用 token 走 GET /backups/run-due?token=... (已有 token 校验逻辑保留作 fallback)
 Route::post('backups/run-due', [BackupController::class, 'runDue'])
-    ->middleware(['auth:sanctum', 'permission:system.backup'])
+    ->middleware(['auth:sanctum', 'ensure_system', 'permission:system.backup'])
     ->withoutMiddleware('ensure_business');
 
 // ========== 消息中心 (通用) ==========

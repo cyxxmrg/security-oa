@@ -16,12 +16,7 @@ class BackupController extends Controller
 
     public function __construct()
     {
-        // P0-4 安全修复: 兜底守门, 任何方法执行前都先验证必须是 system 账号
-        // 即使 route 中间件被绕过 (例如未来路由配置回归), 控制器内部仍然拒绝
-        $user = auth()->user();
-        if (!$user || $user->user_type !== 'system') {
-            abort(403, '备份管理仅限 system 账号');
-        }
+        // 授权由路由中间件负责；构造函数必须兼容 CLI 命令（如 route:list）。
         $this->backupDir = storage_path('app/backups');
     }
 
