@@ -165,7 +165,15 @@ import { Monitor, Refresh } from '@element-plus/icons-vue'
 const API = '/admin/monitor'
 const loading = ref(false)
 const autoRefresh = ref(false)
-const metrics = ref<Record<string, number>>({})
+interface MonitorMetrics {
+  timestamp?: string | number
+  disk?: { max_percent?: number; mounts?: Array<{ mount: string; severity: string; percent: number; used: number; total: number; free: number }> }
+  errors?: { available?: boolean; total_24h?: number; last_error?: { time?: string }; by_hour?: Record<string, number> }
+  db?: { active_connections?: number; running_queries?: number; cache_hit_rate?: number; slow_count?: number; waiting_locks?: number; big_tables?: Array<{ name: string; size: number }> }
+  services?: { php_fpm_workers?: number; opcache_enabled?: boolean; opcache_hit_rate?: number; opcache_memory_used?: number; opcache_memory_free?: number; load_avg_1?: number; load_avg_5?: number; php_version?: string; laravel_version?: string; environment?: string; debug?: boolean }
+  backups?: { age_days?: number | null; severity?: string; latest?: { name?: string }; files?: Array<{ name: string; size: number; mtime_human?: string; path?: string }> }
+}
+const metrics = ref<MonitorMetrics>({})
 
 let timer: ReturnType<typeof setInterval> | null = null
 
