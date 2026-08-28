@@ -146,12 +146,12 @@
         <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleDetail(row)">详情</el-button>
-            <template v-if="row.status === 'pending' && canApprove(row)">
-              <el-button link type="success" size="small" @click="handleApprove(row)">通过</el-button>
-              <el-button link type="danger" size="small" @click="handleReject(row)">驳回</el-button>
-              <el-button link type="warning" size="small" @click="handleTransfer(row)">转交</el-button>
+            <template v-if="row.status === 'pending' && canApprove(row as any)">
+              <el-button link type="success" size="small" @click="handleApprove(row as any)">通过</el-button>
+              <el-button link type="danger" size="small" @click="handleReject(row as any)">驳回</el-button>
+              <el-button link type="warning" size="small" @click="handleTransfer(row as any)">转交</el-button>
             </template>
-            <el-tag v-else-if="row.status === 'pending' && isSelfSubmitted(row) && !isAdmin" size="small" type="info" effect="plain">自己提交, 不能自审</el-tag>
+            <el-tag v-else-if="row.status === 'pending' && isSelfSubmitted(row as any) && !isAdmin" size="small" type="info" effect="plain">自己提交, 不能自审</el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -191,11 +191,11 @@
         <h4 class="section-title">🔁 审批流程</h4>
         <el-timeline>
           <el-timeline-item
-            v-for="(n, i) in currentItem.flow"
+            v-for="(n, i) in (currentItem.flow || [])"
             :key="i"
             :timestamp="formatDateTime(n.time)"
             :type="flowNodeType(n.action)"
-            :hollow="i !== currentItem.flow.length - 1"
+            :hollow="i !== (currentItem.flow || []).length - 1"
             size="large"
           >
             <strong>{{ n.operator }}</strong>
@@ -255,7 +255,7 @@ import { useRouter } from 'vue-router'
 import { approvalSubTypeLabel, localizeEnumText, priorityLabel as commonPriorityLabel, statusLabel as commonStatusLabel } from '@/utils/labels'
 
 // el-tag 类型
-type TagType = '' | 'success' | 'warning' | 'info' | 'danger' | 'primary'
+type TagType = 'success' | 'warning' | 'info' | 'danger' | 'primary'
 
 // 审批流程节点
 interface FlowNode {
@@ -299,7 +299,7 @@ const list = ref<FinanceApprovalItem[]>([])
 const currentItem = ref<FinanceApprovalItem | null>(null)
 const approvalComment = ref('')
 
-const filter = reactive({ keyword: '', subType: '', priority: '', dateRange: [] as (string | Date)[] })
+const filter = reactive({ keyword: '', subType: '', priority: '', dateRange: null as [string, string] | null })
 
 // 财务审批子类
 const subTypeOptions = [
@@ -319,23 +319,23 @@ const priorityOptions = [
   { value: 'urgent', label: '紧急' }, { value: 'high', label: '高' },
   { value: 'normal', label: '普通' }, { value: 'low', label: '低' }
 ]
-const subTypeLabel = (t: string) => subTypeOptions.find(x => x.value === t)?.label || approvalSubTypeLabel(t)
-const priorityLabel = (p: string) => priorityOptions.find(x => x.value === p)?.label || commonPriorityLabel(p)
-const subTypeTagType = (t: string): TagType => ({
+const subTypeLabel = (t?: string) => subTypeOptions.find(x => x.value === t)?.label || approvalSubTypeLabel(t || '')
+const priorityLabel = (p?: string) => priorityOptions.find(x => x.value === p)?.label || commonPriorityLabel(p || '')
+const subTypeTagType = (t?: string): TagType => ({
   expense: 'danger', payment: 'danger', receivable: 'warning', payable: 'warning',
   purchase: 'success', commission: 'success', salary: 'info',
   reimburse: 'danger', loan: 'warning', other: 'info'
-}[t] as TagType || 'info')
+}[t || ''] as TagType || 'info')
 const subTypeIcon = (t: string) => ({
   expense: 'Money', payment: 'CreditCard', receivable: 'Wallet', payable: 'Wallet',
   purchase: 'ShoppingCart', commission: 'Coin', salary: 'UserFilled',
   reimburse: 'Ticket', loan: 'CreditCard', other: 'MoreFilled'
 }[t] || 'MoreFilled')
-const priorityTagType = (p: string): TagType => ({ urgent: 'danger', high: 'warning', normal: 'primary', low: 'info' }[p] as TagType || 'info')
-const statusLabel = (s: string) => commonStatusLabel(s)
-const statusTagType = (s: string): TagType => ({ pending: 'warning', approved: 'success', rejected: 'danger', transferred: 'info', cancelled: 'info' }[s] as TagType || 'info')
-const flowNodeType = (a: string): TagType => ({ submit: 'primary', approve: 'success', reject: 'danger', transfer: 'warning', comment: 'info', pay_done: 'success' }[a] as TagType || 'info')
-const flowActionLabel = (a: string) => ({ submit: '发起', approve: '通过', reject: '驳回', transfer: '转交', comment: '补充', pay_done: '付款' }[a] || a)
+const priorityTagType = (p?: string): TagType => ({ urgent: 'danger', high: 'warning', normal: 'primary', low: 'info' }[p || ''] as TagType || 'info')
+const statusLabel = (s?: string) => commonStatusLabel(s || '')
+const statusTagType = (s?: string): TagType => ({ pending: 'warning', approved: 'success', rejected: 'danger', transferred: 'info', cancelled: 'info' }[s || ''] as TagType || 'info')
+const flowNodeType = (a?: string): TagType => ({ submit: 'primary', approve: 'success', reject: 'danger', transfer: 'warning', comment: 'info', pay_done: 'success' }[a || ''] as TagType || 'info')
+const flowActionLabel = (a?: string) => ({ submit: '发起', approve: '通过', reject: '驳回', transfer: '转交', comment: '补充', pay_done: '付款' }[a || ''] || a || '')
 
 const router = useRouter()
 
@@ -385,8 +385,8 @@ const reloadItem = async () => {
 
 const pendingCount = computed(() => list.value.filter(i => i.status === 'pending').length)
 const approvedCount = computed(() => list.value.filter(i => i.status === 'approved').length)
-const totalAmount = computed(() => list.value.filter(i => i.status === 'pending' || i.status === 'approved').reduce((s, i) => s + (parseFloat(i.amount) || 0), 0))
-const paidAmount = computed(() => list.value.filter(i => i.status === 'approved').reduce((s, i) => s + (parseFloat(i.amount) || 0), 0))
+const totalAmount = computed(() => list.value.filter(i => i.status === 'pending' || i.status === 'approved').reduce((s, i) => s + (Number(i.amount) || 0), 0))
+const paidAmount = computed(() => list.value.filter(i => i.status === 'approved').reduce((s, i) => s + (Number(i.amount) || 0), 0))
 
 const loadList = async () => {
   loading.value = true
@@ -397,7 +397,7 @@ const loadList = async () => {
   finally { loading.value = false }
 }
 
-const filteredList = computed(() => list.value.filter(item => {
+const filteredList = computed<FinanceApprovalItem[]>(() => list.value.filter(item => {
   if (activeTab.value === 'pending' && item.status !== 'pending') return false
   if (activeTab.value === 'approved' && item.status !== 'approved') return false
   if (activeTab.value === 'rejected' && item.status !== 'rejected') return false
@@ -419,20 +419,20 @@ const loadMyId = async () => {
     isAdmin.value = me?.data?.user?.is_system === true || me?.data?.user?.user_type === 'system'
   } catch {}
 }
-const handleDetail = (row: FinanceApprovalItem) => { currentItem.value = row; approvalComment.value = ''; showDetailDialog.value = true }
-const handleApprove = async (row: FinanceApprovalItem) => {
+const handleDetail = (row: any) => { currentItem.value = row; approvalComment.value = ''; showDetailDialog.value = true }
+const handleApprove = async (row: any) => {
   try { await ElMessageBox.confirm('确定审批通过吗？', '审批确认', { type: 'success' }); await post(`/approvals/finance/${row.id}/approve`, { comment: approvalComment.value || '同意' }); ElMessage.success('已通过'); showDetailDialog.value = false; loadList() } catch (e: unknown) { if (e !== 'cancel') ElMessage.error((e as ApiError)?.message || '操作失败') }
 }
-const handleReject = async (row: FinanceApprovalItem) => {
+const handleReject = async (row: any) => {
   if (!approvalComment.value.trim()) { ElMessage.warning('请填写驳回意见'); return }
   try { await ElMessageBox.confirm('确定驳回吗？', '驳回确认', { type: 'warning' }); await post(`/approvals/finance/${row.id}/reject`, { comment: approvalComment.value }); ElMessage.success('已驳回'); showDetailDialog.value = false; loadList() } catch (e: unknown) { if (e !== 'cancel') ElMessage.error((e as ApiError)?.message || '操作失败') }
 }
-const handleTransfer = async (row: FinanceApprovalItem) => {
+const handleTransfer = async (row: any) => {
   try { const { value: target } = await ElMessageBox.prompt('请输入转交给谁', '转交审批', { inputPlaceholder: '用户名' }); if (!target) return; await post(`/approvals/finance/${row.id}/forward`, { target }); ElMessage.success(`已转交 ${target}`); showDetailDialog.value = false; loadList() } catch (e: unknown) { if (e !== 'cancel') ElMessage.error((e as ApiError)?.message || '操作失败') }
 }
 const handleSearch = () => {}
-const resetFilter = () => { filter.keyword = ''; filter.subType = ''; filter.priority = ''; filter.dateRange = [] }
-const formatDateTime = (d: string) => d ? new Date(d).toLocaleString('zh-CN', { hour12: false }).slice(0, 16) : '-'
+const resetFilter = () => { filter.keyword = ''; filter.subType = ''; filter.priority = ''; filter.dateRange = null }
+const formatDateTime = (d?: string) => d ? new Date(d).toLocaleString('zh-CN', { hour12: false }).slice(0, 16) : '-'
 const formatMoney = (v: unknown) => { const n = parseFloat(v as string); return isNaN(n) ? '0.00' : n.toFixed(2) }
 
 onMounted(() => { loadMyId(); loadList() })
