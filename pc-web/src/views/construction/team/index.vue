@@ -114,7 +114,7 @@
       <template v-if="detailTarget">
         <el-descriptions :column="3" border size="default">
           <el-descriptions-item label="团队名称">{{ detailTarget.team_name || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="类型">{{ typeLabel(detailTarget.team_type) }}</el-descriptions-item>
+          <el-descriptions-item label="类型">{{ typeLabel(String(detailTarget.team_type || '')) }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="detailTarget.status === 'active' ? 'success' : 'danger'" effect="plain" size="small">
               {{ detailTarget.status === 'active' ? '启用' : '停用' }}
@@ -182,8 +182,8 @@ const filteredList = computed(() => {
   if (searchForm.keyword) {
     const kw = searchForm.keyword.toLowerCase()
     arr = arr.filter(r =>
-      (r.team_name || '').toLowerCase().includes(kw) ||
-      (r.leader?.name || '').toLowerCase().includes(kw)
+      String(r.team_name || '').toLowerCase().includes(kw) ||
+      String(r.leader?.name || '').toLowerCase().includes(kw)
     )
   }
   return arr
@@ -266,7 +266,7 @@ const handleEdit = (row: Record<string, unknown>) => {
 const handleSave = async (payload: Record<string, unknown>) => {
   try {
     if (editingTeam.value?.id) {
-      await teamApi.update(editingTeam.value.id, payload)
+      await teamApi.update(Number(editingTeam.value.id), payload)
       ElMessage.success('已更新')
     } else {
       await teamApi.create(payload)

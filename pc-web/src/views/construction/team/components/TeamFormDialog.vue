@@ -137,14 +137,14 @@ const resetForm = () => {
 
 const fillFromEditing = (row: Team) => {
   if (!row) { resetForm(); return }
-  formData.project_id = row.project_id ?? null
-  formData.team_name = row.team_name || ''
-  formData.team_type = row.team_type || 'internal'
-  formData.leader_name = row.leader_name || ''
-  formData.leader_phone = row.leader_phone || ''
-  formData.specialty = row.specialty || ''
-  formData.status = row.status || 'active'
-  formData.remark = row.remark || ''
+  formData.project_id = Number(row.project_id) || null
+  formData.team_name = String(row.team_name || '')
+  formData.team_type = String(row.team_type || 'internal')
+  formData.leader_name = String(row.leader_name || '')
+  formData.leader_phone = String(row.leader_phone || '')
+  formData.specialty = Array.isArray(row.specialty) ? row.specialty.join(',') : String(row.specialty || '')
+  formData.status = String(row.status || 'active')
+  formData.remark = String(row.remark || '')
 }
 
 const handleOpen = () => {

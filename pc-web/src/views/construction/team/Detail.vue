@@ -27,7 +27,7 @@
             <el-descriptions-item label="团队ID">{{ team.id }}</el-descriptions-item>
             <el-descriptions-item label="团队名称">{{ team.name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="类型">
-              <el-tag effect="plain" size="small">{{ typeLabel(team.type) }}</el-tag>
+              <el-tag effect="plain" size="small">{{ typeLabel(team.type || '') }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="负责人">{{ team.leader?.name || team.leader_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="联系电话">{{ team.phone || '-' }}</el-descriptions-item>
@@ -135,7 +135,7 @@ import { ArrowLeft, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { teamApi } from '@/api/construction'
 import { unwrapItem } from '@/utils/response'
 import MemberFormDialog from './components/MemberFormDialog.vue'
-import type { Team } from '../types'
+import type { Team, TeamMember, TeamProject, LogRow } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -201,7 +201,7 @@ const handleRemoveMember = async (row: TeamMember) => {
     )
   } catch { return }
   try {
-    await teamApi.removeMember(teamId.value, row.id || row.user_id)
+    await teamApi.removeMember(teamId.value, Number(row.id || row.user_id))
     ElMessage.success('已移除')
     await loadDetail()
   } catch { /* 拦截器已提示 */ }
