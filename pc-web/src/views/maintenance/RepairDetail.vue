@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <div v-if="loading && !ro" class="loading-state"><el-icon class="is-loading"><Loading /></el-icon><span>加载中…</span></div>
+    <div v-if="loading && !ro" class="loading-state"><el-icon class="is-loading"><Loading /></el-icon><span>加载中�?/span></div>
 
     <template v-else-if="ro">
       <!-- 顶部 -->
@@ -26,7 +26,7 @@
         </div>
         <div class="status-right">
           <el-button v-if="ro.status === 'received' && !readonly" type="warning" :icon="Box" @click="onShipOut" size="small">寄出</el-button>
-          <el-button v-if="ro.status === 'sent_for_repair' && !readonly" @click="onInRepair" size="small">开始维修</el-button>
+          <el-button v-if="ro.status === 'sent_for_repair' && !readonly" @click="onInRepair" size="small">开始维�?/el-button>
           <el-button v-if="ro.status === 'in_repair' && !readonly" type="success" @click="onRepaired" size="small">标记修好</el-button>
           <el-button v-if="ro.status === 'repaired' && !readonly" type="warning" @click="onShipBack" size="small">寄回</el-button>
           <el-button v-if="['sent_back','repaired'].includes(ro.status) && !readonly" type="success" :icon="CircleCheck" @click="onClose" size="small">关闭</el-button>
@@ -42,19 +42,19 @@
             <div class="info-grid">
               <div class="info-item">
                 <div class="info-label">客户</div>
-                <div class="info-value">{{ ro.customer_name || '—' }}</div>
+                <div class="info-value">{{ ro.customer_name || '�? }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">项目</div>
-                <div class="info-value">{{ ro.project_name || '—' }}</div>
+                <div class="info-value">{{ ro.project_name || '�? }}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">联系人</div>
-                <div class="info-value">{{ ro.contact_name || '—' }}</div>
+                <div class="info-label">联系�?/div>
+                <div class="info-value">{{ ro.contact_name || '�? }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">联系电话</div>
-                <div class="info-value">{{ ro.contact_phone || '—' }}</div>
+                <div class="info-value">{{ ro.contact_phone || '�? }}</div>
               </div>
               <div class="info-item full" v-if="ro.address">
                 <div class="info-label">地址</div>
@@ -62,23 +62,23 @@
               </div>
               <div class="info-item">
                 <div class="info-label">品牌</div>
-                <div class="info-value">{{ ro.equipment_brand || '—' }}</div>
+                <div class="info-value">{{ ro.equipment_brand || '�? }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">型号</div>
-                <div class="info-value">{{ ro.equipment_model || '—' }}</div>
+                <div class="info-value">{{ ro.equipment_model || '�? }}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">序列号</div>
-                <div class="info-value"><code v-if="ro.serial_no">{{ ro.serial_no }}</code><span v-else>—</span></div>
+                <div class="info-label">序列�?/div>
+                <div class="info-value"><code v-if="ro.serial_no">{{ ro.serial_no }}</code><span v-else>�?/span></div>
               </div>
               <div class="info-item full">
                 <div class="info-label">故障描述</div>
                 <div class="info-value description">{{ ro.fault_description }}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">接件人</div>
-                <div class="info-value">{{ ro.receiver_name || '—' }}</div>
+                <div class="info-label">接件�?/div>
+                <div class="info-value">{{ ro.receiver_name || '�? }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">接件时间</div>
@@ -87,7 +87,7 @@
             </div>
           </el-tab-pane>
 
-          <!-- Tab 2: 物流轨迹 (往返双向) -->
+          <!-- Tab 2: 物流轨迹 (往返双�? -->
           <el-tab-pane :label="`物流轨迹 (${(ro.shipments||[]).length})`" name="shipments">
             <div class="attachment-section">
               <div class="attach-header">
@@ -98,7 +98,7 @@
                   accept="image/*"
                   multiple
                 >
-                  <el-button size="small" type="primary" :icon="Upload">上传凭证图</el-button>
+                  <el-button size="small" type="primary" :icon="Upload">上传凭证�?/el-button>
                 </el-upload>
               </div>
               <div v-if="!attachments.length" class="empty-state-sm">暂无凭证照片</div>
@@ -131,19 +131,19 @@
                 </div>
                 <div class="ship-body">
                   <div class="ship-row">
-                    <span class="ship-label">承运商</span>
+                    <span class="ship-label">承运�?/span>
                     <span class="ship-value">{{ s.carrier }}</span>
                   </div>
                   <div class="ship-row">
-                    <span class="ship-label">运单号</span>
+                    <span class="ship-label">运单�?/span>
                     <span class="ship-value"><code>{{ s.tracking_no }}</code></span>
                   </div>
                   <div class="ship-row">
-                    <span class="ship-label">发件人</span>
+                    <span class="ship-label">发件�?/span>
                     <span class="ship-value">{{ s.sender_name }} {{ s.sender_phone ? '· ' + s.sender_phone : '' }}</span>
                   </div>
                   <div class="ship-row">
-                    <span class="ship-label">收件人</span>
+                    <span class="ship-label">收件�?/span>
                     <span class="ship-value">{{ s.receiver_name }} {{ s.receiver_phone ? '· ' + s.receiver_phone : '' }}</span>
                   </div>
                   <div class="ship-row" v-if="s.shipped_at">
@@ -194,7 +194,7 @@
                 <div class="method-body" v-if="m.parts_replaced?.length">
                   <div class="info-label">换件清单</div>
                   <el-table :data="m.parts_replaced" size="small" style="margin-top: 4px;">
-                    <el-table-column prop="name" label="配件名" />
+                    <el-table-column prop="name" label="配件�? />
                     <el-table-column prop="qty" label="数量" width="80" />
                     <el-table-column label="单价" width="100">
                       <template #default="{ row }">¥ {{ row.price }}</template>
@@ -217,7 +217,7 @@
                 </div>
                 <div v-if="m.remarks" class="method-remarks">📝 {{ m.remarks }}</div>
               </div>
-              <el-button v-if="!readonly" @click="onAddMethod" plain style="margin-top: 12px;">+ 添加另一个维修方式</el-button>
+              <el-button v-if="!readonly" @click="onAddMethod" plain style="margin-top: 12px;">+ 添加另一个维修方�?/el-button>
             </div>
           </el-tab-pane>
 
@@ -244,7 +244,7 @@
             <el-empty v-else description="暂无进度记录" />
           </el-tab-pane>
 
-          <!-- V0.5.7 块2 — 维修过程照片 (7 步进度) -->
+          <!-- V0.5.7 �? �?维修过程照片 (7 步进�? -->
           <el-tab-pane label="过程照片" name="photos">
             <StepPhotoUploader
               v-if="ro?.id"
@@ -256,13 +256,13 @@
           <el-tab-pane label="费用" name="cost">
             <div class="cost-summary">
               <div class="cost-row">
-                <span>配件费</span><span class="amount">¥ {{ ro.parts_cost }}</span>
+                <span>配件�?/span><span class="amount">¥ {{ ro.parts_cost }}</span>
               </div>
               <div class="cost-row">
-                <span>工时费</span><span class="amount">¥ {{ ro.labor_cost }}</span>
+                <span>工时�?/span><span class="amount">¥ {{ ro.labor_cost }}</span>
               </div>
               <div class="cost-row">
-                <span>物流费</span><span class="amount">¥ {{ ro.shipping_cost }}</span>
+                <span>物流�?/span><span class="amount">¥ {{ ro.shipping_cost }}</span>
               </div>
               <div class="cost-row total">
                 <span>合计</span><span class="amount">¥ {{ ro.total_cost }}</span>
@@ -276,7 +276,7 @@
         </el-tabs>
       </div>
 
-      <!-- 移动底部操作栏 -->
+      <!-- 移动底部操作�?-->
       <div class="bottom-bar show-mobile">
         <el-button v-if="ro.status === 'received' && !readonly" type="warning" @click="onShipOut" style="flex:1;">寄出</el-button>
         <el-button v-if="ro.status === 'in_repair' && !readonly" type="success" @click="onRepaired" style="flex:1;">修好</el-button>
@@ -289,23 +289,23 @@
     <!-- 寄出 dialog -->
     <el-dialog v-model="shipOutVisible" :title="shipDirection === 'outbound' ? '寄出去程' : '寄回回程'" width="500px">
       <el-form :model="shipForm" label-width="100px">
-        <el-form-item label="承运商" required>
-          <el-select v-model="shipForm.carrier" filterable allow-create placeholder="选择或输入" style="width: 100%">
+        <el-form-item label="承运�? required>
+          <el-select v-model="shipForm.carrier" filterable allow-create placeholder="选择或输�? style="width: 100%">
             <el-option label="顺丰" value="顺丰" />
             <el-option label="京东" value="京东" />
-            <el-option label="中通" value="中通" />
-            <el-option label="圆通" value="圆通" />
-            <el-option label="申通" value="申通" />
+            <el-option label="中�? value="中�? />
+            <el-option label="圆�? value="圆�? />
+            <el-option label="申�? value="申�? />
             <el-option label="邮政" value="邮政" />
           </el-select>
         </el-form-item>
-        <el-form-item label="运单号" required>
+        <el-form-item label="运单�? required>
           <el-input v-model="shipForm.tracking_no" />
         </el-form-item>
         <el-form-item label="运费">
           <el-input-number v-model="shipForm.cost" :min="0" :precision="2" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="发件人" required>
+        <el-form-item label="发件�? required>
           <el-input v-model="shipForm.sender_name" />
         </el-form-item>
         <el-form-item label="发件电话">
@@ -314,7 +314,7 @@
         <el-form-item label="发件地址">
           <el-input v-model="shipForm.sender_address" />
         </el-form-item>
-        <el-form-item label="收件人" required>
+        <el-form-item label="收件�? required>
           <el-input v-model="shipForm.receiver_name" />
         </el-form-item>
         <el-form-item label="收件电话">
@@ -339,7 +339,7 @@
             <el-option label="🆓 免费（合同）" value="free_contract" />
             <el-option label="💰 付费（维修）" value="paid_repair" />
             <el-option label="💰 付费（换新）" value="paid_replace" />
-            <el-option label="↩️ 退回（不修）" value="returned" />
+            <el-option label="↩️ 退回（不修�? value="returned" />
           </el-select>
         </el-form-item>
         <el-form-item label="实际成本">
@@ -365,13 +365,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, User, Promotion, Box, CircleCheck, Plus, Loading, Upload } from '@element-plus/icons-vue'
-import { get, post } from '@/utils/request'
+import { get, post, del } from '@/utils/request'
 import { unwrapItem } from '@/utils/response'
 import StepPhotoUploader from './components/StepPhotoUploader.vue'
 
 const route = useRoute()
 const id = Number(route.params.id)
-const ro = ref<Record<string, unknown> | null>(null)
+const ro = ref<any>(null)
 const loading = ref(false)
 const activeTab = ref('basic')
 const readonly = computed(() => ['closed', 'cancelled'].includes(ro.value?.status))
@@ -392,16 +392,16 @@ const methodVisible = ref(false)
 const savingMethod = ref(false)
 const methodForm = ref({ method_type: 'paid_repair', actual_cost: 0, hours_spent: 0, remarks: '' })
 
-const attachments = ref<Record<string, unknown>[]>([])
+const attachments = ref<any[]>([])
 const loadAttachments = async () => {
   if (!ro.value?.id) return
   try {
-    // 后端返回 {code:0, data: [array]}, 解包后 res 本身就是数组
+    // 后端返回 {code:0, data: [array]}, 解包�?res 本身就是数组
     const res = await get(`/repair-orders/${ro.value.id}/attachments`)
     attachments.value = res || []
   } catch { attachments.value = [] }
 }
-const uploadAttachment = async (option: Record<string, unknown>) => {
+const uploadAttachment = async (option: any) => {
   const fd = new FormData()
   fd.append('file', option.file)
   fd.append('category', 'shipping')
@@ -409,15 +409,15 @@ const uploadAttachment = async (option: Record<string, unknown>) => {
     await post(`/repair-orders/${ro.value?.id}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     ElMessage.success('上传成功')
     await loadAttachments()
-  } catch (e: unknown) { ElMessage.error(e?.message || '上传失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '上传失败') }
 }
 const deleteAttachment = async (id: number) => {
-  try { await ElMessageBox.confirm('确定删除这张凭证图?', '提示', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确定删除这张凭证�?', '提示', { type: 'warning' }) } catch { return }
   try {
     await del(`/repair-orders/${ro.value?.id}/attachments/${id}`)
-    ElMessage.success('已删除')
+    ElMessage.success('已删�?)
     await loadAttachments()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const loadData = async () => {
@@ -426,7 +426,7 @@ const loadData = async () => {
     // V0.6.3: res = {code, data: <entity>}
     const res = await get(`/repair-orders/${id}`)
     ro.value = unwrapItem(res) || {}
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error('加载失败: ' + (e?.message || ''))
   } finally { loading.value = false }
 }
@@ -458,58 +458,58 @@ const onShipBack = () => {
 
 const onShipConfirm = async () => {
   if (!shipForm.value.carrier || !shipForm.value.tracking_no || !shipForm.value.receiver_name || !shipForm.value.receiver_address) {
-    return ElMessage.warning('请填承运商/运单号/收件人/收件地址')
+    return ElMessage.warning('请填承运�?运单�?收件�?收件地址')
   }
   shipping.value = true
   try {
     const endpoint = shipDirection.value === 'outbound' ? 'ship-out' : 'ship-back'
     await post(`/repair-orders/${id}/${endpoint}`, shipForm.value)
-    ElMessage.success(shipDirection.value === 'outbound' ? '已寄出' : '已寄回')
+    ElMessage.success(shipDirection.value === 'outbound' ? '已寄�? : '已寄�?)
     shipOutVisible.value = false
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
   finally { shipping.value = false }
 }
 
 const onInRepair = async () => {
   try {
     await post(`/repair-orders/${id}/in-repair`)
-    ElMessage.success('已进入维修')
+    ElMessage.success('已进入维�?)
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onRepaired = async () => {
   // 必须先有 method
   if (!ro.value?.methods?.length) {
-    try { await ElMessageBox.confirm('标记修好前需要至少 1 条维修方式记录, 现在添加?', '提示', { type: 'warning' }) } catch { return }
+    try { await ElMessageBox.confirm('标记修好前需要至�?1 条维修方式记�? 现在添加?', '提示', { type: 'warning' }) } catch { return }
     onAddMethod()
     return
   }
   try {
     await post(`/repair-orders/${id}/repaired`)
-    ElMessage.success('已修好')
+    ElMessage.success('已修�?)
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onClose = async () => {
   try { await ElMessageBox.confirm('确认关闭此返修单?', '提示', { type: 'warning' }) } catch { return }
   try {
     await post(`/repair-orders/${id}/close`)
-    ElMessage.success('已关闭')
+    ElMessage.success('已关�?)
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onCancel = async () => {
-  const { value } = await ElMessageBox.prompt('请输入取消原因', '取消返修', { inputType: 'textarea' }).catch(() => null)
+  const { value } = await ElMessageBox.prompt('请输入取消原�?, '取消返修', { inputType: 'textarea' }).catch(() => null)
   if (!value) return
   try {
     await post(`/repair-orders/${id}/cancel`, { reason: value })
-    ElMessage.success('已取消')
+    ElMessage.success('已取�?)
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onAddMethod = () => {
@@ -521,21 +521,21 @@ const onMethodConfirm = async () => {
   savingMethod.value = true
   try {
     await post(`/repair-orders/${id}/methods`, methodForm.value)
-    ElMessage.success('已添加')
+    ElMessage.success('已添�?)
     methodVisible.value = false
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
   finally { savingMethod.value = false }
 }
 
 const onAddLog = async () => {
-  const { value } = await ElMessageBox.prompt('进度说明 (例: 已诊断, 主板烧毁, 报价 ¥750)', '添加进度', { inputType: 'textarea' }).catch(() => null)
+  const { value } = await ElMessageBox.prompt('进度说明 (�? 已诊�? 主板烧毁, 报价 ¥750)', '添加进度', { inputType: 'textarea' }).catch(() => null)
   if (!value) return
   try {
     await post(`/repair-orders/${id}/progress-logs`, { progress: '进度更新', description: value })
-    ElMessage.success('已添加')
+    ElMessage.success('已添�?)
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const formatDate = (s: string) => {
@@ -544,8 +544,8 @@ const formatDate = (s: string) => {
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
 }
 
-const deliveryLabel = (s: string) => ({ pending: '待发出', in_transit: '在途中', delivered: '已签收', exception: '异常' }[s] || s)
-const paymentLabel = (s: string) => ({ unpaid: '未付', partial: '部分付', paid: '已付', refunded: '已退' }[s] || s)
+const deliveryLabel = (s: string) => ({ pending: '待发�?, in_transit: '在途中', delivered: '已签�?, exception: '异常' }[s] || s)
+const paymentLabel = (s: string) => ({ unpaid: '未付', partial: '部分�?, paid: '已付', refunded: '已退' }[s] || s)
 const paymentColor = (s: string): string => ({ unpaid: 'danger', partial: 'warning', paid: 'success', refunded: 'info' }[s] || '')
 
 onMounted(() => { loadData(); loadAttachments() })
