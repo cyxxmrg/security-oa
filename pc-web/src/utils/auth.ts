@@ -13,12 +13,12 @@ export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-export function getUserInfo(): Record<string, unknown> | null {
+export function getUserInfo(): Record<string, any> | null {
   const data = localStorage.getItem(USER_KEY)
   return data ? JSON.parse(data) : null
 }
 
-export function setUserInfo(info: Record<string, unknown>): void {
+export function setUserInfo(info: Record<string, any>): void {
   localStorage.setItem(USER_KEY, JSON.stringify(info))
 }
 

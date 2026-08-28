@@ -22,7 +22,12 @@ import { ElMessage } from 'element-plus'
 import { Promotion } from '@element-plus/icons-vue'
 
 const visible = ref(false)
-let deferredEvent: Record<string, unknown> | null = null
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
+let deferredEvent: BeforeInstallPromptEvent | null = null
 const DISMISS_KEY = 'pwa_install_dismissed'
 const DISMISS_DAYS = 7
 
@@ -57,11 +62,12 @@ onMounted(() => {
   if (checkDismissed()) return
 
   // 监听 beforeinstallprompt
-  window.addEventListener('beforeinstallprompt', (e: Record<string, unknown>) => {
+  window.addEventListener('beforeinstallprompt', ((e: Event) => {
+    const promptEvent = e as BeforeInstallPromptEvent
     e.preventDefault()
-    deferredEvent = e
+    deferredEvent = promptEvent
     visible.value = true
-  })
+  }) as EventListener)
 
   // 已安装就隐藏
   if (window.matchMedia('(display-mode: standalone)').matches) {

@@ -22,7 +22,7 @@
 import { ElMessage } from 'element-plus'
 
 /** 转义 CSV 字段 (双引号包裹 + 内嵌引号转义) */
-function csvField(v: Record<string, unknown>): string {
+function csvField(v: unknown): string {
   if (v === null || v === undefined) return ''
   const s = String(v)
   if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
@@ -37,7 +37,7 @@ const UTF8_BOM = '\uFEFF'
 /** 简单 CSV 导出 (适合几千行, 浏览器直接下载) */
 export function exportCsv(
   headers: string[],
-  rows: Record<string, unknown>[][],
+  rows: unknown[][],
   filename: string = '导出',
   options: { withBom?: boolean } = {}
 ): void {

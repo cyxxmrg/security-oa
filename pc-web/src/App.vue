@@ -25,8 +25,8 @@ const router = useRouter()
 
 // 路由切换 loading 状态
 const isRouteLoading = ref(false)
-let loadTimer: Record<string, unknown> | null = null
-let offAfter: Record<string, unknown> | null = null
+let loadTimer: ReturnType<typeof setTimeout> | null = null
+let offAfter: (() => void) | null = null
 
 // 骨架屏:基于路由 meta.skeleton
 const showSkeleton = ref(false)

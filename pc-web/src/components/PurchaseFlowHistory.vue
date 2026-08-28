@@ -113,8 +113,18 @@ const props = defineProps<{
   entityId: number | string
 }>()
 
-const logs = ref<Record<string, unknown>[]>([])
-const entities = ref<Record<string, unknown>>({})
+type FlowEntity = Record<string, any>
+interface FlowEntities {
+  plans: FlowEntity[]
+  orders: FlowEntity[]
+  contracts: FlowEntity[]
+  payment_reqs: FlowEntity[]
+  payments: FlowEntity[]
+  shipments: FlowEntity[]
+}
+
+const logs = ref<FlowEntity[]>([])
+const entities = ref<FlowEntities>({ plans: [], orders: [], contracts: [], payment_reqs: [], payments: [], shipments: [] })
 const loading = ref(false)
 
 const totalSteps = computed(() => {
@@ -147,7 +157,7 @@ async function load() {
   } catch (e) {
     console.error('[FlowHistory] load failed', e)
     logs.value = []
-    entities.value = {}
+    entities.value = { plans: [], orders: [], contracts: [], payment_reqs: [], payments: [], shipments: [] }
   } finally {
     loading.value = false
   }
