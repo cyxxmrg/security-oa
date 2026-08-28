@@ -43,7 +43,6 @@ let globalListenerInstalled = false
 let lastActivityTs = Date.now()
 let tickTimer: number | null = null
 let warningShown = false
-let warningBox: Record<string, unknown> | null = null
 
 // 当前生效的配置(由 syncIdleConfigFromServer 异步写入)
 let currentEnabled = true
@@ -131,9 +130,6 @@ function tick() {
         stopIdleMonitor()
         doLogout('已主动登出')
       })
-      .finally(() => {
-        warningBox = null
-      })
   }
 }
 
@@ -148,10 +144,6 @@ function stopTickTimer() {
     tickTimer = null
   }
   warningShown = false
-  if (warningBox) {
-    warningBox.close?.()
-    warningBox = null
-  }
 }
 
 /**
@@ -226,10 +218,6 @@ export function resetIdleTimer(options: IdleTimerOptions = {}) {
   if (options.enabled !== undefined) currentEnabled = options.enabled
   lastActivityTs = Date.now()
   warningShown = false
-  if (warningBox) {
-    warningBox.close?.()
-    warningBox = null
-  }
   // 配置变了 → 重新拉
   syncIdleConfigFromServer().finally(() => {
     if (currentEnabled) startTickTimer()
