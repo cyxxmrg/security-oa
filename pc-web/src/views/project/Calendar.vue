@@ -127,9 +127,9 @@ const props = withDefaults(defineProps<{
 }>(), { projectId: 0, embedded: false })
 
 const router = useRouter()
-const summary = ref<Record<string, number | string>>({ total_count: 0, total_amount: 0, paid_amount: 0, pending_amount: 0, overdue_count: 0, overdue_amount: 0, soon_count: 0 })
-const calendar = ref<CalendarItem[]>([])
-const items = ref<CalendarItem[]>([])
+const summary = ref<any>({ total_count: 0, total_amount: 0, paid_amount: 0, pending_amount: 0, overdue_count: 0, overdue_amount: 0, soon_count: 0 })
+const calendar = ref<any[]>([])
+const items = ref<any[]>([])
 const filterStatus = ref<string>('')
 
 // 按项目过滤
@@ -182,44 +182,44 @@ const loadList = async () => {
   }
 }
 
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-const formatDate = (d: string) => d ? d.slice(0, 10) : '-'
+const formatMoney = (n: number | string | null | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatDate = (d?: string) => d ? d.slice(0, 10) : '-'
 const monthLabel = (m: string) => {
   if (!m) return ''
   const [y, mm] = m.split('-')
   return `${y} 年 ${parseInt(mm)} 月`
 }
 
-const statusIcon = (row: CalendarItem) => {
+const statusIcon = (row: any) => {
   if (row.status === 'paid') return CircleCheck
   if (row.is_overdue) return CircleClose
   if (row.is_soon) return Warning
   return Clock
 }
-const statusColor = (row: CalendarItem) => {
+const statusColor = (row: any) => {
   if (row.status === 'paid') return '#1D9E75'
   if (row.is_overdue) return '#A32D2D'
   if (row.is_soon) return '#BA7517'
   return '#909399'
 }
-const statusLabel = (row: CalendarItem) => {
+const statusLabel = (row: any) => {
   if (row.status === 'paid') return '已付'
   if (row.is_overdue) return '逾期'
   if (row.is_soon) return '即将到期'
   return '待付'
 }
-const statusTagType = (row: CalendarItem): string => {
+const statusTagType = (row: any): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
   if (row.status === 'paid') return 'success'
   if (row.is_overdue) return 'danger'
   if (row.is_soon) return 'warning'
   return 'info'
 }
-const dueClass = (row: CalendarItem) => {
+const dueClass = (row: any) => {
   if (row.is_overdue) return 'overdue'
   if (row.is_soon) return 'soon'
   return ''
 }
-const goProject = (pid: number) => { if (pid) router.push(`/project/detail/${pid}`) }
+const goProject = (pid: number | string) => { if (pid) router.push(`/project/detail/${pid}`) }
 
 onMounted(() => {
   loadList()

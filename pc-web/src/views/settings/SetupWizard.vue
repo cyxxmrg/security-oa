@@ -252,7 +252,7 @@ const step3Loading = ref(false)
 const step4Loading = ref(false)
 const completing = ref(false)
 
-const summary = ref<Record<string, unknown>>({ settings: {}, counts: {}, suggestions: [], score: 0 })
+const summary = ref<any>({ settings: {}, counts: {}, suggestions: [], score: 0 })
 
 const countLabels: Record<string, string> = {
   users: '员工',
@@ -284,7 +284,7 @@ const step1Form = ref({
 })
 
 // Step 3
-const step3Form = ref<{ employees: Record<string, unknown>[] }>({ employees: [] })
+const step3Form = ref<any>({ employees: [] })
 const roleOptions = ref<string[]>([])
 const deptOptions = ref<{ id: number; name: string }[]>([])
 
@@ -299,7 +299,8 @@ const newRow = () => ({
   position_id: null,
 })
 
-const addRow = (n = 1) => {
+const addRow = (n: number | MouseEvent = 1) => {
+  if (typeof n !== 'number') n = 1
   for (let i = 0; i < n; i++) step3Form.value.employees.push(newRow())
 }
 
@@ -309,7 +310,7 @@ const removeRow = (i: number) => {
 
 // Step 4
 const step4Form = ref({ csv_text: '' })
-const step4Preview = ref<Record<string, unknown>[]>([])
+const step4Preview = ref<any[]>([])
 
 // ==================== 数据加载 ====================
 const loadSummary = async () => {
@@ -329,7 +330,7 @@ const loadSummary = async () => {
     }
     // 已完成 → 跳到最后一步
     if (summary.value.setup_completed) activeStep.value = 4
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error('加载摘要失败: ' + (e?.message || ''))
   } finally { loading.value = false }
 }
@@ -362,7 +363,7 @@ const saveStep1 = async () => {
     ElMessage.success('基础设置已保存')
     await loadSummary()
     activeStep.value = 1
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '保存失败')
   } finally { step1Loading.value = false }
 }
@@ -386,7 +387,7 @@ const saveStep3 = async () => {
     }
     await loadSummary()
     step3Form.value.employees = []
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '创建失败')
   } finally { step3Loading.value = false }
 }
@@ -420,7 +421,7 @@ const confirmStep4 = async () => {
     step4Form.value.csv_text = ''
     step4Preview.value = []
     await loadSummary()
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '导入失败')
   } finally { step4Loading.value = false }
 }
@@ -452,7 +453,7 @@ const markComplete = async () => {
     await post(`${API}/setup/complete`, {})
     ElMessage.success('🎉 系统初始化完成!')
     await loadSummary()
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '标记失败')
   } finally { completing.value = false }
 }
