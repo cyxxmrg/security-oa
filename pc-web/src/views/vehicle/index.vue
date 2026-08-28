@@ -33,9 +33,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleView(row)">查看</el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" size="small" @click="handleView(row as any)">查看</el-button>
+            <el-button link type="primary" size="small" @click="handleEdit(row as any)">编辑</el-button>
+            <el-button link type="danger" size="small" @click="handleDelete(row as any)">删除</el-button>
           </template>
         </el-table-column>
         <el-table-column label="保险" width="140" align="center">
@@ -64,7 +64,7 @@
         </el-table-column>
         <el-table-column label="调度" width="90" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="goDispatch(row)">详情</el-button>
+          <el-button link type="primary" size="small" @click="goDispatch(row as any)">详情</el-button>
           </template>
         </el-table-column>
         <el-table-column label="油卡" width="180" align="center">
@@ -180,7 +180,7 @@ const createDialogVisible = ref(false)
 const vehicleFormRef = ref()
 const router = useRouter()
 
-const list = ref<VehicleItem[]>([])
+const list = ref<any[]>([])
 const loading = ref(false)
 const editingId = ref<number | null>(null)
 const departments = ref<DepartmentItem[]>([])
@@ -209,14 +209,14 @@ const statusMap: Record<string, { label: string; type: 'success' | 'warning' | '
   maintenance: { label: '维修中', type: 'info' },
   retired: { label: '已停用', type: 'danger' },
 }
-const statusLabel = (s: string) => statusMap[s]?.label || s
-const statusTagType = (s: string): 'success' | 'warning' | 'info' | 'danger' => statusMap[s]?.type || 'info'
+const statusLabel = (s?: string) => statusMap[s || '']?.label || s || ''
+const statusTagType = (s?: string): 'success' | 'warning' | 'info' | 'danger' => statusMap[s || '']?.type || 'info'
 
 const loadList = async () => {
   loading.value = true
   try {
     const res: ApiResponse = await get('/vehicles')
-    let vehicles = (res.data || res) || []
+    let vehicles: any[] = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : [])
     // 模拟每辆车的保险/保养/油卡状态（实际项目从后端聚合）
     vehicles = vehicles.map((v: VehicleItem) => ({
       ...v,
@@ -229,7 +229,7 @@ const loadList = async () => {
       last_recharge: v.last_recharge || mockRecharge()
     }))
     list.value = vehicles
-  } catch (e: ApiError) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '加载车辆列表失败')
   } finally {
     loading.value = false
@@ -307,13 +307,13 @@ const detailRow = ref<VehicleItem | null>(null)
 const detailTab = ref('insurance')
 const insurances = ref<VehicleInsurance[]>([])
 const maintenances = ref<VehicleMaintenance[]>([])
-const fuelCards = ref<FuelCard[]>([])
+const fuelCards = ref<any[]>([])
 const cardRecharges = ref<CardRecharge[]>([])
 
-const fuelTypeLabel = (t: string) => ({ gas: '汽油', diesel: '柴油', electric: '电', hybrid: '混动' }[t] || t || '-')
-const formatDate = (d: string) => d ? String(d).slice(0, 10) : '-'
+const fuelTypeLabel = (t?: string) => ({ gas: '汽油', diesel: '柴油', electric: '电', hybrid: '混动' }[t || ''] || t || '-')
+const formatDate = (d?: string) => d ? String(d).slice(0, 10) : '-'
 const formatMoney = (v: unknown) => {
-  const n = parseFloat(v)
+  const n = Number(v)
   return isNaN(n) ? '0.00' : n.toFixed(2)
 }
 
@@ -321,7 +321,8 @@ const goDetail = (row: VehicleItem, tab: 'insurance' | 'maintenance' | 'fuelcard
   detailRow.value = row
   showDetailDialog.value = true
   detailTab.value = tab
-  Promise.all([loadInsurances(row.id), loadMaintenances(row.id), loadFuelCards(row.id)])
+  const vehicleId = Number(row.id)
+  Promise.all([loadInsurances(vehicleId), loadMaintenances(vehicleId), loadFuelCards(vehicleId)])
 }
 
 const goDispatch = (row: VehicleItem) => {
@@ -354,7 +355,7 @@ const loadFuelCards = async (vehicleId: number) => {
       const cardIds = fuelCards.value.map((c: FuelCard) => c.id)
       const r2: ApiResponse = await get('/fuel-cards/recharges', { per_page: 50 })
       const allRecharges = unwrapList(r2)
-      cardRecharges.value = allRecharges.filter((r: CardRecharge) => cardIds.includes(r.card_id))
+      cardRecharges.value = allRecharges.filter((r: CardRecharge) => r.card_id != null && cardIds.includes(r.card_id))
     } else {
       cardRecharges.value = []
     }
@@ -362,7 +363,7 @@ const loadFuelCards = async (vehicleId: number) => {
 }
 
 const handleEdit = (row: VehicleItem) => {
-  editingId.value = row.id
+  editingId.value = Number(row.id)
   Object.assign(vehicleForm, {
     plate_no: row.plate_no || row.plateNo,
     brand: row.brand,
@@ -384,7 +385,7 @@ const handleDelete = async (row: VehicleItem) => {
     await del(`/vehicles/${row.id}`)
     ElMessage.success('已删除')
     loadList()
-  } catch (e: ApiError) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '删除失败')
   }
 }
@@ -423,7 +424,7 @@ const handleVehicleSubmit = async () => {
     }
     createDialogVisible.value = false
     loadList()
-  } catch (e: ApiError) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
   }
 }

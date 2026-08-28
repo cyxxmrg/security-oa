@@ -50,7 +50,7 @@ import { useRouter } from 'vue-router'
 import { get } from '@/utils/request'
 
 const router = useRouter()
-const data = ref<Record<string, unknown>>({})
+const data = ref<any>({})
 const loaded = ref(false)
 
 const loadData = async () => {
@@ -89,7 +89,8 @@ const descText = computed(() => {
 
 const goMaintenance = () => router.push('/maintenance/kanban')
 
-const fmtCost = (n: number | undefined) => {
+const fmtCost = (n: number | string | undefined) => {
+  n = Number(n) || 0
   if (!n) return '0'
   if (n >= 10000) return (n / 10000).toFixed(1) + '万'
   return n.toFixed(0)
