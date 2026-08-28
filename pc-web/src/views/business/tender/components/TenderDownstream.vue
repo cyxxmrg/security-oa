@@ -108,7 +108,7 @@
 
 <script setup lang="ts">
 defineProps<{
-  downstream: Record<string, unknown>
+  downstream: any
 }>()
 
 defineEmits<{
