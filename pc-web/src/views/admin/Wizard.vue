@@ -87,8 +87,8 @@ const router = useRouter()
 const activeStep = ref(0)
 const loading = ref(false)
 const formRef = ref<FormInstance>()
-const departments = ref<Record<string, unknown>[]>([])
-const roles = ref<Record<string, unknown>[]>([])
+const departments = ref<Record<string, any>[]>([])
+const roles = ref<Record<string, any>[]>([])
 const createdAdminName = ref('')
 
 const form = reactive({
@@ -178,7 +178,8 @@ async function handleCreateAdmin() {
     }
     router.push('/admin/welcome')
   } catch (e: unknown) {
-    const msg = e?.response?.data?.message || e?.serverMessage || e?.message || '创建失败'
+    const err = e as { response?: { data?: { message?: string } }; serverMessage?: string; message?: string }
+    const msg = err.response?.data?.message || err.serverMessage || err.message || '创建失败'
     ElMessage.error(msg)
   } finally {
     loading.value = false

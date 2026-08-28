@@ -299,7 +299,7 @@ function deleteHint(data: TreeNode) {
   return ''
 }
 
-function filterNode(value: string, data: TreeNode) {
+function filterNode(value: string, data: any) {
   if (!value) return true
   return data.label?.includes(value)
 }
