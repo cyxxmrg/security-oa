@@ -45,7 +45,7 @@ const handleJump = (projectId: number, riskId: string) => emit('jump', { project
       <div class="rb-list">
         <div
           v-for="r in summary.preview"
-          :key="r.projectId + '-' + r.idx"
+          :key="r.projectId + '-' + r.id"
           class="rb-item"
           :class="`rb-${r.level}`"
           @click="handleJump(r.projectId, r.id)"

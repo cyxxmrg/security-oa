@@ -21,7 +21,7 @@ const stageTagType = (stage: string): 'info' | 'success' | 'warning' | 'danger' 
   const map: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = {
     立项: 'info', 询价: 'primary', 合同: 'success', 采购: 'warning', 施工: 'danger', 结算: 'primary', 质保: 'success',
   }
-  return (map[stage] || 'info') as Record<string, unknown>
+  return map[stage] || 'info'
 }
 
 const progressColor = (p: number): string => {

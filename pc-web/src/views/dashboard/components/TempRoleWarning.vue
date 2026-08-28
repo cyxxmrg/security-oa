@@ -29,7 +29,7 @@
         v-for="(row, idx) in rows"
         :key="idx"
         class="role-item"
-        :class="`level-${level(row.days_left)}`"
+        :class="`level-${level(Number(row.days_left))}`"
       >
         <div class="role-user">
           <el-avatar :size="32" :style="{ background: levelColor(row.days_left), color: 'white' }">
@@ -41,13 +41,13 @@
           </div>
         </div>
 
-        <el-tag :type="levelType(row.days_left)" size="small" effect="dark" class="role-tag">
+        <el-tag :type="levelType(Number(row.days_left))" size="small" effect="dark" class="role-tag">
           {{ row.role_name }}
         </el-tag>
 
         <div class="role-expire">
           <el-icon><Timer /></el-icon>
-          <span :class="`expire-text level-${level(row.days_left)}`">
+          <span :class="`expire-text level-${level(Number(row.days_left))}`">
             {{ row.days_left }} 天后到期
           </span>
           <div class="expire-date">{{ formatDate(row.expires_at) }}</div>
@@ -76,9 +76,18 @@ import { Clock, ArrowRight, Loading, CircleCheckFilled, Timer, EditPen } from '@
 import { get } from '@/utils/request'
 import { unwrapList } from '@/utils/response'
 
+interface ExpiringRole {
+  name?: string
+  username?: string
+  days_left: number | string
+  expires_at?: string
+  role_name?: string
+  reason?: string
+}
+
 const router = useRouter()
 const loading = ref(false)
-const rows = ref<Record<string, unknown>[]>([])
+const rows = ref<ExpiringRole[]>([])
 
 // 只有 admin 才显示
 const visible = ref(false)
@@ -90,7 +99,7 @@ const level = (days: number) => {
   return 'info'
 }
 
-const levelType = (days: number): string => {
+const levelType = (days: number): 'success' | 'primary' | 'warning' | 'danger' | 'info' => {
   if (days <= 1) return 'danger'
   if (days <= 3) return 'danger'
   if (days <= 7) return 'warning'
@@ -104,7 +113,7 @@ const levelColor = (days: string | number) => {
   return '#909399'
 }
 
-const formatDate = (s: string) => {
+const formatDate = (s?: string) => {
   if (!s) return ''
   const d = new Date(s)
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
@@ -119,7 +128,7 @@ const loadData = async () => {
   try {
     // V0.6.3: res = {code, data: <expiring roles>}
     const res = await get('/roles/expiring', { within_days: 7 })
-    rows.value = unwrapList(res)
+    rows.value = unwrapList(res) as ExpiringRole[]
     visible.value = true
   } catch (e: unknown) {
     // 非 admin 会 403, 不显示

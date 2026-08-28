@@ -11,7 +11,7 @@ defineProps<{
     type: string
     content: string
     time: string
-    tagType: string
+    tagType: 'success' | 'primary' | 'info' | 'warning' | 'danger'
     link?: string
   }>
 }>()
@@ -38,7 +38,7 @@ const emit = defineEmits<{
         @click="item.link && emit('click', item)"
       >
         <div class="todo-left">
-          <el-tag :type="(item.tagType as Record<string, unknown>)" size="small" effect="plain">{{ item.type }}</el-tag>
+          <el-tag :type="item.tagType" size="small" effect="plain">{{ item.type }}</el-tag>
           <span class="todo-text">{{ item.content }}</span>
         </div>
         <span class="todo-time">{{ item.time }}</span>

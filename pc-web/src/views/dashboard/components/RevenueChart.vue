@@ -60,7 +60,7 @@ const chartOption = computed(() => {
       label: {
         show: true,
         position: 'top',
-        formatter: (p: Record<string, unknown>) => formatMoney(p.value),
+        formatter: (p: { value?: number }) => formatMoney(Number(p.value || 0)),
         fontSize: 10,
         color: '#606266',
       },
@@ -82,7 +82,7 @@ const chartOption = computed(() => {
       label: {
         show: true,
         position: 'top',
-        formatter: (p: Record<string, unknown>) => formatMoney(p.value),
+        formatter: (p: { value?: number }) => formatMoney(Number(p.value || 0)),
         fontSize: 10,
         color: '#606266',
       },
@@ -97,7 +97,7 @@ const chartOption = computed(() => {
       backgroundColor: 'rgba(50, 50, 50, 0.92)',
       borderColor: 'transparent',
       textStyle: { color: '#fff', fontSize: 12 },
-      formatter: (params: Record<string, unknown>) => {
+      formatter: (params: Array<Record<string, any>>) => {
         if (!Array.isArray(params)) return ''
         const month = params[0]?.axisValue || ''
         let html = `<div style="font-weight:600;margin-bottom:6px">${month}</div>`
@@ -105,7 +105,7 @@ const chartOption = computed(() => {
           html += `<div style="display:flex;align-items:center;gap:6px;margin:2px 0">
             <i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.color}"></i>
             <span style="flex:1">${p.seriesName}</span>
-            <span style="font-weight:600">¥${(p.value || 0).toLocaleString()}</span>
+            <span style="font-weight:600">¥${Number(p.value || 0).toLocaleString()}</span>
           </div>`
         })
         return html
@@ -141,7 +141,7 @@ const chartOption = computed(() => {
     series,
     animationDuration: 800,
     animationEasing: 'cubicOut',
-  }
+  } as any
 })
 
 const formatMoney = (n: number): string => {
