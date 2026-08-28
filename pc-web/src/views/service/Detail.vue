@@ -102,7 +102,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
-const order = ref<Record<string, unknown> | null>(null)
+const order = ref<any>(null)
 const loading = ref(false)
 const activeTab = ref('progress')
 
@@ -127,11 +127,11 @@ const serviceTypeMap: Record<string, string> = {
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
 
-const statusLabel = (s: string) => statusOptions.find(o => o.value === s)?.label || s
-const urgencyLabel = (u: string) => urgencyOptions.find(o => o.value === u)?.label || u
-const serviceTypeLabel = (s: string) => serviceTypeMap[s] || s
+const statusLabel = (s?: string) => statusOptions.find(o => o.value === s)?.label || s || '-'
+const urgencyLabel = (u?: string) => urgencyOptions.find(o => o.value === u)?.label || u || '-'
+const serviceTypeLabel = (s?: string) => serviceTypeMap[s || ''] || s || '-'
 
-const statusTagType = (s: string): TagType => {
+const statusTagType = (s?: string): TagType => {
   const map: Record<string, TagType> = {
     pending:     'danger',
     assigned:    'warning',
@@ -139,17 +139,17 @@ const statusTagType = (s: string): TagType => {
     completed:   'info',
     confirmed:   'success',
   }
-  return map[s] || 'info'
+  return map[s || ''] || 'info'
 }
-const urgencyTagType = (u: string): TagType => {
+const urgencyTagType = (u?: string): TagType => {
   const map: Record<string, TagType> = {
     normal:   'info',
     urgent:   'warning',
     critical: 'danger',
   }
-  return map[u] || 'info'
+  return map[u || ''] || 'info'
 }
-const logType = (action: string): TagType => {
+const logType = (action?: string): TagType => {
   const map: Record<string, TagType> = {
     created:  'primary',
     assigned: 'warning',
@@ -157,9 +157,9 @@ const logType = (action: string): TagType => {
     completed:'success',
     confirmed:'success',
   }
-  return map[action] || 'info'
+  return map[action || ''] || 'info'
 }
-const logActionLabel = (action: string) => {
+const logActionLabel = (action?: string) => {
   const map: Record<string, string> = {
     created:   '工单创建',
     assigned:  '工单派发',
@@ -167,7 +167,7 @@ const logActionLabel = (action: string) => {
     completed: '维修完成',
     confirmed: '客户确认',
   }
-  return map[action] || action
+  return map[action || ''] || action || '-'
 }
 
 const formatDate = (s?: string) => {
@@ -185,8 +185,8 @@ async function loadOrder() {
   try {
     const res = await get(`/service/orders/${id}`)
     order.value = res.data || res
-  } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || e.message || '工单不存在')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || '工单不存在')
     order.value = null
   } finally {
     loading.value = false
