@@ -1,6 +1,6 @@
 <template>
   <div class="filter-bar">
-    <el-tabs :model-value="activeStatus" @update:model-value="(v: string) => emit('update:activeStatus', v)" @tab-change="emit('tabChange')" class="status-tabs">
+    <el-tabs :model-value="activeStatus" @update:model-value="(v: TabPaneName) => emit('update:activeStatus', String(v))" @tab-change="emit('tabChange')" class="status-tabs">
       <el-tab-pane label="草稿"   name="draft" />
       <el-tab-pane label="待审批" name="pending" />
       <el-tab-pane label="已审批" name="approved" />
@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { Plus, Search } from '@element-plus/icons-vue'
+import type { TabPaneName } from 'element-plus'
 
 defineProps<{
   activeStatus: string

@@ -54,13 +54,13 @@
       </el-table-column>
       <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="emit('view', row)">查看档案</el-button>
-          <el-button type="warning" link size="small" @click="emit('renew', row)">续签合同</el-button>
+          <el-button type="primary" link size="small" @click="emit('view', toOnboarding(row))">查看档案</el-button>
+          <el-button type="warning" link size="small" @click="emit('renew', toOnboarding(row))">续签合同</el-button>
           <el-popconfirm
             title="确定归档此入职档案？归档后该员工账号将停用"
             confirm-button-text="确定"
             cancel-button-text="取消"
-            @confirm="emit('archive', row)"
+            @confirm="emit('archive', toOnboarding(row))"
           >
             <template #reference>
               <el-button type="danger" link size="small">归档</el-button>
@@ -100,6 +100,8 @@ const emit = defineEmits<{
   (e: 'archive', row: Onboarding): void
   (e: 'reload'): void
 }>()
+
+const toOnboarding = (row: unknown): Onboarding => row as Onboarding
 </script>
 
 <style lang="scss" scoped>

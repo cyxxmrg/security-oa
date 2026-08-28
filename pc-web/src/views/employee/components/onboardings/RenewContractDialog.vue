@@ -40,7 +40,7 @@
       </el-form-item>
       <el-form-item label="合同文件">
         <el-upload
-          :http-request="(opt: Record<string, unknown>) => emit('upload', opt)"
+          :http-request="handleUpload"
           :show-file-list="false"
           accept="image/*,.pdf,.doc,.docx"
         >
@@ -60,6 +60,7 @@
 import { computed, ref } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { Onboarding } from './types'
+import type { FormRules, UploadRequestOptions } from 'element-plus'
 
 // v0.3.22 抽自 employee/Onboardings.vue:444-486
 const props = defineProps<{
@@ -71,15 +72,19 @@ const props = defineProps<{
     contract_file_id: number | null
     contract_file_name: string
   }
-  rules: Record<string, unknown>
+  rules: FormRules
   row: Onboarding | null
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'submit'): void
-  (e: 'upload', opt: Record<string, unknown>): void
+  (e: 'upload', opt: UploadRequestOptions): void
 }>()
+
+const handleUpload = async (opt: UploadRequestOptions) => {
+  emit('upload', opt)
+}
 
 const formRef = ref()
 defineExpose({ formRef })

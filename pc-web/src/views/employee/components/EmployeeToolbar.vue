@@ -27,10 +27,11 @@
 
 <script setup lang="ts">
 import { Search, Plus } from '@element-plus/icons-vue'
+import type { DepartmentOption } from '../orgTypes'
 
 defineProps<{
   listFilters: { keyword: string; department_id: number | null; status: string }
-  deptList: Record<string, unknown>[]
+  deptList: DepartmentOption[]
 }>()
 
 defineEmits<{

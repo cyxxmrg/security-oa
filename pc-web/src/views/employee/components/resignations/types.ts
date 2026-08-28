@@ -47,15 +47,15 @@ export const statusLabel = (s?: string) => s ? (STATUS_MAP[s]?.label || s) : '�
 export const statusTag   = (s?: string): 'warning' | 'success' | 'info' | 'danger' => (s ? (STATUS_MAP[s]?.type || 'info') : 'info')
 
 // 离职类型 → {label, tag}
-export const RESIGN_TYPE_MAP: Record<string, { label: string; type: 'success' | 'warning' | 'danger' | 'info' | '' }> = {
-  voluntary:           { label: '主动辞职',     type: '' },
+export const RESIGN_TYPE_MAP: Record<string, { label: string; type: 'success' | 'warning' | 'danger' | 'info' }> = {
+  voluntary:           { label: '主动辞职',     type: 'info' },
   contract_end:        { label: '合同到期不续签', type: 'info' },
   mutual:              { label: '协商解除',     type: 'warning' },
   dismissed:           { label: '公司辞退',     type: 'danger' },
   probation_dismissed: { label: '试用期辞退',   type: 'danger' },
 }
 export const resignTypeLabel = (s?: string) => s ? (RESIGN_TYPE_MAP[s]?.label || s) : '—'
-export const resignTypeTag = (s?: string): 'success' | 'warning' | 'danger' | 'info' | '' =>
+export const resignTypeTag = (s?: string): 'success' | 'warning' | 'danger' | 'info' =>
   s ? (RESIGN_TYPE_MAP[s]?.type || 'info') : 'info'
 
 // todayStr YYYY-MM-DD

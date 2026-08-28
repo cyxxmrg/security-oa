@@ -55,3 +55,8 @@ export interface PositionForm {
   description: string
   sort_order: number
 }
+
+export interface DepartmentOption {
+  id: number
+  name: string
+}

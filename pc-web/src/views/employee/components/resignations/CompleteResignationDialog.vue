@@ -27,7 +27,7 @@
       </el-form-item>
       <el-form-item label="离职证明">
         <el-upload
-          :http-request="(opt: Record<string, unknown>) => emit('uploadCert', opt)"
+          :http-request="handleUpload"
           :show-file-list="false"
           accept=".pdf,.jpg,.png"
         >
@@ -48,6 +48,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Resignation } from './types'
+import type { UploadRequestOptions } from 'element-plus'
 
 export interface CompleteForm {
   all_assets_returned: boolean
@@ -79,6 +80,10 @@ defineExpose({ formRef })
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
   (e: 'submit'): void
-  (e: 'uploadCert', opt: Record<string, unknown>): void
+  (e: 'uploadCert', opt: UploadRequestOptions): void
 }>()
+
+const handleUpload = async (opt: UploadRequestOptions) => {
+  emit('uploadCert', opt)
+}
 </script>

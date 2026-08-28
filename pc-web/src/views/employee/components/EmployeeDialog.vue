@@ -141,7 +141,7 @@ import type { EmployeeForm } from '../orgTypes'
 const props = defineProps<{
   visible: boolean
   submitting: boolean
-  target: Record<string, unknown> | null
+  target: (Partial<EmployeeForm> & { roles?: { id: number }[]; profile?: { hire_date?: string } } & Record<string, any>) | null
   roles: { id: number; name: string; display_name?: string }[]
   deptList: { id: number; name: string }[]
   posList: { id: number; name: string; department_id: number }[]

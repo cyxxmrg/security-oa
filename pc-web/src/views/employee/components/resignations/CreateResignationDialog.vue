@@ -110,7 +110,7 @@
         </el-col>
       </el-row>
 
-      <div v-if="previewVisible" class="preview-box">
+      <div v-if="previewVisible && preview" class="preview-box">
         <el-descriptions :column="3" size="small" border>
           <el-descriptions-item label="基础月薪">¥{{ Number(preview.base_salary || 0).toLocaleString() }}</el-descriptions-item>
           <el-descriptions-item label="日工资">¥{{ Number(preview.daily_salary || 0).toFixed(2) }}</el-descriptions-item>
@@ -132,6 +132,20 @@
 import { ref } from 'vue'
 import { RESIGN_TYPE_MAP } from './types'
 
+interface SalaryPreview {
+  base_salary?: number
+  daily_salary?: number
+  expected_days?: number
+  actual_days?: number
+  total_amount?: number
+}
+
+interface UserOption {
+  id: number
+  name: string
+  username?: string
+}
+
 export interface ResignationForm {
   user_id: number | null
   resign_date: string
@@ -151,9 +165,9 @@ export interface ResignationForm {
 defineProps<{
   visible: boolean
   form: ResignationForm
-  users: Record<string, unknown>[]
+  users: UserOption[]
   previewVisible: boolean
-  preview: Record<string, unknown> | null
+  preview: SalaryPreview | null
   previewing: boolean
   submitting: boolean
 }>()

@@ -44,10 +44,10 @@
     </el-table-column>
     <el-table-column label="操作" width="240" fixed="right">
       <template #default="{ row }">
-        <el-button type="primary" link size="small" @click="emit('detail', row)">查看</el-button>
-        <el-button v-if="row.status === 'draft'" type="success" link size="small" @click="emit('submit', row)">提交</el-button>
-        <el-button v-if="row.status === 'pending'" type="info" link size="small" @click="emit('cancel', row)">撤回</el-button>
-        <el-button v-if="row.status === 'approved'" type="primary" link size="small" @click="emit('complete', row)">办结</el-button>
+        <el-button type="primary" link size="small" @click="emit('detail', toResignation(row))">查看</el-button>
+        <el-button v-if="row.status === 'draft'" type="success" link size="small" @click="emit('submit', toResignation(row))">提交</el-button>
+        <el-button v-if="row.status === 'pending'" type="info" link size="small" @click="emit('cancel', toResignation(row))">撤回</el-button>
+        <el-button v-if="row.status === 'approved'" type="primary" link size="small" @click="emit('complete', toResignation(row))">办结</el-button>
         <el-tag v-if="row.status === 'pending'" size="small" type="info" effect="plain" class="ml-8">去审批中心</el-tag>
       </template>
     </el-table-column>
@@ -85,6 +85,8 @@ const emit = defineEmits<{
   (e: 'pageChange', p: number): void
   (e: 'sizeChange', s: number): void
 }>()
+
+const toResignation = (row: unknown): Resignation => row as Resignation
 </script>
 
 <style lang="scss" scoped>

@@ -73,7 +73,7 @@ import { POSITION_LEVEL_OPTIONS, type PositionForm, type PositionLevel } from '.
 const props = defineProps<{
   visible: boolean
   submitting: boolean
-  target: Record<string, unknown> | null
+  target: (Partial<PositionForm> & Record<string, any>) | null
   allDeptOptions: { id: number; name: string }[]
 }>()
 

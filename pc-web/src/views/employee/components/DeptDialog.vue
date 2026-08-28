@@ -72,7 +72,7 @@ import type { DeptForm } from '../orgTypes'
 const props = defineProps<{
   visible: boolean
   submitting: boolean
-  target: Record<string, unknown> | null
+  target: (Partial<DeptForm> & Record<string, any>) | null
   allDeptOptions: { id: number; name: string }[]
   userList: { id: number; name: string; username: string }[]
 }>()
