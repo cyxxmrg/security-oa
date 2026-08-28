@@ -72,10 +72,10 @@
           <el-divider content-position="left">检查项 (按计划模板)</el-divider>
           <div v-for="(item, idx) in (task.plan?.checklist_template || [])" :key="idx" class="checklist-row">
             <label>{{ item.name }}<span v-if="item.required" style="color: #f5222d"> *</span></label>
-            <el-input v-if="item.type === 'text'" v-model="checkoutForm.answers[item.name]" placeholder="文本" />
-            <el-input-number v-else-if="item.type === 'number'" v-model.number="checkoutForm.answers[item.name]" :min="0" />
-            <el-select v-else-if="item.type === 'select'" v-model="checkoutForm.answers[item.name]" placeholder="选择" style="width: 100%">
-              <el-option v-for="opt in (item.options || [])" :key="opt" :label="opt" :value="opt" />
+            <el-input v-if="item.type === 'text'" v-model="checkoutForm.answers[answerKey(item.name)]" placeholder="文本" />
+            <el-input-number v-else-if="item.type === 'number'" v-model.number="checkoutForm.answers[answerKey(item.name)]" :min="0" />
+            <el-select v-else-if="item.type === 'select'" v-model="checkoutForm.answers[answerKey(item.name)]" placeholder="选择" style="width: 100%">
+              <el-option v-for="opt in (item.options || [])" :key="String(opt)" :label="String(opt)" :value="opt" />
             </el-select>
             <el-input v-else v-model="checkoutForm.answers[item.name]" placeholder="拍照说明" />
           </div>
@@ -173,6 +173,7 @@ type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
 const taskStatusColor = (s: string): TagType => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: 'info', cancelled: 'info' }[s] as TagType || 'info')
 const issueStatusColor = (s: string): TagType => ({ open: 'danger', work_order_created: 'warning', resolved: 'success', ignored: 'info' }[s] as TagType || 'info')
 const severityColor = (s: string): TagType => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] as TagType || 'info')
+const answerKey = (name: unknown) => String(name || '')
 
 const addPhoto = () => {
   const url = prompt('输入照片 URL (演示用)')
@@ -226,7 +227,7 @@ const loadTask = async () => {
   loading.value = true
   try {
     const r = await inspection.getTask(Number(route.params.id))
-    task.value = r?.data as InspectionTask
+    task.value = r as unknown as InspectionTask
   } catch (e: unknown) {
     const message = e && typeof e === 'object' && 'message' in e ? e.message : e
     ElMessage.error(message || '加载失败')

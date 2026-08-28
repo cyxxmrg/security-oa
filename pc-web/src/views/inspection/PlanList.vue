@@ -35,7 +35,7 @@
         </el-table-column>
         <el-table-column label="频率" width="100" align="center">
           <template #default="{ row }">
-            <el-tag size="small">{{ FREQUENCY_LABEL[row.frequency] || row.frequency }}</el-tag>
+            <el-tag size="small">{{ frequencyLabel(row.frequency) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="进度" width="160" align="center">
@@ -53,7 +53,7 @@
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="planStatusColor(row.status)" size="small">{{ PLAN_STATUS_LABEL[row.status] || row.status }}</el-tag>
+            <el-tag :type="planStatusColor(row.status)" size="small">{{ planStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" align="center" fixed="right">
@@ -97,6 +97,8 @@ const filter = reactive<{ keyword: string; status: string; frequency: string }>(
 
 type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
 const planStatusColor = (s: string): TagType => ({ active: 'success', paused: 'warning', expired: 'info', cancelled: 'info' }[s] as TagType || 'info')
+const frequencyLabel = (value: unknown) => FREQUENCY_LABEL[String(value) as keyof typeof FREQUENCY_LABEL] || String(value || '')
+const planStatusLabel = (value: unknown) => PLAN_STATUS_LABEL[String(value) as keyof typeof PLAN_STATUS_LABEL] || String(value || '')
 
 const loadList = async (page = 1) => {
   pagination.page = page
@@ -104,12 +106,12 @@ const loadList = async (page = 1) => {
   try {
     const r = await inspection.listPlans({
       keyword: filter.keyword || undefined,
-      status: (filter.status as string) || undefined,
-      frequency: (filter.frequency as string) || undefined,
+      status: (filter.status || undefined) as any,
+      frequency: (filter.frequency || undefined) as any,
       per_page: pagination.per_page,
       page,
     })
-    const d = r?.data ?? {}
+    const d = (r?.data ?? {}) as { data?: InspectionPlan[]; total?: number }
     list.value = d.data || []
     pagination.total = d.total || 0
   } catch (e: unknown) {
@@ -142,7 +144,8 @@ const handleGenerate = async (row: any) => {
   try {
     await ElMessageBox.confirm(`立即为计划 [${row.name}] 增量生成执行任务?`, '确认', { type: 'info' })
     const r = await inspection.generateTasks(row.id)
-    ElMessage.success(`已生成 ${r?.data?.generated ?? 0} 个任务`)
+    const generated = (r as unknown as { data?: { generated?: number } })?.data?.generated ?? 0
+    ElMessage.success(`已生成 ${generated} 个任务`)
     loadList(pagination.page)
   } catch (e: unknown) {
     if (e !== 'cancel') { const message = e && typeof e === 'object' && 'message' in e ? e.message : e; ElMessage.error(message || '生成失败') }
