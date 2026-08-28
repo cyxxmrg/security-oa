@@ -174,14 +174,14 @@ export const TASK_STATUS_LABEL: Record<InspectionTaskStatus, string> = {
   cancelled: '已取消',
 }
 
-export const ISSUE_STATUS_LABEL: Record<InspectionIssueStatus, string> = {
+export const ISSUE_STATUS_LABEL: Record<string, string> = {
   open: '待处理',
   work_order_created: '已转工单',
   resolved: '已解决',
   ignored: '已忽略',
 }
 
-export const ISSUE_TYPE_LABEL: Record<InspectionIssueType, string> = {
+export const ISSUE_TYPE_LABEL: Record<string, string> = {
   hardware: '硬件故障',
   software: '软件问题',
   network: '网络异常',
@@ -190,14 +190,14 @@ export const ISSUE_TYPE_LABEL: Record<InspectionIssueType, string> = {
   other: '其他',
 }
 
-export const SEVERITY_LABEL: Record<InspectionSeverity, string> = {
+export const SEVERITY_LABEL: Record<string, string> = {
   low: '轻微',
   medium: '一般',
   high: '严重',
   critical: '紧急',
 }
 
-export const SEVERITY_COLOR: Record<InspectionSeverity, string> = {
+export const SEVERITY_COLOR: Record<string, string> = {
   low: 'info',
   medium: 'warning',
   high: 'danger',

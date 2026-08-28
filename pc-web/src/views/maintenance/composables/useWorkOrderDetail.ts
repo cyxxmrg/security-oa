@@ -12,9 +12,9 @@ export function useWorkOrderDetail() {
   const router = useRouter()
   const id = Number(route.params.id)
 
-  const wo = ref<Record<string, unknown> | null>(null)
+  const wo = ref<any>(null)
   const activeTab = ref('basic')
-  const engineers = ref<Record<string, unknown>[]>([])
+  const engineers = ref<any[]>([])
 
   // 转返修
   const convertVisible = ref(false)
@@ -26,7 +26,7 @@ export function useWorkOrderDetail() {
   const assigning = ref(false)
   const assignForm = ref({ engineer_id: null as number | null, note: '' })
 
-  const formatDate = (s: string) => {
+  const formatDate = (s?: string) => {
     if (!s) return ''
     const d = new Date(s)
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
@@ -34,7 +34,7 @@ export function useWorkOrderDetail() {
 
   const timeline = computed(() => {
     if (!wo.value) return []
-    const arr: Record<string, unknown>[] = []
+    const arr: any[] = []
     if (wo.value.created_at) arr.push({ type: 'primary', time: formatDate(wo.value.created_at), title: '工单创建', desc: '接单登记' })
     if (wo.value.scheduled_at) arr.push({ type: 'info', time: formatDate(wo.value.scheduled_at), title: '预约时间', desc: '' })
     if (wo.value.started_at) arr.push({ type: 'warning', time: formatDate(wo.value.started_at), title: '开始服务', desc: `工程师: ${wo.value.assignee_name}` })
@@ -71,7 +71,7 @@ export function useWorkOrderDetail() {
   }
 
   const purchasePickerVisible = ref(false)
-  const handlePurchaseItemSelected = (items: Record<string, unknown>[]) => {
+  const handlePurchaseItemSelected = (items: any[]) => {
     const item = items[0]
     if (!item) return
     purchaseForm.value.inventory_item_id = item.id
@@ -88,7 +88,7 @@ export function useWorkOrderDetail() {
     }
     submittingPurchase.value = true
     try {
-      const r = await purchaseFlow.fromWorkOrder(wo.value.id, purchaseForm.value)
+      const r: any = await purchaseFlow.fromWorkOrder(wo.value.id, purchaseForm.value)
       if (r.code === 0) {
         ElMessage.success('采购需求已创建, 进入采购员审核流')
         showPurchaseDialog.value = false
@@ -97,7 +97,7 @@ export function useWorkOrderDetail() {
       } else {
         ElMessage.error(r.message || '创建失败')
       }
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.response?.data?.message || '创建失败')
     } finally {
       submittingPurchase.value = false
@@ -109,7 +109,7 @@ export function useWorkOrderDetail() {
       // V0.6.3: res = {code, data: <entity>}
       const res = await get(`/work-orders/${id}`)
       wo.value = unwrapItem(res) || {}
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error('加载失败: ' + (e?.message || ''))
     }
   }
@@ -131,18 +131,18 @@ export function useWorkOrderDetail() {
       ElMessage.success('已派单')
       assignVisible.value = false
       await loadData()
-    } catch (e: unknown) { ElMessage.error(e?.message || '派单失败') }
+    } catch (e: any) { ElMessage.error(e?.message || '派单失败') }
     finally { assigning.value = false }
   }
 
   const onStart = async () => {
-    await ElMessageBox.confirm('开始服务?', '确认', { type: 'info' }).catch(() => null)
-    if (!arguments[0]) return  // 用户取消
+    const confirmed = await ElMessageBox.confirm('开始服务?', '确认', { type: 'info' }).then(() => true).catch(() => false)
+    if (!confirmed) return
     try {
       await post(`/work-orders/${id}/start`)
       ElMessage.success('已开始')
       await loadData()
-    } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+    } catch (e: any) { ElMessage.error(e?.message || '失败') }
   }
 
   const resolveVisible = ref(false)
@@ -204,18 +204,18 @@ export function useWorkOrderDetail() {
       ElMessage.success('已完成')
       resolveVisible.value = false
       await loadData()
-    } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+    } catch (e: any) { ElMessage.error(e?.message || '失败') }
     finally { resolving.value = false }
   }
 
   const onCancel = async () => {
-    const { value } = await ElMessageBox.prompt('请输入取消原因', '取消工单', { inputType: 'textarea' }).catch(() => null)
-    if (!value) return
+    const result = await ElMessageBox.prompt('请输入取消原因', '取消工单', { inputType: 'textarea' }).catch(() => null)
+    if (!result?.value) return
     try {
-      await post(`/work-orders/${id}/cancel`, { reason: value })
+      await post(`/work-orders/${id}/cancel`, { reason: result.value })
       ElMessage.success('已取消')
       await loadData()
-    } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+    } catch (e: any) { ElMessage.error(e?.message || '失败') }
   }
 
   const onConvert = async () => {
@@ -248,7 +248,7 @@ export function useWorkOrderDetail() {
       ElMessage.success(`已转为返修单 ${repairOrder?.code || '新'}`)
       convertVisible.value = false
       if (repairOrder?.id) router.push(`/maintenance/repairs/${repairOrder.id}`)
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.message || '转返修失败')
     } finally { converting.value = false }
   }
