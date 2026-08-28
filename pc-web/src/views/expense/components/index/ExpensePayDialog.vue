@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ visible: boolean; form: Record<string, unknown>; target: Record<string, unknown>; loading: boolean }>()
+defineProps<{ visible: boolean; form: { paid_amount?: number }; target: { claim_no?: string; total_amount?: number | string } | null; loading: boolean }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
   (e: 'confirm'): void

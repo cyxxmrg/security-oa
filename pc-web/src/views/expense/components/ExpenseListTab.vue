@@ -78,13 +78,13 @@ defineProps<{
   statusOptions: { value: string; label: string }[]
   categoryOptions: { value: string; label: string }[]
   loading: boolean
-  list: Record<string, unknown>[]
+  list: any[]
   pagination: { page: number; per_page: number; total: number }
-  canCancel: (row: Record<string, unknown>) => boolean
-  canDelete: (row: Record<string, unknown>) => boolean
-  canPay: (row: Record<string, unknown>) => boolean
-  expenseStatusType: (s: string) => string
-  formatDate: (s?: string) => string
+  canCancel: (row: any) => boolean
+  canDelete: (row: any) => boolean
+  canPay: (row: any) => boolean
+  expenseStatusType: (s: string) => 'success' | 'primary' | 'info' | 'warning' | 'danger'
+  formatDate: (s?: string | null) => string
   expenseCategoryLabel: (s: string) => string
   commonStatusLabel: (s: string) => string
 }>()
