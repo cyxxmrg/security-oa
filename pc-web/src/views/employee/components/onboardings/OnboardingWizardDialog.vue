@@ -131,7 +131,7 @@
               <el-col :span="12">
                 <el-form-item label="扫描件">
                   <el-upload
-                    :http-request="(opt: Record<string, unknown>) => handleFileUpload(opt, 'id_card_file_id')"
+                    :http-request="(opt) => handleFileUpload(opt, 'id_card_file_id')"
                     :show-file-list="false"
                     accept="image/*,.pdf"
                   >
@@ -165,7 +165,7 @@
             </el-row>
             <el-form-item label="扫描件">
               <el-upload
-                :http-request="(opt: Record<string, unknown>) => handleFileUpload(opt, 'driver_license_file_id')"
+                :http-request="(opt) => handleFileUpload(opt, 'driver_license_file_id')"
                 :show-file-list="false"
                 accept="image/*,.pdf"
               >
@@ -203,7 +203,7 @@
             </el-row>
             <el-form-item label="学历证明">
               <el-upload
-                :http-request="(opt: Record<string, unknown>) => handleFileUpload(opt, 'education_file_id')"
+                :http-request="(opt) => handleFileUpload(opt, 'education_file_id')"
                 :show-file-list="false"
                 accept="image/*,.pdf"
               >
@@ -217,7 +217,7 @@
             <div class="doc-block__title">劳动合同 <span class="optional-tip">(选填)</span></div>
             <el-form-item label="合同文件">
               <el-upload
-                :http-request="(opt: Record<string, unknown>) => handleFileUpload(opt, 'contract_file_id')"
+                :http-request="(opt) => handleFileUpload(opt, 'contract_file_id')"
                 :show-file-list="false"
                 accept="image/*,.pdf,.doc,.docx"
               >
@@ -242,6 +242,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
+import type { UploadRequestOptions } from 'element-plus'
 import type { Department, Position, UserOption } from './types'
 import { EDUCATION_OPTIONS } from './types'
 
@@ -253,11 +254,11 @@ const props = defineProps<{
   modelValue: boolean
   step: number
   submitting: boolean
-  form1: Record<string, unknown>
-  form2: Record<string, unknown>
-  form3: Record<string, unknown>
-  rules1: Record<string, unknown>
-  rules2: Record<string, unknown>
+  form1: any
+  form2: any
+  form3: any
+  rules1: any
+  rules2: any
   departmentList: Department[]
   positionList: Position[]
   activeUserList: UserOption[]
@@ -271,7 +272,7 @@ const emit = defineEmits<{
   (e: 'next'): void
   (e: 'prev'): void
   (e: 'submit'): void
-  (e: 'upload', opt: Record<string, unknown>, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id'): void
+  (e: 'upload', opt: any, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id'): void
 }>()
 
 const visible = computed({
@@ -284,8 +285,9 @@ function deptNameOf(id?: number | null) {
   return props.departmentList.find(d => d.id === id)?.name || ''
 }
 
-function handleFileUpload(opt: Record<string, unknown>, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id') {
+function handleFileUpload(opt: UploadRequestOptions, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id') {
   emit('upload', opt, field)
+  return Promise.resolve()
 }
 
 async function onNextClick() {
