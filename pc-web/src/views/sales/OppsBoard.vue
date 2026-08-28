@@ -61,7 +61,7 @@ import { get } from '@/utils/request'
 import { unwrapList } from '@/utils/response'
 import type { Opportunity } from './types'
 
-const list = ref<Opportunity[]>([])
+const list = ref<any[]>([])
 const draggingId = ref<number | null>(null)
 const dragOverCol = ref<string | null>(null)
 
@@ -90,7 +90,7 @@ const columns = [
 ]
 
 const grouped = computed(() => {
-  const g: Record<string, Opportunity[]> = {}
+  const g: Record<string, any[]> = {}
   for (const c of columns) g[c.value] = []
   for (const o of list.value) {
     // DB stage 归一到看板列名
@@ -112,7 +112,7 @@ const loadList = async () => {
   } catch (e) { /* toast */ }
 }
 
-const onDragStart = (o: Opportunity, e?: DragEvent) => {
+const onDragStart = (o: any, e?: DragEvent) => {
   draggingId.value = o.id
   try {
     if (e?.dataTransfer) {
@@ -128,7 +128,7 @@ const onDrop = async (newBoardStage: string, e?: DragEvent) => {
   if (e) e.preventDefault()
   const id = draggingId.value
   if (!id) return
-  const opp = list.value.find(o => o.id === id)
+  const opp = list.value.find(o => Number(o.id) === id)
   if (!opp || STAGE_REVERSE[opp.stage] === newBoardStage) { draggingId.value = null; dragOverCol.value = null; return }
   // won / lost 不可拖入（只可由按钮触发）
   if (newBoardStage === 'won' || newBoardStage === 'lost') {
@@ -155,9 +155,9 @@ const onDrop = async (newBoardStage: string, e?: DragEvent) => {
   }
 }
 
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
-const formatDate = (d: string) => d ? d.slice(0, 10) : '-'
-const probabilityColor = (p: number) => p >= 70 ? '#1D9E75' : p >= 40 ? '#0C447C' : '#BA7517'
+const formatMoney = (n: number | null | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+const formatDate = (d: string | null | undefined) => d ? d.slice(0, 10) : '-'
+const probabilityColor = (p: number | null | undefined) => (p || 0) >= 70 ? '#1D9E75' : (p || 0) >= 40 ? '#0C447C' : '#BA7517'
 
 onMounted(() => { loadList() })
 </script>
