@@ -88,8 +88,8 @@ import { ref, onMounted } from 'vue'
 import { get } from '@/utils/request'
 
 const days = ref(30)
-const woStats = ref<Record<string, unknown> | null>(null)
-const roStats = ref<Record<string, unknown> | null>(null)
+const woStats = ref<Record<string, any> | null>(null)
+const roStats = ref<Record<string, any> | null>(null)
 
 const loadData = async () => {
   try {
@@ -103,9 +103,9 @@ const loadData = async () => {
   } catch (e) { /* ignore */ }
 }
 
-const priorityLabel = (k: string) => ({ low: '低', medium: '中', high: '高', urgent: '紧急' }[k] || k)
-const methodLabel = (k: string) => ({ free_warranty: '🆓 免费（保内）', free_contract: '🆓 免费（合同）', paid_repair: '💰 付费（维修）', paid_replace: '💰 付费（换新）', returned: '↩️ 退回' }[k] || k)
-const roStatusLabel = (k: string) => ({ received: '已接件', sent_for_repair: '寄修中', in_repair: '维修中', repaired: '已修好', sent_back: '寄回中', closed: '已关闭', cancelled: '已取消' }[k] || k)
+const priorityLabel = (k: string | number) => ({ low: '低', medium: '中', high: '高', urgent: '紧急' }[String(k)] || String(k))
+const methodLabel = (k: string | number) => ({ free_warranty: '🆓 免费（保内）', free_contract: '🆓 免费（合同）', paid_repair: '💰 付费（维修）', paid_replace: '💰 付费（换新）', returned: '↩️ 退回' }[String(k)] || String(k))
+const roStatusLabel = (k: string | number) => ({ received: '已接件', sent_for_repair: '寄修中', in_repair: '维修中', repaired: '已修好', sent_back: '寄回中', closed: '已关闭', cancelled: '已取消' }[String(k)] || String(k))
 
 onMounted(() => loadData())
 </script>

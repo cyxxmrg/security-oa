@@ -7,7 +7,7 @@
       </el-select>
       <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width:240px" @change="loadList(1)" />
       <el-input v-model="searchKey" placeholder="搜索单号/物料" clearable style="width:220px" :prefix-icon="Search" @keyup.enter="loadList(1)" @clear="loadList(1)" />
-      <el-button type="primary" plain :icon="Plus" @click="handleCreate">新增出库单</el-button>
+      <el-button type="primary" plain :icon="Plus" @click="handleCreate()">新增出库单</el-button>
     </div>
     <div class="content-card">
       <el-table v-loading="loading" :data="list" stripe border style="width:100%" :row-key="(r: Record<string,unknown>) => r.record_no as string">
@@ -199,7 +199,7 @@
             <template #default="{row}"><span style="font-weight:600;color:#0C447C">¥{{ Number(row.amount||0).toFixed(2) }}</span></template>
           </el-table-column>
           <el-table-column label="操作" width="55" align="center">
-            <template #default="{_,$index}">
+            <template #default="{$index}">
               <el-button type="danger" link size="small" :icon="Delete" @click="removeItemRow($index)" />
             </template>
           </el-table-column>
@@ -339,7 +339,7 @@ interface BusinessOption { id: number; name: string }
 const filterType = ref<string>('')
 const dateRange = ref<[string, string] | null>(null)
 const searchKey = ref('')
-const list = ref<OutboundRecord[]>([])
+const list = ref<any[]>([])
 const loading = ref(false)
 const pagination = reactive({ page: 1, per_page: 15, total: 0 })
 const itemOptions = ref<InventoryItem[]>([])
@@ -407,7 +407,7 @@ async function loadAccounts() {
 }
 const showFormDialog = ref(false)
 const showDetail = ref(false)
-const detailItem = ref<OutboundRecord | null>(null)
+const detailItem = ref<any>(null)
 const formRef = ref()
 const submitting = ref(false)
 const pickerVisible = ref(false)
@@ -451,7 +451,7 @@ function addItemRow() {
   pickerIndex.value = form.items.length - 1
   pickerVisible.value = true
 }
-function calcAmount(row: { quantity: number; unit_price?: number; amount?: number }) {
+function calcAmount(row: any) {
   row.amount = Number(row.quantity || 0) * Number(row.unit_price || 0)
 }
 const totalAmount = computed(() => form.items.reduce((s, r) => s + Number(r.amount || 0), 0))
@@ -495,7 +495,7 @@ async function openImportDialog() {
   importDialogVisible.value = true
   if (importSelectedProject.value) await loadProjectMaterials()
 }
-function toggleAllMaterials(v: boolean) {
+function toggleAllMaterials(v: any) {
   importSelectedIds.value = v ? importProjectMaterials.value.map(m => m.id) : []
   selectAll.value = v
 }

@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 defineProps<{
-  wo: Record<string, unknown>
+  wo: Record<string, any>
   formatDate: (s: string) => string
 }>()
 </script>

@@ -148,8 +148,8 @@ const visible = computed({ get: () => props.modelValue, set: (v) => emit('update
 
 const formRef = ref()
 const submitting = ref(false)
-const customers = ref<Record<string, unknown>[]>([])
-const workOrderOptions = ref<Record<string, unknown>[]>([])
+const customers = ref<Record<string, any>[]>([])
+const workOrderOptions = ref<Record<string, any>[]>([])
 const searching = ref(false)
 
 const form = ref({

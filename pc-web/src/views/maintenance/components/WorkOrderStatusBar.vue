@@ -33,7 +33,7 @@
 import { ArrowLeft, User, Phone, Avatar, Lock, Promotion, VideoPlay, CircleCheck, RefreshRight, ShoppingCart } from '@element-plus/icons-vue'
 
 defineProps<{
-  wo: Record<string, unknown>
+  wo: Record<string, any>
 }>()
 
 defineEmits<{

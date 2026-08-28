@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 defineProps<{
-  timeline: Record<string, unknown>[]
+  timeline: Record<string, any>[]
 }>()
 </script>
 

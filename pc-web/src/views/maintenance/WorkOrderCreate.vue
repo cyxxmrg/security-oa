@@ -74,7 +74,7 @@ import { unwrapList, unwrapItem } from '@/utils/response'
 const router = useRouter()
 const formRef = ref()
 const submitting = ref(false)
-const customers = ref<Record<string, unknown>[]>([])
+const customers = ref<Record<string, any>[]>([])
 
 const form = ref({
   contact_name: '', contact_phone: '', address: '',
@@ -110,7 +110,7 @@ const onSubmit = async () => {
     ElMessage.success(`工单 ${wo?.code || '新'} 已创建`)
     if (wo?.id) router.push(`/maintenance/work-orders/${wo.id}`)
     else router.push('/maintenance/work-orders')
-  } catch (e: unknown) { ElMessage.error(e?.message || '创建失败') }
+  } catch (e: unknown) { ElMessage.error((e as { message?: string })?.message || '创建失败') }
   finally { submitting.value = false }
 }
 

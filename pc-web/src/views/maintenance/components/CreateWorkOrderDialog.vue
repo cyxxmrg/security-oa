@@ -158,7 +158,7 @@ const visible = computed({
 
 const formRef = ref()
 const submitting = ref(false)
-const customers = ref<Record<string, unknown>[]>([])
+const customers = ref<Record<string, any>[]>([])
 const projectOptions = ref<{ id: number; name: string }[]>([])
 const contractOptions = ref<{ id: number; name: string }[]>([])
 

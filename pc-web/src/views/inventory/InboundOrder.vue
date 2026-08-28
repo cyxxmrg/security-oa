@@ -176,7 +176,7 @@
             </template>
           </el-table-column>
           <el-table-column label="操作" width="55" align="center">
-            <template #default="{_,$index}">
+            <template #default="{$index}">
               <el-button type="danger" link size="small" :icon="Delete" @click="removeItemRow($index)" />
             </template>
           </el-table-column>
@@ -286,7 +286,7 @@ interface BusinessOption { id: number; name: string }
 const filterType = ref("")
 const dateRange = ref<[string, string] | null>(null)
 const searchKey = ref("")
-const list = ref<InboundRecord[]>([])
+const list = ref<any[]>([])
 const loading = ref(false)
 const pagination = reactive({ page:1, per_page:15, total:0 })
 const itemOptions = ref<InventoryItem[]>([])
@@ -314,10 +314,10 @@ async function loadList(page = 1) {
     else if (filterType.value === 'return') params.type = 'return'
     const res = await get("/inventory/stock-records", params)
     const pag = unwrapPaginate(res)
-    let items = pag.list as InboundRecord[]
+    let items = pag.list as any[]
     if (searchKey.value) {
       const kw = searchKey.value.toLowerCase()
-      items = items.filter(r => (r.record_no || "").toLowerCase().includes(kw) || (r.party?.name || "").toLowerCase().includes(kw) || (r.operator?.name || "").toLowerCase().includes(kw))
+      items = items.filter(r => (r.record_no || "").toLowerCase().includes(kw) || (typeof r.party === 'object' && r.party?.name || "").toLowerCase().includes(kw) || (r.operator?.name || "").toLowerCase().includes(kw))
     }
     if (dateRange.value) {
       const [from, to] = dateRange.value
@@ -358,7 +358,7 @@ async function loadAccounts() {
 
 const showFormDialog = ref(false)
 const showDetail = ref(false)
-const detailItem = ref<InboundRecord | null>(null)
+const detailItem = ref<any>(null)
 const formRef = ref()
 const submitting = ref(false)
 const pickerVisible = ref(false)
@@ -383,7 +383,7 @@ const form = reactive({
 })
 
 // V1.2.13: 计算单行金额 + 合计
-function calcAmount(row: { quantity: number; unit_cost?: number; amount?: number }) {
+function calcAmount(row: any) {
   row.amount = (row.quantity || 0) * (row.unit_cost || 0)
 }
 const totalAmount = computed(() => form.items.reduce((s, r) => s + (r.amount || 0), 0))

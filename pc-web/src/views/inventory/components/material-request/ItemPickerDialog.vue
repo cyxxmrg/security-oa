@@ -39,7 +39,7 @@
     <el-table
       v-loading="loading"
       :data="pagedItems"
-      :row-key="(row: InventoryItem) => row.id"
+      :row-key="(row: InventoryItem) => String(row.id)"
       stripe border style="width:100%" max-height="460"
       @row-click="onRowClick"
       @selection-change="onSelectionChange"

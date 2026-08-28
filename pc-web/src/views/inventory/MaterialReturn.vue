@@ -151,7 +151,7 @@
             </template>
           </el-table-column>
           <el-table-column label="操作" width="55" align="center">
-            <template #default="{ _, $index }">
+            <template #default="{ $index }">
               <el-button type="danger" link size="small" :icon="Delete" @click="removeItemRow($index)" />
             </template>
           </el-table-column>
@@ -178,7 +178,7 @@
       <div v-if="importLoading" style="text-align:center;padding:40px"><el-icon class="is-loading" :size="24"><Loading /></el-icon> 加载中...</div>
       <template v-else-if="importProjectMaterials.length > 0">
         <div style="margin-bottom:8px">
-          <el-checkbox v-model="importSelectAll" @change="toggleImportAll">全选 ({{ importProjectMaterials.length }} 种物料)</el-checkbox>
+          <el-checkbox v-model="importSelectAll" @change="toggleImportAll($event)">全选 ({{ importProjectMaterials.length }} 种物料)</el-checkbox>
         </div>
         <el-table :data="importProjectMaterials" stripe border style="width:100%" max-height="400" @selection-change="onImportSelectionChange">
           <el-table-column type="selection" width="42" />
@@ -425,7 +425,7 @@ function onImportSelectionChange(sel: { id: number }[]) {
   importSelectedIds.value = sel.map(s => s.id)
 }
 
-function toggleImportAll(v: boolean) {
+function toggleImportAll(v: any) {
   importSelectedIds.value = v ? importProjectMaterials.value.map(m => m.id) : []
 }
 async function loadProjectMaterials() {

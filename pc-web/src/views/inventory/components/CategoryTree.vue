@@ -112,7 +112,7 @@
         <el-tree-select
           v-model="form.parent_id"
           :data="parentTreeOptions"
-          :props="{ value: 'id', label: 'name', children: 'children' }"
+            :props="{ label: 'name', children: 'children' }"
           node-key="id"
             check-strictly
             clearable
@@ -311,21 +311,22 @@ function flatten(nodes: CategoryNode[]): CategoryNode[] {
   return out
 }
 
-function filterNode(value: string, data: CategoryNode) {
+function filterNode(value: string, data: any) {
   if (!value) return true
-  return data.name?.includes(value) || data.code?.includes(value)
+  return Boolean(data.name?.includes(value) || data.code?.includes(value))
 }
 
 function onNodeClick(data: CategoryNode) {
   emit('update:modelValue', data.id)
 }
 
-function onContextMenu(event: MouseEvent, data: CategoryNode) {
-  event.preventDefault()
-  event.stopPropagation()
+function onContextMenu(event: Event, data: CategoryNode) {
+  const mouseEvent = event as MouseEvent
+  mouseEvent.preventDefault()
+  mouseEvent.stopPropagation()
   ctxMenu.visible = true
-  ctxMenu.left = event.clientX
-  ctxMenu.top = event.clientY
+  ctxMenu.left = mouseEvent.clientX
+  ctxMenu.top = mouseEvent.clientY
   ctxMenu.data = data
   // 同时切换为高亮节点
   treeRef.value?.setCurrentKey(data.id)

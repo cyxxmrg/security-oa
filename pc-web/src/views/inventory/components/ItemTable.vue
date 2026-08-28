@@ -42,7 +42,6 @@
       stripe
       style="width: 100%"
       :max-height="maxHeight"
-      :default-sort="defaultSort"
       :row-key="rowKey"
       @sort-change="onSortChange"
       @row-click="onRowClick"
@@ -119,7 +118,7 @@
 import { ref, watch } from 'vue'
 import { Search, Box } from '@element-plus/icons-vue'
 import type { InventoryItem, WarehouseOption } from '../types'
-import type { TableSortOrder } from 'element-plus'
+type TableSortOrder = 'ascending' | 'descending' | null
 
 const props = defineProps<{
   list: InventoryItem[]
@@ -145,8 +144,8 @@ const emit = defineEmits<{
   (e: 'selection-change', ids: number[]): void
 }>()
 
-function rowKey(row: InventoryItem): number {
-  return row.id
+function rowKey(row: InventoryItem): string {
+  return String(row.id)
 }
 
 function onSelectionChange(sel: InventoryItem[]) {
@@ -159,8 +158,6 @@ const filterStatus = ref<string>('')
 const sortField = ref('')
 const sortOrder = ref('')
 const maxHeight = ref(window.innerHeight - 320)
-
-const defaultSort: { prop: string; order: TableSortOrder } = { prop: '', order: null }
 
 watch(() => props.currentCategory, () => {
   // 切换分类时自动重发搜索
@@ -195,18 +192,18 @@ const emitStockOut = (row: any) => emit('stock-out', row as InventoryItem)
 const emitEdit = (row: any) => emit('edit', row as InventoryItem)
 const emitDelete = (row: any) => emit('delete', row as InventoryItem)
 
-function stockClass(row: InventoryItem) {
+function stockClass(row: any) {
   if (row.is_low_stock) return 'stock-text stock-text--danger'
   if ((row.current_stock ?? 0) <= (row.safety_stock ?? 0) * 1.5) return 'stock-text stock-text--warn'
   return 'stock-text'
 }
 
-function statusType(row: InventoryItem) {
+function statusType(row: any): 'success' | 'warning' | 'danger' {
   if (row.is_low_stock) return 'danger'
   if ((row.current_stock ?? 0) <= (row.safety_stock ?? 0) * 1.5) return 'warning'
   return 'success'
 }
-function statusLabel(row: InventoryItem) {
+function statusLabel(row: any) {
   if (row.is_low_stock) return '不足'
   if ((row.current_stock ?? 0) <= (row.safety_stock ?? 0) * 1.5) return '预警'
   return '正常'

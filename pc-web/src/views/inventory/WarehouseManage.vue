@@ -136,7 +136,7 @@ async function loadList() {
   }
 }
 
-function openForm(row?: WarehouseItem, idx?: number) {
+function openForm(row?: any, idx?: number) {
   formIndex.value = idx ?? -1
   form.name = row?.name || ''
   form.code = row?.code || ''
@@ -169,7 +169,7 @@ async function handleSave() {
   }
 }
 
-async function handleDelete(row: WarehouseItem) {
+async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(`确认删除仓库「${row.name}」? 若仓库有物料/流水关联则无法删除。`, '删除确认', { type: 'warning' })
     await del(`/inventory/warehouses/${row.id}`)

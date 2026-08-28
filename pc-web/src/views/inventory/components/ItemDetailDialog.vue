@@ -95,7 +95,7 @@
 
     <template #footer>
       <el-button @click="emit('update:visible', false)">关闭</el-button>
-      <el-button v-if="detailItem" type="primary" :icon="Edit" @click="emit('edit', detailItem)">编辑</el-button>
+      <el-button v-if="detailItem" type="primary" :icon="Edit" @click="emit('edit', detailItem as InventoryItem)">编辑</el-button>
     </template>
   </el-dialog>
 </template>
@@ -118,7 +118,7 @@ const emit = defineEmits<{
 
 const activeTab = ref('basic')
 const loading = ref(false)
-const detailItem = ref<Record<string, unknown> | null>(null)
+const detailItem = ref<Record<string, any> | null>(null)
 
 const isLowStock = computed(() => {
   if (!detailItem.value) return false

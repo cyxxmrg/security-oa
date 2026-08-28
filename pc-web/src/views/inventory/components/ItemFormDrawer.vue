@@ -31,7 +31,7 @@
           <el-tree-select
             v-model="form.category_id"
             :data="categoryOptions"
-            :props="{ value: 'id', label: 'name', children: 'children' }"
+            :props="{ label: 'name', children: 'children' }"
             check-strictly
             clearable
             placeholder="选择物品分类"

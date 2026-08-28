@@ -143,7 +143,7 @@
             </template>
           </el-table-column>
           <el-table-column label="操作" width="55" align="center">
-            <template #default="{ _, $index }">
+            <template #default="{ $index }">
               <el-button type="danger" link size="small" :icon="Delete" @click="removeItemRow($index)" />
             </template>
           </el-table-column>

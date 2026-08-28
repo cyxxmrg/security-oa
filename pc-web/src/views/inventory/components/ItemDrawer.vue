@@ -8,7 +8,7 @@
     :destroy-on-close="true"
     @update:model-value="(v: boolean) => emit('update:visible', v)"
   >
-    <div v-loading="loading" class="item-drawer">
+    <div v-loading="!!loading" class="item-drawer">
       <template v-if="item">
         <!-- 顶部状态横幅 -->
         <div v-if="warnings.length" class="warn-banner">

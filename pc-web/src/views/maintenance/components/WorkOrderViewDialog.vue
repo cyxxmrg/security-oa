@@ -20,7 +20,7 @@
         <el-descriptions-item label="联系电话" :span="1">{{ wo.contact_phone || '—' }}</el-descriptions-item>
         <el-descriptions-item label="地址" :span="2">{{ wo.address || '—' }}</el-descriptions-item>
         <el-descriptions-item label="客户" :span="1">{{ wo.customer_name || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="服务类型" :span="1">{{ ({ on_site: '上门', remote: '远程', depot: '送修' })[wo.service_type || ''] || wo.service_type || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="服务类型" :span="1">{{ ({ on_site: '上门', remote: '远程', depot: '送修' } as Record<string, string>)[wo.service_type || ''] || wo.service_type || '—' }}</el-descriptions-item>
         <el-descriptions-item label="预约时间" :span="1">{{ wo.scheduled_at ? formatTime(wo.scheduled_at) : '—' }}</el-descriptions-item>
         <el-descriptions-item label="工程师" :span="1">{{ wo.assignee_name || '未派' }}</el-descriptions-item>
       </el-descriptions>
@@ -28,7 +28,7 @@
       <!-- 收费信息 -->
       <el-descriptions :column="4" border class="detail-section" style="margin-top:12px">
         <el-descriptions-item label="收费方式" :span="1">
-          {{ ({ warranty_free: '保内免费', contract_free: '合同内免费', paid: '收费' })[wo.charge_type || 'paid'] }}
+          {{ ({ warranty_free: '保内免费', contract_free: '合同内免费', paid: '收费' } as Record<string, string>)[wo.charge_type || 'paid'] }}
         </el-descriptions-item>
         <el-descriptions-item label="关联项目" :span="1">{{ wo.project_name || '—' }}</el-descriptions-item>
         <el-descriptions-item label="关联合同" :span="1">{{ wo.contract_name || '—' }}</el-descriptions-item>
@@ -78,7 +78,7 @@ import { VideoPlay } from '@element-plus/icons-vue'
 import { post } from '@/utils/request'
 import { unwrapItem } from '@/utils/response'
 
-const props = defineProps<{ modelValue: boolean; wo: Record<string, unknown> | null }>()
+const props = defineProps<{ modelValue: boolean; wo: Record<string, any> | null }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'done'): void

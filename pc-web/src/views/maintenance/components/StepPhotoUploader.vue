@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { UploadRequestOptions } from 'element-plus'
 import { Camera, Picture } from '@element-plus/icons-vue'
 import { get, post, del } from '@/utils/request'
 import { unwrapList } from '@/utils/response'
@@ -66,7 +67,14 @@ const STEPS: Record<string, string> = {
   other:        '📌 其他',
 }
 
-const photos = ref<Record<string, unknown>[]>([])
+interface StepPhoto {
+  id: number
+  step: keyof typeof STEPS
+  file_url: string
+  uploaded_at: string
+  description?: string
+}
+const photos = ref<StepPhoto[]>([])
 const counts = ref<Record<string, number>>({})
 const currentStep = ref<keyof typeof STEPS>('diagnose')
 const uploading = ref(false)
@@ -108,7 +116,7 @@ const loadPhotos = async () => {
   } catch { photos.value = [] }
 }
 
-const uploadPhoto = async (option: Record<string, unknown>) => {
+const uploadPhoto = async (option: UploadRequestOptions) => {
   uploading.value = true
   const fd = new FormData()
   fd.append('file', option.file)
@@ -122,7 +130,7 @@ const uploadPhoto = async (option: Record<string, unknown>) => {
     description.value = ''
     await loadPhotos()
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '上传失败')
+    ElMessage.error((e as { message?: string })?.message || '上传失败')
   } finally { uploading.value = false }
 }
 
@@ -132,7 +140,7 @@ const deletePhoto = async (id: number) => {
     await del(`/step-photos/${id}`)
     ElMessage.success('已删除')
     await loadPhotos()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: unknown) { ElMessage.error((e as { message?: string })?.message || '失败') }
 }
 
 watch(() => props.targetId, () => loadPhotos())

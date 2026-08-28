@@ -64,7 +64,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { post } from '@/utils/request'
 
-const props = defineProps<{ modelValue: boolean; ro: Record<string, unknown> | null; direction: 'outbound' | 'inbound' }>()
+const props = defineProps<{ modelValue: boolean; ro: Record<string, any> | null; direction: 'outbound' | 'inbound' }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'done'): void }>()
 const visible = computed({ get: () => props.modelValue, set: (v) => emit('update:modelValue', v) })
 

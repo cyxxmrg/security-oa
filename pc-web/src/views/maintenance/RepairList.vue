@@ -135,7 +135,7 @@ import RepairViewDialog from './components/RepairViewDialog.vue'
 import CreateRepairDialog from './components/CreateRepairDialog.vue'
 
 const router = useRouter()
-const STATUS_OPTIONS = [
+const STATUS_OPTIONS: Array<{ value: string; label: string; color: 'success' | 'primary' | 'info' | 'warning' | 'danger' }> = [
   { value: 'received', label: '已接件', color: 'primary' },
   { value: 'sent_for_repair', label: '寄修中', color: 'warning' },
   { value: 'in_repair', label: '维修中', color: 'warning' },
@@ -145,7 +145,7 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: '已取消', color: 'info' },
 ]
 
-const list = ref<Record<string, unknown>[]>([])
+const list = ref<Record<string, any>[]>([])
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
@@ -157,7 +157,7 @@ const filterSource = ref('')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const debouncedSearch = () => {
-  clearTimeout(debounceTimer)
+  clearTimeout(debounceTimer ?? undefined)
   debounceTimer = setTimeout(() => { page.value = 1; loadData() }, 300)
 }
 
@@ -177,7 +177,7 @@ const loadData = async () => {
     list.value = pag.list
     total.value = pag.total
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    ElMessage.error('加载失败: ' + ((e as { message?: string })?.message || ''))
   } finally { loading.value = false }
 }
 
