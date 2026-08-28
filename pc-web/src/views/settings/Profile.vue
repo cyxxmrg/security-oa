@@ -94,7 +94,7 @@ import { ref, onMounted } from 'vue'
 import {
   Refresh, Camera, Check, RefreshLeft, OfficeBuilding, User, Clock, Connection,
 } from '@element-plus/icons-vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules, type UploadFile } from 'element-plus'
 import { get, put } from '@/utils/request'
 import { unwrapItem } from '@/utils/response'
 import { useUserStore } from '@/stores/user'
@@ -133,13 +133,13 @@ async function loadUserInfo() {
       last_login_ip: u.last_login_ip || '',
     }
   } catch (e: unknown) {
-    ElMessage.error('加载个人信息失败：' + (e?.message || '未知错误'))
+    ElMessage.error('加载个人信息失败：' + ((e as { message?: string })?.message || '未知错误'))
   }
 }
 
-function handleAvatarChange(file: { size: number; name?: string; type?: string }) {
+function handleAvatarChange(file: UploadFile) {
   // 本地选择图片 → FileReader 读 base64
-  const raw: File = file.raw
+  const raw = file.raw
   if (!raw) return
   if (raw.size > 2 * 1024 * 1024) {
     ElMessage.warning('图片大小不能超过 2MB')
@@ -168,9 +168,10 @@ async function handleSave() {
       const res = await put('/auth/profile', payload)
       ElMessage.success(res.message || '资料已更新')
       // 同步到 userStore 顶栏
-      userStore.setUser({ name: form.value.name, avatar: form.value.avatar })
+      Object.assign(userStore.userInfo, { name: form.value.name, avatar: form.value.avatar })
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '保存失败')
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      ElMessage.error(err.response?.data?.message || err.message || '保存失败')
     } finally {
       saving.value = false
     }

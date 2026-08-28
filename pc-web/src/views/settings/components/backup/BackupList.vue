@@ -27,14 +27,14 @@
 import { Files } from '@element-plus/icons-vue'
 
 defineProps<{
-  backups: Record<string, unknown>[]
+  backups: Record<string, any>[]
   loading: boolean
   backingUp: boolean
 }>()
 const emit = defineEmits<{
   (e: 'backup'): void
   (e: 'refresh'): void
-  (e: 'download', row: Record<string, unknown>): void
-  (e: 'delete', row: Record<string, unknown>): void
+  (e: 'download', row: any): void
+  (e: 'delete', row: any): void
 }>()
 </script>
