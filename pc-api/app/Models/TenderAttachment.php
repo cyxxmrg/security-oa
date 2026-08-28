@@ -22,6 +22,13 @@ class TenderAttachment extends Model
 
     public function getUrlAttribute(): string
     {
-        return asset('storage/' . $this->file_path);
+        if (!$this->tender_bid_id && $this->visibility === 'public') {
+            return asset('storage/' . $this->file_path);
+        }
+
+        return route('tenders.attachments.download', [
+            'id' => $this->tender_project_id,
+            'attId' => $this->id,
+        ]);
     }
 }

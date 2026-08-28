@@ -179,7 +179,7 @@ class PortalController extends Controller
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
         $dir  = "tenders/{$t->id}/bids/{$bid->id}";
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'public');
+        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'attachments');
         $att  = TenderAttachment::create([
             'tender_project_id' => $t->id,
             'tender_bid_id'     => $bid->id,

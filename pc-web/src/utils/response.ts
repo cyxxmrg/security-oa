@@ -34,7 +34,7 @@
  */
 
 /** 永远返回数组 — 用于"只要列表"的场景 */
-export function unwrapList(res: Record<string, unknown>): Record<string, unknown>[] {
+export function unwrapList(res: any): any[] {
   // 形状 1: 裸数组
   if (Array.isArray(res)) return res
   // 形状 3: 分页包裹 — 取内层 data
@@ -56,7 +56,7 @@ export function unwrapList(res: Record<string, unknown>): Record<string, unknown
 
 /** 返回分页对象 — 用于表格分页场景，永远有 list + total */
 export interface PaginatedResult {
-  list: Record<string, unknown>[]
+  list: any[]
   total: number
   current_page?: number
   per_page?: number
@@ -64,7 +64,7 @@ export interface PaginatedResult {
   [key: string]: unknown
 }
 
-export function unwrapPaginate(res: Record<string, unknown>): PaginatedResult {
+export function unwrapPaginate(res: any): PaginatedResult {
   // 形状 3: 分页包裹 {code, data: {data, total, ...}}
   if (res?.data?.data && Array.isArray(res.data.data)) {
     const p = res.data
@@ -105,7 +105,7 @@ export function unwrapPaginate(res: Record<string, unknown>): PaginatedResult {
 }
 
 /** 返回单个对象/值 — 用于详情接口 */
-export function unwrapItem<T = any>(res: Record<string, unknown>): T {
+export function unwrapItem<T = any>(res: any): T {
   // 形状 2: 单值包裹
   if (res && typeof res === 'object' && 'code' in res && 'data' in res) {
     return res.data as T
@@ -115,7 +115,7 @@ export function unwrapItem<T = any>(res: Record<string, unknown>): T {
 }
 
 /** 返回统计对象 — 用于 BI/看板接口，永远返回对象 */
-export function unwrapStats<T = Record<string, unknown>>(res: Record<string, unknown>): T {
+export function unwrapStats<T = Record<string, unknown>>(res: any): T {
   // 形状 4: 统计包裹
   if (res && typeof res === 'object' && 'code' in res && 'data' in res) {
     return (res.data ?? {}) as T
@@ -126,7 +126,7 @@ export function unwrapStats<T = Record<string, unknown>>(res: Record<string, unk
 }
 
 /** 从响应里取 total 字段 — 用于只关心总数的场景 */
-export function unwrapTotal(res: Record<string, unknown>): number {
+export function unwrapTotal(res: any): number {
   if (res?.data?.total != null) return Number(res.data.total)
   if (res?.total != null) return Number(res.total)
   if (Array.isArray(res?.data)) return res.data.length
@@ -139,7 +139,7 @@ export function unwrapTotal(res: Record<string, unknown>): number {
  * 用于从 fallback 模式逐步迁移到 helper 的过渡期
  * raw 保留原始响应, 万一需要其他字段
  */
-export function unwrap(res: Record<string, unknown>): { list: Record<string, unknown>[]; total: number; raw: Record<string, unknown>; item: Record<string, unknown>; stats: Record<string, unknown> } {
+export function unwrap(res: any): { list: any[]; total: number; raw: any; item: any; stats: Record<string, unknown> } {
   return {
     list: unwrapList(res),
     total: unwrapTotal(res),

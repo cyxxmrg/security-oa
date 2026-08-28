@@ -7,7 +7,7 @@ import router from '@/router'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string>(getToken() || '')
-  const userInfo = ref<Record<string, unknown>>(getUserInfo() || null)
+  const userInfo = ref<any>(getUserInfo() || {})
   const permissions = ref<string[]>([])
   const roles = ref<string[]>([])
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Analytics\AnalyticsQueryService;
+use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -33,7 +34,7 @@ class AnalyticsController extends Controller
      */
     public function revenue(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->revenue($request->only(['start', 'end', 'industry'])));
+        return $this->respond(fn () => $this->svc->revenue($this->scopedFilters($request, ['start', 'end', 'industry'])));
     }
 
     /**
@@ -41,7 +42,7 @@ class AnalyticsController extends Controller
      */
     public function salesFunnel(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->salesFunnel($request->only(['weeks'])));
+        return $this->respond(fn () => $this->svc->salesFunnel($this->scopedFilters($request, ['weeks'])));
     }
 
     /**
@@ -49,7 +50,7 @@ class AnalyticsController extends Controller
      */
     public function projectHealth(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->projectHealth($request->only(['color', 'limit'])));
+        return $this->respond(fn () => $this->svc->projectHealth($this->scopedFilters($request, ['color', 'limit'])));
     }
 
     /**
@@ -57,7 +58,7 @@ class AnalyticsController extends Controller
      */
     public function customerRfm(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->customerRfm($request->only(['segment', 'limit'])));
+        return $this->respond(fn () => $this->svc->customerRfm($this->scopedFilters($request, ['segment', 'limit'])));
     }
 
     /**
@@ -65,7 +66,10 @@ class AnalyticsController extends Controller
      */
     public function inventoryAging(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->inventoryAging($request->only(['status'])));
+        if (!AuthScope::isUnrestricted($request->user())) {
+            return response()->json(['code' => 403, 'message' => '库存报表暂不支持当前数据范围'], 403);
+        }
+        return $this->respond(fn () => $this->svc->inventoryAging($this->scopedFilters($request, ['status'])));
     }
 
     /**
@@ -73,7 +77,10 @@ class AnalyticsController extends Controller
      */
     public function financePnl(Request $request): JsonResponse
     {
-        return $this->respond(fn () => $this->svc->financePnl($request->only(['start', 'end'])));
+        if (!AuthScope::isUnrestricted($request->user())) {
+            return response()->json(['code' => 403, 'message' => '财务利润表仅限全局授权账号'], 403);
+        }
+        return $this->respond(fn () => $this->svc->financePnl($this->scopedFilters($request, ['start', 'end'])));
     }
 
     /**
@@ -144,5 +151,21 @@ class AnalyticsController extends Controller
                 'message' => '报表查询失败: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function scopedFilters(Request $request, array $keys): array
+    {
+        $filters = $request->only($keys);
+        $user = $request->user();
+        if (AuthScope::isUnrestricted($user)) {
+            return $filters;
+        }
+
+        $filters['_scope_department_id'] = $user?->department_id;
+        $filters['_scope_sales_ids'] = $user?->department_id
+            ? \App\Models\User::where('department_id', $user->department_id)->pluck('id')->all()
+            : [$user?->id];
+        $filters['_scope_manager_ids'] = $filters['_scope_sales_ids'];
+        return $filters;
     }
 }

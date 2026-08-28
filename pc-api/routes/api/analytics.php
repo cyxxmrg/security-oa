@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 | 权限: analytics.view (spatie permission)
 */
 
-Route::middleware(['auth:sanctum'])->prefix('analytics')->group(function () {
+Route::middleware(['auth:sanctum', 'permission:analytics.view'])->prefix('analytics')->group(function () {
     // 数据接口
     Route::get('revenue',         [AnalyticsController::class, 'revenue']);
     Route::get('sales-funnel',    [AnalyticsController::class, 'salesFunnel']);

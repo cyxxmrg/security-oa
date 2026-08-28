@@ -8,7 +8,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type {
   Project, Tracking, ConstructionLog, ProcessInstance, ProcessInspection,
-} from '../types'
+} from '@/views/project/types'
 
 /**
  * 把分页响应解包成数组

@@ -32,32 +32,39 @@ Route::prefix('expenses')->middleware(['auth:sanctum', 'ensure_business'])->grou
 });
 
 // ========== 车辆管理 ==========
+// V1.4.4 安全修复: 原读路由(列表/统计/详情/保险/保养/用车申请)完全无 permission 中间件,
+// 任何登录用户都能查看车牌/保险/保养/费用数据; 写路由用的 vehicle.create|vehicle.edit
+// 在权限字典中根本未注册 → 非 admin 角色一律 403。
+// 现统一对齐"菜单级权限点"(vehicle.view/apply/dispatch/insurance/maintenance),
+// 这些点在角色权限矩阵 UI 中可勾选, 管理员可自行调整可见范围。
 Route::prefix('vehicles')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
-    Route::get('/', [VehicleController::class, 'index']);
-    Route::post('/', [VehicleController::class, 'store'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::get('stats', [VehicleController::class, 'stats']);
-    Route::get('usage', [VehicleController::class, 'usageRequests']);
-    Route::post('usage', [VehicleController::class, 'storeUsageRequest'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::post('usage/{usageRequest}/dispatch', [VehicleController::class, 'dispatchVehicle'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::put('usage/{usageRequest}', [VehicleController::class, 'updateUsageRequest'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::get('applies', [VehicleController::class, 'usageRequests']);
-    Route::get('apply', [VehicleController::class, 'usageRequests']);
-    Route::post('apply', [VehicleController::class, 'storeUsageRequest'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::get('insurances', [VehicleController::class, 'insurances']);
-    Route::post('insurances', [VehicleController::class, 'storeInsurance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::put('insurances/{insurance}', [VehicleController::class, 'updateInsurance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::delete('insurances/{insurance}', [VehicleController::class, 'destroyInsurance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::get('maintenances', [VehicleController::class, 'maintenances']);
-    Route::post('maintenances', [VehicleController::class, 'storeMaintenance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::put('maintenances/{maintenance}', [VehicleController::class, 'updateMaintenance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::delete('maintenances/{maintenance}', [VehicleController::class, 'destroyMaintenance'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::get('{vehicle}', [VehicleController::class, 'show']);
-    Route::put('{vehicle}', [VehicleController::class, 'update'])->middleware('permission:vehicle.create|vehicle.edit');
-    Route::delete('{vehicle}', [VehicleController::class, 'destroy'])->middleware('permission:vehicle.create|vehicle.edit');
+    Route::get('/', [VehicleController::class, 'index'])->middleware('permission:vehicle.*');
+    Route::post('/', [VehicleController::class, 'store'])->middleware('permission:vehicle.view');
+    Route::get('stats', [VehicleController::class, 'stats'])->middleware('permission:vehicle.*');
+    Route::get('usage', [VehicleController::class, 'usageRequests'])->middleware('permission:vehicle.apply|vehicle.dispatch');
+    Route::post('usage', [VehicleController::class, 'storeUsageRequest'])->middleware('permission:vehicle.apply');
+    Route::post('usage/{usageRequest}/dispatch', [VehicleController::class, 'dispatchVehicle'])->middleware('permission:vehicle.dispatch');
+    Route::put('usage/{usageRequest}', [VehicleController::class, 'updateUsageRequest'])->middleware('permission:vehicle.apply|vehicle.dispatch');
+    Route::get('applies', [VehicleController::class, 'usageRequests'])->middleware('permission:vehicle.apply|vehicle.dispatch');
+    Route::get('apply', [VehicleController::class, 'usageRequests'])->middleware('permission:vehicle.apply|vehicle.dispatch');
+    Route::post('apply', [VehicleController::class, 'storeUsageRequest'])->middleware('permission:vehicle.apply');
+    Route::get('insurances', [VehicleController::class, 'insurances'])->middleware('permission:vehicle.insurance');
+    Route::post('insurances', [VehicleController::class, 'storeInsurance'])->middleware('permission:vehicle.insurance');
+    Route::put('insurances/{insurance}', [VehicleController::class, 'updateInsurance'])->middleware('permission:vehicle.insurance');
+    Route::delete('insurances/{insurance}', [VehicleController::class, 'destroyInsurance'])->middleware('permission:vehicle.insurance');
+    Route::get('maintenances', [VehicleController::class, 'maintenances'])->middleware('permission:vehicle.maintenance');
+    Route::post('maintenances', [VehicleController::class, 'storeMaintenance'])->middleware('permission:vehicle.maintenance');
+    Route::put('maintenances/{maintenance}', [VehicleController::class, 'updateMaintenance'])->middleware('permission:vehicle.maintenance');
+    Route::delete('maintenances/{maintenance}', [VehicleController::class, 'destroyMaintenance'])->middleware('permission:vehicle.maintenance');
+    Route::get('{vehicle}', [VehicleController::class, 'show'])->middleware('permission:vehicle.*');
+    Route::put('{vehicle}', [VehicleController::class, 'update'])->middleware('permission:vehicle.view');
+    Route::delete('{vehicle}', [VehicleController::class, 'destroy'])->middleware('permission:vehicle.view');
 });
 
 // ========== 油卡管理 ==========
-Route::prefix('fuel-cards')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+// V1.4.4 安全修复: 与车辆同属一个模块, 原本完全无 permission 中间件
+// (油卡余额/充值流水属财务敏感数据) → 统一挂菜单级权限点 vehicle.fuel
+Route::prefix('fuel-cards')->middleware(['auth:sanctum', 'ensure_business', 'permission:vehicle.fuel'])->group(function () {
     Route::get('stats', [FuelCardController::class, 'stats']);
     Route::get('/', [FuelCardController::class, 'index']);
     Route::post('/', [FuelCardController::class, 'store']);
@@ -222,7 +229,8 @@ Route::prefix('knowledge')->middleware(['auth:sanctum', 'ensure_business'])->gro
     Route::put('articles/{article}', [KnowledgeController::class, 'update'])->middleware('permission:knowledge.create|knowledge.edit');
     Route::delete('articles/{article}', [KnowledgeController::class, 'destroy'])->middleware('permission:knowledge.create|knowledge.edit');
     Route::post('upload', [KnowledgeController::class, 'uploadAttachment'])->middleware('permission:knowledge.create|knowledge.edit');
-    Route::get('attachment/download', [KnowledgeController::class, 'downloadAttachment']);
+    Route::get('attachment/download', [KnowledgeController::class, 'downloadAttachment'])
+        ->middleware('permission:knowledge.view');
 });
 
 // ========== 数据备份 (通用) ==========

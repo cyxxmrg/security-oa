@@ -17,6 +17,7 @@ use App\Services\TenderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
@@ -492,7 +493,7 @@ class TenderController extends Controller
 
         // 统一上传服务 (P1 重构): 自动 extension + 真实 MIME 双重校验 + SHA256
         $result = $uploader->store($request, 'file', [
-            'disk'         => 'public',
+            'disk'         => $request->input('visibility', 'public') === 'public' ? 'public' : 'attachments',
             'subdir'       => "tenders/{$t->id}/" . date('Ymd'),
             'allowed_ext'  => ['pdf','doc','docx','xls','xlsx','jpg','jpeg','png','zip','rar','dwg'],
             'allowed_mime' => ['application/pdf','application/msword',
@@ -524,10 +525,24 @@ class TenderController extends Controller
         return response()->json(['code' => 0, 'data' => $list]);
     }
 
+    public function downloadAttachment(int $id, int $attId)
+    {
+        $attachment = TenderAttachment::where('tender_project_id', $id)->findOrFail($attId);
+        $disk = $attachment->tender_bid_id || $attachment->visibility !== 'public' ? 'attachments' : 'public';
+        abort_unless(Storage::disk($disk)->exists($attachment->file_path), 404, '附件不存在');
+
+        return response()->download(
+            Storage::disk($disk)->path($attachment->file_path),
+            $attachment->file_name,
+            ['Content-Type' => $attachment->mime_type ?: 'application/octet-stream']
+        );
+    }
+
     public function deleteAttachment(int $id, int $att): JsonResponse
     {
         $a = TenderAttachment::where('tender_project_id', $id)->findOrFail($att);
-        \Storage::disk('public')->delete($a->file_path);
+        $disk = $a->tender_bid_id || $a->visibility !== 'public' ? 'attachments' : 'public';
+        Storage::disk($disk)->delete($a->file_path);
         $a->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }

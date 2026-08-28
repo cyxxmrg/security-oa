@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Analytics\AnalyticsQueryService;
+use App\Support\AuthScope;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -43,7 +44,10 @@ class AnalyticsPdfController extends Controller
 
         try {
             // 收集数据
-            $data = $this->collectData($report);
+            if (in_array($report, ['inventory', 'pnl', 'full'], true) && !AuthScope::isUnrestricted($request->user())) {
+                return response()->json(['code' => 403, 'message' => '当前账号无权导出全局库存或财务报表'], 403);
+            }
+            $data = $this->collectData($report, $request);
 
             // 生成 HTML
             $html = view("analytics.pdf.{$template}", [
@@ -78,20 +82,29 @@ class AnalyticsPdfController extends Controller
     /**
      * 收集各报表数据
      */
-    private function collectData(string $report): array
+    private function collectData(string $report, Request $request): array
     {
         $data = ['filters' => []];
+        $scope = AuthScope::isUnrestricted($request->user()) ? [] : [
+            '_scope_department_id' => $request->user()?->department_id,
+            '_scope_sales_ids' => $request->user()?->department_id
+                ? \App\Models\User::where('department_id', $request->user()->department_id)->pluck('id')->all()
+                : [$request->user()?->id],
+            '_scope_manager_ids' => $request->user()?->department_id
+                ? \App\Models\User::where('department_id', $request->user()->department_id)->pluck('id')->all()
+                : [$request->user()?->id],
+        ];
         if ($report === 'full' || $report === 'revenue') {
-            $data['revenue'] = $this->svc->revenue();
+            $data['revenue'] = $this->svc->revenue($scope);
         }
         if ($report === 'full' || $report === 'funnel') {
-            $data['funnel'] = $this->svc->salesFunnel();
+            $data['funnel'] = $this->svc->salesFunnel($scope);
         }
         if ($report === 'full' || $report === 'projects') {
-            $data['projects'] = $this->svc->projectHealth(['limit' => 30]);
+            $data['projects'] = $this->svc->projectHealth($scope + ['limit' => 30]);
         }
         if ($report === 'full' || $report === 'rfm') {
-            $data['rfm'] = $this->svc->customerRfm(['limit' => 50]);
+            $data['rfm'] = $this->svc->customerRfm($scope + ['limit' => 50]);
         }
         if ($report === 'full' || $report === 'inventory') {
             $data['inventory'] = $this->svc->inventoryAging();

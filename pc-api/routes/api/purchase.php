@@ -40,6 +40,8 @@ Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business', 'permis
     Route::post('{id}/bids', [TenderController::class, 'storeBid'])->whereNumber('id');
     Route::get('{id}/attachments', [TenderController::class, 'listAttachments'])->whereNumber('id');
     Route::post('{id}/attachments', [TenderController::class, 'uploadAttachment'])->whereNumber('id');
+    Route::get('{id}/attachments/{attId}/download', [TenderController::class, 'downloadAttachment'])
+        ->whereNumber('id')->whereNumber('attId')->name('tenders.attachments.download');
     Route::delete('{id}/attachments/{attId}', [TenderController::class, 'deleteAttachment'])->whereNumber('id');
     Route::get('{id}', [TenderController::class, 'show'])->whereNumber('id');
     Route::put('{id}', [TenderController::class, 'update'])->whereNumber('id');

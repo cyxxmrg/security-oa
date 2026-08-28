@@ -194,4 +194,33 @@ class FieldMask
         }
         return $row;
     }
+
+    /**
+     * V1.4.4 安全修复 — 手机号脱敏 (员工通讯录场景)
+     *
+     * 规则:
+     *  - 11 位手机号 → 前 3 位 + **** + 后 4 位 (138****5678)
+     *  - 其它格式 (含 TEL-xxx 占位号) → 前 2 位 + ****
+     *  - 空值原样返回
+     *
+     * 权限守门放在调用方 (Controller), 本方法只负责字符串变换。
+     */
+    public static function maskPhone(?string $phone): ?string
+    {
+        if ($phone === null || $phone === '') {
+            return $phone;
+        }
+        if (preg_match('/^\d{11}$/', $phone)) {
+            return substr($phone, 0, 3) . '****' . substr($phone, -4);
+        }
+        return mb_substr($phone, 0, 2) . '****';
+    }
+
+    /**
+     * 判断一个值是否已经是脱敏后的掩码 (防止前端把掩码回写进 DB)
+     */
+    public static function isMasked(?string $value): bool
+    {
+        return is_string($value) && str_contains($value, '****');
+    }
 }

@@ -173,6 +173,13 @@ class KnowledgeController extends Controller
         if (!$path || !str_starts_with($path, 'knowledge/')) {
             return response()->json(['code' => 1001, 'message' => '参数错误'], 400);
         }
+        $article = KnowledgeArticle::where('file_path', $path)->first();
+        $user = $request->user();
+        $canEdit = $user && $user->hasActivePermissionTo('knowledge.edit');
+        if (!$article || ($article->status !== 'published' && !$canEdit)) {
+            return response()->json(['code' => 1003, 'message' => '无权访问该附件'], 403);
+        }
+
         $disk = Storage::disk('attachments');
         if (!$disk->exists($path)) {
             return response()->json(['code' => 1004, 'message' => '文件已丢失'], 404);

@@ -46,6 +46,10 @@ class AnalyticsQueryService
                 $sql .= ' AND industry = ?';
                 $params[] = $industry;
             }
+            if (array_key_exists('_scope_department_id', $filters) && $filters['_scope_department_id'] !== null) {
+                $sql .= ' AND department_id = ?';
+                $params[] = (string) $filters['_scope_department_id'];
+            }
             $sql .= ' GROUP BY period_key, industry ORDER BY period_key ASC, industry ASC';
 
             $rows = DB::select($sql, $params);
@@ -96,6 +100,7 @@ class AnalyticsQueryService
             $rows = DB::select("
                 SELECT
                     period_key,
+                    sales_id,
                     s_lead, s_qualify, s_proposal, s_negotiation, s_contract, s_won, s_lost,
                     COALESCE(won_amount, 0) AS won_amount,
                     (s_lead + s_qualify + s_proposal + s_negotiation + s_contract + s_won + s_lost) AS total,
@@ -104,6 +109,10 @@ class AnalyticsQueryService
                 WHERE period_key >= to_char(NOW() - (? || ' weeks')::interval, 'IYYY-IW')
                 ORDER BY period_key ASC
             ", [$weeks]);
+            if (array_key_exists('_scope_sales_ids', $filters)) {
+                $allowed = array_map('strval', $filters['_scope_sales_ids'] ?? []);
+                $rows = array_values(array_filter($rows, fn ($row) => in_array((string) $row->sales_id, $allowed, true)));
+            }
 
             return [
                 'rows'         => $rows,
@@ -167,6 +176,10 @@ class AnalyticsQueryService
             $sql .= " ORDER BY health_score ASC LIMIT {$limit}";
 
             $rows = DB::select($sql, $params);
+            if (array_key_exists('_scope_manager_ids', $filters)) {
+                $allowed = array_map('intval', $filters['_scope_manager_ids'] ?? []);
+                $rows = array_values(array_filter($rows, fn ($row) => in_array((int) $row->manager_id, $allowed, true)));
+            }
 
             $stats = ['green' => 0, 'yellow' => 0, 'red' => 0, 'total' => 0];
             foreach ($rows as $r) {
@@ -199,6 +212,10 @@ class AnalyticsQueryService
             }
             $sql .= " ORDER BY rfm_avg DESC LIMIT {$limit}";
             $rows = DB::select($sql, $params);
+            if (array_key_exists('_scope_sales_ids', $filters)) {
+                $allowed = array_map('intval', $filters['_scope_sales_ids'] ?? []);
+                $rows = array_values(array_filter($rows, fn ($row) => in_array((int) $row->sales_id, $allowed, true)));
+            }
 
             // 9 宫格聚合 (R × F 5x5 简化为 3x3)
             $matrix = [];
@@ -213,13 +230,18 @@ class AnalyticsQueryService
                 $matrix[$key]['monetary'] += (float)$r->monetary;
             }
 
-            // 段位汇总
-            $segments = DB::select("
-                SELECT segment_label, COUNT(*) AS cnt, COALESCE(SUM(monetary), 0) AS total
-                FROM mv_customer_rfm
-                GROUP BY segment_label
-                ORDER BY total DESC
-            ");
+            // 段位汇总基于已过滤明细，避免范围外数据混入统计。
+            $segmentTotals = [];
+            foreach ($rows as $row) {
+                $label = (string) $row->segment_label;
+                if (!isset($segmentTotals[$label])) {
+                    $segmentTotals[$label] = ['segment_label' => $label, 'cnt' => 0, 'total' => 0];
+                }
+                $segmentTotals[$label]['cnt']++;
+                $segmentTotals[$label]['total'] += (float) $row->monetary;
+            }
+            usort($segmentTotals, fn ($a, $b) => $b['total'] <=> $a['total']);
+            $segments = $segmentTotals;
 
             return [
                 'rows'      => $rows,

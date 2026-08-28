@@ -13,6 +13,7 @@ use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Http\Requests\Employee\ResetPasswordRequest;
 use App\Http\Resources\EmployeeProfileResource;
+use App\Support\FieldMask;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +33,31 @@ class EmployeeController extends Controller
             return true;
         }
         return false;
+    }
+
+    /**
+     * V1.4.4 安全修复: 能否看到员工完整手机号
+     *
+     * 通讯录场景采用"分级可见"策略:
+     *  - 本人 / system 账号 / system_admin 角色 → 明文
+     *  - 拥有员工档案页权限 (employee.view, 管理员/主管角色默认有) → 明文
+     *  - 其它普通员工 → 掩码 138****5678 (防批量爬取导出)
+     *
+     * 权限点复用菜单矩阵中已存在的 employee.view, 管理员可在
+     * 「角色权限」界面自行调整哪些角色能看完整号码, 无需改代码。
+     */
+    private function canViewFullContact(?User $viewer, User $target): bool
+    {
+        if ($this->canViewFullProfile($viewer, $target)) {
+            return true;
+        }
+        try {
+            return $viewer && method_exists($viewer, 'hasActivePermissionTo')
+                && $viewer->hasActivePermissionTo('employee.view');
+        } catch (\Throwable $e) {
+            Log::warning('canViewFullContact 判定异常: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -125,6 +151,10 @@ class EmployeeController extends Controller
                     $u->id_card = null;
                 }
             }
+            // V1.4.4: 手机号分级脱敏 — 无 employee.view 权限的普通员工只看掩码
+            if (!$this->canViewFullContact($viewer, $u)) {
+                $u->phone = FieldMask::maskPhone($u->phone);
+            }
             return $u;
         });
         return response()->json(['code' => 0, 'data' => $list]);
@@ -194,6 +224,10 @@ class EmployeeController extends Controller
                 $user->id_card = null;
             }
         }
+        // V1.4.4: 手机号分级脱敏 (详情接口同样受控, 防逐个 ID 遍历绕过列表脱敏)
+        if (!$this->canViewFullContact($request->user(), $user)) {
+            $user->phone = FieldMask::maskPhone($user->phone);
+        }
         return response()->json(['code' => 0, 'data' => $user]);
     }
 
@@ -213,6 +247,10 @@ class EmployeeController extends Controller
         if ($denied) return $denied;
 
         $data = $request->validated();
+        // V1.4.4: 防止前端把脱敏掩码 (138****5678) 原样提交回来写坏真实手机号
+        if (array_key_exists('phone', $data) && FieldMask::isMasked($data['phone'])) {
+            unset($data['phone']);
+        }
         $shouldSyncRole = array_key_exists('role_id', $data);
         $roleId = $shouldSyncRole ? $data['role_id'] : null;
         if ($shouldSyncRole) {
@@ -273,7 +311,7 @@ class EmployeeController extends Controller
         return response()->json([
             'code'    => 0,
             'message' => '密码已重置',
-            'data'    => ['id' => $user->id, 'username' => $user->username, 'password' => $newPwd],
+            'data'    => ['id' => $user->id, 'username' => $user->username],
         ]);
     }
 
