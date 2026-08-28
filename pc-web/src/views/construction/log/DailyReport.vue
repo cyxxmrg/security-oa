@@ -204,12 +204,12 @@ const router = useRouter()
 
 const weatherOptions = ['晴', '多云', '阴', '小雨', '中雨', '大雨', '雪', '雾', '大风']
 
-const statusLabel = (s: string) => ({
+const statusLabel = (s?: string | null) => ({
   draft: '草稿', submitted: '已提交', approved: '已审核',
-} as Record<string, string>)[s] || s || '-'
-const statusTagType = (s: string): string => ({
+} as Record<string, string>)[s || ''] || s || '-'
+const statusTagType = (s?: string | null): 'success' | 'primary' | 'info' | 'warning' | 'danger' => ({
   draft: 'info', submitted: 'warning', approved: 'success',
-} as Record<string, string>)[s] || 'info'
+} as Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'>)[s || ''] || 'info'
 
 const today = new Date()
 const todayStr = today.toISOString().slice(0, 10)
@@ -223,14 +223,14 @@ const calendarTitle = computed(() => {
 
 const monthLogs = ref<LogRow[]>([])      // 当月所有日志
 const overdueList = ref<OverdueItem[]>([])    // 漏报
-const projectOptions = ref<Record<string, unknown>[]>([])
+const projectOptions = ref<Record<string, any>[]>([])
 const processOptions = ref<ProcessOption[]>([])
 
 // 照片上传
 const photoList = ref<{ name: string; url: string }[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-const teamOptions = ref<Record<string, unknown>[]>([])
+const teamOptions = ref<Record<string, any>[]>([])
 
 const formRef = ref()
 const saving = ref(false)
@@ -488,7 +488,7 @@ const handleSubmit = async () => {
   if (!selectedLog.value?.id) return
   submitting.value = true
   try {
-    await logApi.submit(selectedLog.value.id)
+    await logApi.submit(Number(selectedLog.value.id))
     ElMessage.success('已提交')
     await loadAll()
   } catch { /* 拦截器已提示 */ }

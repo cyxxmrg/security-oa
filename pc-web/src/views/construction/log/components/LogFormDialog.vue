@@ -141,12 +141,19 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { LogRow, ProcessOption } from '../../types'
 
+interface OptionItem {
+  id: number
+  name: string
+  code?: string
+  team_name?: string
+}
+
 const props = defineProps<{
   visible: boolean
-  projectOptions: Record<string, unknown>[]
-  processOptions: Record<string, unknown>[]
-  teamOptions: Record<string, unknown>[]
-  editing?: Record<string, unknown>
+  projectOptions: any[]
+  processOptions: any[]
+  teamOptions: any[]
+  editing?: Record<string, any> | null
   defaultDate?: string
   readonly?: boolean
 }>()
@@ -204,15 +211,15 @@ const fillFromEditing = (row: LogRow) => {
   const r = row as Record<string, unknown>
   formData.date = (r.work_date as string) || (r.date as string) || ''
   formData.weather = row.weather || '晴'
-  formData.project_id = row.project_id || null
-  formData.process_id = row.process_id || null
-  formData.team_id = row.team_id || null
+  formData.project_id = Number(row.project_id) || null
+  formData.process_id = Number(row.process_id) || null
+  formData.team_id = Number(row.team_id) || null
   formData.worker_count = Number(row.worker_count || 1)
   formData.work_hours = Number(row.work_hours || 0)
   formData.progress = Number(row.progress || 0)
-  formData.issues = row.issues || ''
-  formData.photos = Array.isArray(row.photos) ? row.photos.join(',') : (row.photos || '')
-  formData.remark = row.remark || ''
+  formData.issues = String(row.issues || '')
+  formData.photos = Array.isArray(row.photos) ? row.photos.join(',') : String(row.photos || '')
+  formData.remark = String(row.remark || '')
 }
 
 const handleOpen = () => {
