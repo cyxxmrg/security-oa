@@ -59,6 +59,10 @@ Route::middleware(['auth:sanctum', 'ensure_business'])->group(function () {
     require __DIR__.'/api/analytics.php';
 });
 
+// 外部 cron 仅凭专用 token 触发到期备份，不继承业务组认证。
+Route::post('backups/run-due', [App\Http\Controllers\Api\BackupController::class, 'runDue'])
+    ->middleware('backup.cron');
+
 // ========== V1.2.9f: auth 路由独立加载 (system 也要能 logout/me/change-password) ==========
 // 不能放进 ensure_business group, 不然 system 登录后被 403 卡死
 Route::middleware(['auth:sanctum'])->group(function () {

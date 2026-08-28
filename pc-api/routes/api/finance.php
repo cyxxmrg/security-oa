@@ -244,13 +244,6 @@ Route::prefix('backups')->middleware(['auth:sanctum', 'ensure_system', 'permissi
     Route::get('{filename}/download', [BackupController::class, 'download'])->withoutMiddleware('ensure_business');
     Route::delete('{filename}', [BackupController::class, 'destroy'])->withoutMiddleware('ensure_business');
 });
-// P0-4 安全修复: run-due 之前完全脱 auth, 任何人 / 任何 IP 可调 -> 完全裸奔
-// 现在至少需要 auth:sanctum + permission:system.backup, 匿名不能再 trigger 备份
-// 外部 cron 触发改用 token 走 GET /backups/run-due?token=... (已有 token 校验逻辑保留作 fallback)
-Route::post('backups/run-due', [BackupController::class, 'runDue'])
-    ->middleware('backup.cron')
-    ->withoutMiddleware('ensure_business');
-
 // ========== 消息中心 (通用) ==========
 // V1.2.9f: 必须 ->withoutMiddleware('ensure_business'), system 也要能看自己未读数 (admin 顶部铃铛)
 Route::prefix('notifications')->middleware(['auth:sanctum'])->group(function () {
