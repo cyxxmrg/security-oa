@@ -77,7 +77,7 @@
             <el-select v-else-if="item.type === 'select'" v-model="checkoutForm.answers[answerKey(item.name)]" placeholder="选择" style="width: 100%">
               <el-option v-for="opt in (item.options || [])" :key="String(opt)" :label="String(opt)" :value="opt" />
             </el-select>
-            <el-input v-else v-model="checkoutForm.answers[item.name]" placeholder="拍照说明" />
+            <el-input v-else v-model="checkoutForm.answers[answerKey(item.name)]" placeholder="拍照说明" />
           </div>
           <el-form-item label="巡检小结">
             <el-input v-model="checkoutForm.summary" type="textarea" :rows="3" placeholder="如 6 号楼监控全部正常运行" />
@@ -165,7 +165,7 @@ const canCheckout = computed(() => task.value && task.value.record && task.value
 
 const checkinForm = reactive({ checkin_location: '', checkin_lat: undefined as number | undefined, checkin_lng: undefined as number | undefined, checkin_photos: [] as string[] })
 const checkinSubmitting = ref(false)
-const checkoutForm = reactive<{ answers: Record<string, unknown>; summary: string; rating: number; issues: Record<string, unknown>[] }>({ answers: {}, summary: '', rating: 5, issues: [] })
+const checkoutForm = reactive<{ answers: Record<string, any>; summary: string; rating: number; issues: Record<string, unknown>[] }>({ answers: {}, summary: '', rating: 5, issues: [] })
 const checkoutSubmitting = ref(false)
 
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
