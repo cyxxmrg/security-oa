@@ -98,7 +98,7 @@
 import { Check, CircleClose, Refresh } from '@element-plus/icons-vue'
 
 defineProps<{
-  editingRole: Record<string, any>
+  editingRole?: Record<string, any>
   activeRole: string
   checkedCount: number
   totalLeaves: number
@@ -106,13 +106,13 @@ defineProps<{
   saving: boolean
   loadingMenus: boolean
   visibleMenus: Record<string, any>[]
-  visibleLeaves: (menu: Record<string, any>) => Record<string, any>[]
-  isLeafChecked: (menu: Record<string, any>, leaf: Record<string, any>) => boolean
-  toggleLeaf: (menu: Record<string, any>, leaf: Record<string, any>, checked: boolean) => void
-  isMenuAllChecked: (menu: Record<string, any>) => boolean
-  isMenuIndeterminate: (menu: Record<string, any>) => boolean
-  toggleMenu: (menu: Record<string, any>, checked: boolean) => void
-  countChecked: (menu: Record<string, any>) => number
+  visibleLeaves: (menu: any) => any[]
+  isLeafChecked: (menu: any, leaf: any) => boolean
+  toggleLeaf: (menu: any, leaf: any, checked: boolean) => void
+  isMenuAllChecked: (menu: any) => boolean
+  isMenuIndeterminate: (menu: any) => boolean
+  toggleMenu: (menu: any, checked: boolean) => void
+  countChecked: (menu: any) => number
 }>()
 
 defineEmits<{
