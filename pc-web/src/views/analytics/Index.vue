@@ -94,6 +94,12 @@ const loading = ref(false)
 const lastRefreshedAt = ref<string>('')
 const viewStatus = ref<string>('')
 const dataStatus = ref<'success' | 'warning' | 'error'>('success')
+interface AnalyticsPayload {
+  summary?: Record<string, number>
+  rows?: Array<Record<string, unknown>>
+  stats?: Record<string, number>
+}
+interface AnalyticsResponse { data?: AnalyticsPayload; [key: string]: unknown }
 
 const snippet = ref({
   revenue: 0,
@@ -178,7 +184,7 @@ function formatNumber(n: number) {
 async function refreshAll() {
   loading.value = true
   try {
-    const [revWrap, funWrap, projWrap, rfmWrap, invWrap, pnlWrap, statusWrap]: Record<string, unknown>[] = await Promise.all([
+    const [revWrap, funWrap, projWrap, rfmWrap, invWrap, pnlWrap, statusWrap] = await Promise.all([
       getRevenue({}),
       getSalesFunnel({ weeks: 12 }),
       getProjectHealth({ limit: 50 }),
@@ -189,13 +195,13 @@ async function refreshAll() {
     ])
 
     // V0.6.3+ 后端返回 {code, data, message} 格式, request.ts 不再自动解包, 这里手动取 data
-    const rev = revWrap?.data ?? revWrap
-    const fun = funWrap?.data ?? funWrap
-    const proj = projWrap?.data ?? projWrap
-    const rfm = rfmWrap?.data ?? rfmWrap
-    const inv = invWrap?.data ?? invWrap
-    const pnl = pnlWrap?.data ?? pnlWrap
-    const status = statusWrap?.data ?? statusWrap
+    const rev = ((revWrap as AnalyticsResponse).data ?? revWrap) as AnalyticsPayload
+    const fun = ((funWrap as AnalyticsResponse).data ?? funWrap) as AnalyticsPayload
+    const proj = ((projWrap as AnalyticsResponse).data ?? projWrap) as AnalyticsPayload
+    const rfm = ((rfmWrap as AnalyticsResponse).data ?? rfmWrap) as AnalyticsPayload
+    const inv = ((invWrap as AnalyticsResponse).data ?? invWrap) as AnalyticsPayload
+    const pnl = ((pnlWrap as AnalyticsResponse).data ?? pnlWrap) as AnalyticsPayload
+    const status = ((statusWrap as AnalyticsResponse).data ?? statusWrap) as Array<Record<string, unknown>>
 
     snippet.value.revenue = Number(rev?.summary?.total_gross || 0)
     const totals = (fun?.rows || []).reduce((acc: Record<string, number>, row: Record<string, unknown>) => {
@@ -220,7 +226,7 @@ async function refreshAll() {
     const allOk = views.length > 0 && views.every((view: Record<string, unknown>) => view.refreshed_at)
     dataStatus.value = allOk ? 'success' : 'warning'
     viewStatus.value = views.length ? `${views.length} 个视图，${allOk ? '全部已刷新' : '部分缺少刷新时间'}` : '暂无刷新状态'
-    lastRefreshedAt.value = views[0]?.refreshed_at || '暂无刷新时间'
+    lastRefreshedAt.value = String(views[0]?.refreshed_at || '暂无刷新时间')
   } catch (e) {
     dataStatus.value = 'error'
     viewStatus.value = '数据加载失败，请稍后重试'
