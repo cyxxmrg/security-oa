@@ -191,7 +191,11 @@ import { get, post } from '@/utils/request'
 
 const wiping = ref(false)
 const settingPwd = ref(false)
-const superAdmin = ref<Record<string, unknown> | null>(null)
+interface Department { id: number; name: string }
+interface Role { id: number; name?: string; description?: string }
+interface BusinessUser { id: number; username: string; name?: string }
+interface RequestError { response?: { data?: { message?: string } }; message?: string }
+const superAdmin = ref<{ has_password?: boolean; username?: string; display_name?: string; initialized_at?: string } | null>(null)
 
 // 业务管理员弹窗状态
 const bizAdminDialog = reactive({
@@ -214,9 +218,9 @@ const bizAdminDialog = reactive({
 })
 const createFormRef = ref<FormInstance>()
 const resetFormRef = ref<FormInstance>()
-const departments = ref<Record<string, unknown>[]>([])
-const roles = ref<Record<string, unknown>[]>([])
-const businessUsers = ref<Record<string, unknown>[]>([])
+const departments = ref<Department[]>([])
+const roles = ref<Role[]>([])
+const businessUsers = ref<BusinessUser[]>([])
 
 const createRules: FormRules = {
   username: [{ required: true, message: '请输入登录用户名', trigger: 'blur' }],
@@ -253,11 +257,11 @@ async function openBusinessAdminDialog() {
       get('/system/employees?per_page=200'),
     ])
     // 解包: 拦截器已解 {code, data}, data 可能是 {data:[]} 或 []
-    departments.value = depRes?.data || (Array.isArray(depRes) ? depRes : [])
-    roles.value = roleRes?.data?.data || roleRes?.data || (Array.isArray(roleRes) ? roleRes : [])
+    departments.value = (depRes?.data || (Array.isArray(depRes) ? depRes : [])) as Department[]
+    roles.value = (roleRes?.data?.data || roleRes?.data || (Array.isArray(roleRes) ? roleRes : [])) as Role[]
     // 业务用户 = 排除 system
     const empList = empRes?.data?.data || empRes?.data || []
-    businessUsers.value = (Array.isArray(empList) ? empList : []).filter((u: Record<string, unknown>) => u.username !== 'system')
+    businessUsers.value = (Array.isArray(empList) ? empList : []).filter((u: BusinessUser) => u.username !== 'system')
   } catch (e) {
     console.warn('[Welcome] load biz admin data failed', e)
   }
@@ -295,7 +299,8 @@ async function submitBizAdmin() {
         ElMessage.error(res?.message || '创建失败')
       }
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '创建失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '创建失败')
     } finally {
       bizAdminDialog.submitting = false
     }
@@ -325,7 +330,8 @@ async function submitBizAdmin() {
         ElMessage.error(res?.message || '重置失败')
       }
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '重置失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '重置失败')
     } finally {
       bizAdminDialog.submitting = false
     }
@@ -385,7 +391,7 @@ async function handleSetSuperAdminPassword() {
       ElMessage.error(res?.message || '设置失败')
     }
   } catch (e: unknown) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(e?.message || '已取消')
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e instanceof Error ? e.message : '已取消')
   } finally {
     settingPwd.value = false
   }
@@ -446,10 +452,10 @@ async function handleWipeData() {
         ElMessage.error(res?.message || '清空失败')
       }
     } catch (e: unknown) {
-      if (e !== 'cancel' && e !== 'close') ElMessage.error(e?.message || '操作失败')
+      if (e !== 'cancel' && e !== 'close') ElMessage.error(e instanceof Error ? e.message : '操作失败')
     }
   } catch (e: unknown) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(e?.message || '已取消')
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e instanceof Error ? e.message : '已取消')
   } finally {
     wiping.value = false
   }
