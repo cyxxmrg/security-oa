@@ -95,6 +95,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'ensure_business' => \App\Http\Middleware\EnsureBusinessUser::class,
             // V1.1: 系统路由只允许 system 用户 — 路由: ->middleware('ensure_system')
             'ensure_system' => \App\Http\Middleware\EnsureSystemUser::class,
+            'backup.cron' => \App\Http\Middleware\VerifyBackupCronToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

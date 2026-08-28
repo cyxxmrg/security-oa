@@ -89,11 +89,6 @@ class BackupController extends Controller
 
     public function runDue(Request $request): JsonResponse
     {
-        $expectedToken = $this->settingString('backup_cron_token', '');
-        if ($expectedToken !== '' && !hash_equals($expectedToken, (string) $request->query('token', ''))) {
-            return response()->json(['code' => 403, 'message' => '备份任务 token 不正确'], 403);
-        }
-
         $config = $this->scheduleConfig();
         if (!$config['enabled']) {
             return response()->json(['code' => 0, 'message' => '自动备份未启用', 'data' => ['ran' => false, 'config' => $config]]);
