@@ -4,7 +4,7 @@
       <!-- 头部: 当前角色信息 -->
       <div class="right-header">
         <div class="role-info">
-          <div class="role-color-dot lg" :style="{ background: editingRole.color || '#0C447C' }"></div>
+      <div class="role-color-dot lg" :style="{ background: String(editingRole.color || '#0C447C') }"></div>
           <div>
             <div class="role-info-name">
               {{ editingRole.name }}
@@ -50,7 +50,7 @@
                 <el-checkbox
                   :model-value="isMenuAllChecked(menu)"
                   :indeterminate="isMenuIndeterminate(menu)"
-                  @change="(v: boolean) => toggleMenu(menu, v)"
+                  @change="(v: any) => toggleMenu(menu, Boolean(v))"
                   @click.stop
                 />
                 <span class="menu-name">{{ menu.title }}</span>
@@ -68,7 +68,7 @@
                 <el-checkbox
                   :model-value="isLeafChecked(menu, leaf)"
                   :disabled="!leaf.perm_key || !leaf.perm_exists"
-                  @change="(v: boolean) => toggleLeaf(menu, leaf, v)"
+                  @change="(v: any) => toggleLeaf(menu, leaf, Boolean(v))"
                 >
                   <span class="leaf-name">{{ leaf.title }}</span>
                   <el-tag
@@ -98,21 +98,21 @@
 import { Check, CircleClose, Refresh } from '@element-plus/icons-vue'
 
 defineProps<{
-  editingRole: Record<string, unknown>
+  editingRole: Record<string, any>
   activeRole: string
   checkedCount: number
   totalLeaves: number
   missingPermCount: number
   saving: boolean
   loadingMenus: boolean
-  visibleMenus: Record<string, unknown>[]
-  visibleLeaves: (menu: Record<string, unknown>) => Record<string, unknown>[]
-  isLeafChecked: (menu: Record<string, unknown>, leaf: Record<string, unknown>) => boolean
-  toggleLeaf: (menu: Record<string, unknown>, leaf: Record<string, unknown>, checked: boolean) => void
-  isMenuAllChecked: (menu: Record<string, unknown>) => boolean
-  isMenuIndeterminate: (menu: Record<string, unknown>) => boolean
-  toggleMenu: (menu: Record<string, unknown>, checked: boolean) => void
-  countChecked: (menu: Record<string, unknown>) => number
+  visibleMenus: Record<string, any>[]
+  visibleLeaves: (menu: Record<string, any>) => Record<string, any>[]
+  isLeafChecked: (menu: Record<string, any>, leaf: Record<string, any>) => boolean
+  toggleLeaf: (menu: Record<string, any>, leaf: Record<string, any>, checked: boolean) => void
+  isMenuAllChecked: (menu: Record<string, any>) => boolean
+  isMenuIndeterminate: (menu: Record<string, any>) => boolean
+  toggleMenu: (menu: Record<string, any>, checked: boolean) => void
+  countChecked: (menu: Record<string, any>) => number
 }>()
 
 defineEmits<{

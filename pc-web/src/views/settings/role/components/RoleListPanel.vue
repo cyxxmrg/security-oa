@@ -67,7 +67,7 @@ import { post } from '@/utils/request'
 
 defineProps<{
   loadingRoles: boolean
-  filteredRoles: Record<string, unknown>[]
+  filteredRoles: Record<string, any>[]
   countOwnLeaves: (name: string) => number
 }>()
 
