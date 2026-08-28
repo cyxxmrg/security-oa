@@ -87,7 +87,8 @@ const categoryOptions = [
   { value: 'other',        label: '其他' },
 ]
 
-const projectOptions = ref<Record<string, unknown>[]>([])
+interface ProjectOption { id: number; code?: string; name?: string }
+const projectOptions = ref<ProjectOption[]>([])
 
 const form = reactive({
   category: '' as string,
@@ -111,7 +112,7 @@ async function loadProjects() {
   try {
     const res = await get('/expenses/projects')
     // V0.6.3: res = {code, data: <projects>}
-    projectOptions.value = unwrapList(res)
+    projectOptions.value = unwrapList(res) as ProjectOption[]
   } catch (e) {
     console.warn('[loadProjects]', e)
     projectOptions.value = []
@@ -156,7 +157,8 @@ async function handleSubmit() {
     ElMessage.success(`报销单已提交`)
     router.push({ path: '/expense', query: claimId ? { view: String(claimId) } : undefined })
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || e.message || '提交失败')
+    const error = e as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error(error?.response?.data?.message || error.message || '提交失败')
   } finally {
     submitting.value = false
   }

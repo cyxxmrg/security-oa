@@ -53,10 +53,10 @@
 import { expenseCategoryLabel, statusLabel as commonStatusLabel } from '@/utils/labels'
 defineProps<{
   visible: boolean
-  row: Record<string, unknown>
+  row: any
   loading: boolean
-  statusType: (s: string) => string
-  formatDate: (s?: string) => string
+  statusType: (s: string) => 'success' | 'primary' | 'info' | 'warning' | 'danger'
+  formatDate: (s?: string | null) => string
 }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void

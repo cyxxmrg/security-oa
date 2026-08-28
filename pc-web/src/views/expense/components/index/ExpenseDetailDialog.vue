@@ -63,13 +63,13 @@
 import { expenseCategoryLabel, statusLabel as commonStatusLabel } from '@/utils/labels'
 defineProps<{
   visible: boolean
-  row: Record<string, unknown>
+  row: any
   loading: boolean
-  statusType: (s: string) => string
-  formatDate: (s?: string) => string
-  canCancel: (r: Record<string, unknown>) => boolean
-  canDelete: (r: Record<string, unknown>) => boolean
-  canPay: (r: Record<string, unknown>) => boolean
+  statusType: (s: string) => 'success' | 'primary' | 'info' | 'warning' | 'danger'
+  formatDate: (s?: string | null) => string
+  canCancel: (r: any) => boolean
+  canDelete: (r: any) => boolean
+  canPay: (r: any) => boolean
 }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
