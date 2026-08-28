@@ -99,7 +99,7 @@
 
 <script setup lang="ts">
 defineProps<{
-  form: Record<string, unknown>
+  form: Record<string, any>
   commonTags: string[]
 }>()
 </script>

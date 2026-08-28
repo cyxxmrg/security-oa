@@ -84,7 +84,7 @@
 import { Plus, Delete } from '@element-plus/icons-vue'
 
 defineProps<{
-  invoiceList: Record<string, unknown>[]
+  invoiceList: Record<string, any>[]
 }>()
 
 defineEmits<{

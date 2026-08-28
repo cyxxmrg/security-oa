@@ -73,7 +73,7 @@ export function fakeXY(id: number): { x: number; y: number } {
 }
 
 // 把后端 customer 转成 map-ready 格式
-export function normalizeCustomer(c: Record<string, unknown>): MapCustomer {
+export function normalizeCustomer(c: Record<string, any>): MapCustomer {
   const xy = c.longitude && c.latitude
     ? { x: 15 + ((c.longitude + 180) / 360) * 70, y: 15 + ((90 - c.latitude) / 180) * 70 }
     : fakeXY(c.id)

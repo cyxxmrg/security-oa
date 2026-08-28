@@ -90,7 +90,7 @@ const activeTab = ref('basic')
 const loading = ref(false)
 const submitting = ref(false)
 const customer = ref<Customer>({} as Customer)
-const followRecords = ref<Record<string, unknown>[]>([])
+const followRecords = ref<Record<string, any>[]>([])
 
 async function loadAll() {
   loading.value = true

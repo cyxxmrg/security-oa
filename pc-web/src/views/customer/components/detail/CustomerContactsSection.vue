@@ -52,7 +52,7 @@
 import { Plus, Delete } from '@element-plus/icons-vue'
 
 defineProps<{
-  contactList: Record<string, unknown>[]
+  contactList: Record<string, any>[]
 }>()
 
 defineEmits<{

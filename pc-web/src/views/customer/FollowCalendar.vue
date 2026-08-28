@@ -67,13 +67,13 @@ function todayDateStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function formatTime(t: string | undefined): string {
+function formatTime(t: string | null | undefined): string {
   if (!t) return ''
   const m = String(t).match(/(\d{1,2}):(\d{2})/)
   return m ? `${m[1]}:${m[2]}` : ''
 }
 
-function countdownLabel(t: string | undefined): string {
+function countdownLabel(t: string | null | undefined): string {
   if (!t) return ''
   const date = new Date(String(t).replace(/-/g, '/'))
   if (isNaN(date.getTime())) return ''

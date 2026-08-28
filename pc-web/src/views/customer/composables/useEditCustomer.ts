@@ -3,7 +3,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { put, post, del } from '@/utils/request'
-import type { Customer } from '../detail/types'
+import type { Customer } from '../components/detail/types'
 
 interface Props {
   modelValue: boolean

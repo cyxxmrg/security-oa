@@ -5,6 +5,7 @@
  */
 import { ref, watch } from 'vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
+import type { UploadFile } from 'element-plus'
 
 const props = withDefaults(
   defineProps<{
@@ -27,7 +28,7 @@ const close = () => emit('update:visible', false)
 
 const uploadRef = ref()
 const file = ref<File | null>(null)
-const handleChange = (f: { size: number; name?: string }) => {
+const handleChange = (f: UploadFile) => {
   file.value = f.raw
 }
 
