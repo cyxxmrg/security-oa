@@ -127,6 +127,21 @@ const router = useRouter()
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
 
+interface ServiceRow {
+  id: number | string
+  order_no?: string
+  fault_description?: string
+  urgency: string
+  status: string
+  created_at?: string
+  customer?: { name?: string }
+  assigned_user?: { name?: string }
+  assignedUser?: { name?: string }
+  [key: string]: unknown
+}
+interface Technician { id: number | string; name?: string; department?: string; [key: string]: unknown }
+interface RequestError { response?: { data?: { message?: string } }; message?: string }
+
 const statusOptions = [
   { value: 'pending',     label: '待处理' },
   { value: 'assigned',    label: '已派单' },
@@ -171,10 +186,10 @@ const formatDate = (s?: string) => {
 }
 
 const searchForm = ref({ keyword: '', status: '', urgency: '' })
-const list = ref<Record<string, unknown>[]>([])
+const list = ref<ServiceRow[]>([])
 const loading = ref(false)
 const pagination = reactive({ page: 1, per_page: 15, total: 0 })
-const technicianOptions = ref<Record<string, unknown>[]>([])
+const technicianOptions = ref<Technician[]>([])
 
 async function loadList(page = 1) {
   pagination.page = page
@@ -187,7 +202,7 @@ async function loadList(page = 1) {
     const res = await get('/service/orders', params)
     // V0.6.3: res = {code, data: paginator}
     const pag = unwrapPaginate(res)
-    list.value = pag.list
+    list.value = pag.list as ServiceRow[]
     pagination.total = pag.total
     if (pag.current_page) pagination.page = pag.current_page
   } catch (e) {
@@ -203,7 +218,7 @@ async function loadTechnicians() {
   try {
     const res = await get('/employees', { per_page: 200, is_active: true })
     // V0.6.3: res = {code, data: paginator}
-    technicianOptions.value = unwrapList(res)
+    technicianOptions.value = unwrapList(res) as Technician[]
   } catch (e) {
     console.warn('[loadTechnicians]', e)
   }
@@ -222,7 +237,7 @@ const dispatchingRow = ref<Record<string, unknown> | null>(null)
 const assignedUserId = ref<number | null>(null)
 const dispatchLoading = ref(false)
 
-function handleDispatch(row: Record<string, unknown>) {
+function handleDispatch(row: ServiceRow) {
   dispatchingRow.value = row
   assignedUserId.value = null
   showDispatchDialog.value = true
@@ -235,31 +250,35 @@ async function confirmDispatch() {
   }
   dispatchLoading.value = true
   try {
-    await post(`/service/orders/${dispatchingRow.value.id}/assign`, { assigned_to: assignedUserId.value })
-    ElMessage.success(`工单 ${dispatchingRow.value.order_no} 派单成功`)
+    const row = dispatchingRow.value
+    if (!row) return
+    await post(`/service/orders/${row.id}/assign`, { assigned_to: assignedUserId.value })
+    ElMessage.success(`工单 ${row.order_no} 派单成功`)
     showDispatchDialog.value = false
     loadList(pagination.page)
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || e.message || '派单失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '派单失败')
   } finally {
     dispatchLoading.value = false
   }
 }
 
 // ===== 开始维修 =====
-async function handleStart(row: Record<string, unknown>) {
+async function handleStart(row: ServiceRow) {
   await ElMessageBox.confirm(`确认开始维修工单 ${row.order_no}？`, '开始维修', { type: 'success' })
   try {
     await post(`/service/orders/${row.id}/start`, {})
     ElMessage.success('已开始维修')
     loadList(pagination.page)
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || e.message || '操作失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 
 // ===== 完成维修 =====
-async function handleComplete(row: Record<string, unknown>) {
+async function handleComplete(row: ServiceRow) {
   const { value } = await ElMessageBox.prompt('请输入维修内容（处理说明）', '完成维修', {
     type: 'success',
     confirmButtonText: '标记完成',
@@ -272,12 +291,13 @@ async function handleComplete(row: Record<string, unknown>) {
     ElMessage.success('已标记完成，待客户确认')
     loadList(pagination.page)
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || e.message || '操作失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 
 // ===== 重新指派（已完成的工单） =====
-async function handleReassign(row: Record<string, unknown>) {
+async function handleReassign(row: ServiceRow) {
   try {
     const { value: confirm } = await ElMessageBox.confirm(
       `确认将工单「${row.order_no}」重新指派给其他维修人员？\n原指派人：${row.assigned_user?.name || row.assignedUser?.name || '—'}\n完成时间：${row.completed_at || '—'}`,
@@ -288,7 +308,8 @@ async function handleReassign(row: Record<string, unknown>) {
     handleDispatch(row)
   } catch (e: unknown) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(e?.response?.data?.message || e.message || '操作失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 

@@ -5,7 +5,7 @@
       <div class="title-area">
         <el-button :icon="ArrowLeft" text @click="$router.back()">返回项目列表</el-button>
         <span class="page-title">{{ project.name || '加载中...' }}</span>
-        <el-tag :type="statusTagType(project.status)" effect="light">{{ statusLabel(project.status) }}</el-tag>
+    <el-tag :type="statusTagType(project.status)" effect="light">{{ statusLabel(project.status || '') }}</el-tag>
       </div>
       <div class="header-actions">
         <el-button :icon="Edit" @click="$router.push('/project/create')">编辑</el-button>
@@ -32,7 +32,7 @@
         <el-tab-pane label="阶段流程" name="stage">
           <StageFlowTab
             :project="project"
-            :tracking="tracking"
+            :tracking="stageTracking"
             :display-progress="displayProgress"
             :paid-amount="paidAmount"
             :manager-name="managerName"
@@ -65,8 +65,8 @@
         <el-tab-pane label="成本核算" name="cost">
           <CostTab
             :project="project"
-            :material-stats="tracking.material_stats"
-            :purchase-stats="tracking.purchase_stats"
+            :material-stats="tracking.material_stats || {}"
+            :purchase-stats="tracking.purchase_stats || {}"
             :total-contract="totalContract"
             :paid-amount="Number(paidAmount.replace(/,/g, '')) * 10000"
           />
@@ -120,7 +120,7 @@
     </div>
 
     <!-- 施工日志详情 dialog -->
-    <LogDetailDialog v-model:visible="showLogDetailDialog" :log="currentLog" />
+    <LogDetailDialog v-if="currentLog" v-model:visible="showLogDetailDialog" :log="currentLog" />
   </div>
 </template>
 
@@ -173,6 +173,14 @@ const paidAmount = computed(() => (Number(tracking.value.payment?.paid_amount) /
 const displayProgress = computed(() => Number(tracking.value.display_progress) || Number(project.value.progress) || 0)
 const totalContract = computed(() => Number(tracking.value.payment?.contract_amount) || 0)
 const risks = computed(() => tracking.value.risks || [])
+interface MaintenanceStats { work_order_count?: number; repair_order_count?: number; [key: string]: unknown }
+interface MaintenanceData { stats?: MaintenanceStats; [key: string]: unknown }
+const contractNo = computed(() => String(project.value.contract_no || project.value.contractNo || ''))
+const stageTracking = computed(() => ({
+  current_stage_index: Number(tracking.value.current_stage_index) || 0,
+  timeline: tracking.value.timeline || [],
+  payment: { nodes: tracking.value.payment?.nodes || [] },
+}))
 
 const statusTagType = (s?: string): TagType => {
   if (s === 'completed') return 'success'
@@ -201,8 +209,8 @@ const handleDeliverableDownload = (row: Record<string, unknown>) => {
   // 模拟下载: 走通用下载通道
   if (row.url || row.file_url) {
     const a = document.createElement('a')
-    a.href = row.url || row.file_url
-    a.download = row.name || 'download'
+    a.href = String(row.url || row.file_url)
+    a.download = String(row.name || 'download')
     a.click()
   } else {
     ElMessage.info(`交付物「${row.name}」暂未上传文件`)
@@ -211,13 +219,13 @@ const handleDeliverableDownload = (row: Record<string, unknown>) => {
 const handleDeliverablePreview = (row: Record<string, unknown>) => ElMessage.info(`预览功能开发中：${row.name}`)
 const handleExportLogs = () => {
   // 施工日志 tab 的日志
-  const logs = (logList && logList.value && logList.value.length) ? logList.value : []
+  const logs = constructionLogs.value
   if (logs.length === 0) {
     ElMessage.warning('暂无施工日志可导出')
     return
   }
   const headers = ['日期', '进度', '工时', '施工内容', '天气', '人员', '状态']
-  const rows = logs.map((l: Record<string, unknown>) => [
+  const rows = logs.map((l: Record<string, any>) => [
     l.work_date || l.date || '-',
     (l.progress || 0) + '%',
     l.work_hours || 0,
@@ -291,7 +299,7 @@ const handleGenReport = async () => {
 
 // 售后 tab 标签计数引用 (实际数据由 ProjectMaintenanceTab 内部管理,
 // 此处仅用于 tab 标题显示; 首次为 0, 切换后由子组件加载)
-const maintenanceData = ref<Record<string, unknown> | null>(null)
+const maintenanceData = ref<MaintenanceData | null>(null)
 
 onMounted(() => {
   loadProject()

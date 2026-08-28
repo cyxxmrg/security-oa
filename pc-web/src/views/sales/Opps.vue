@@ -191,7 +191,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Plus, Search, Refresh, DataLine, Aim, ChatLineRound, Document, Money, Promotion, Trophy,
+  Plus, Search, Refresh, DataLine, Aim, ChatLineRound, Document, DocumentCopy, Money, Promotion, Trophy,
 } from '@element-plus/icons-vue'
 import {
   getOpps, getOppStageOptions, getOppFunnel, getOppLostReasons,
@@ -299,7 +299,7 @@ const loadStages = async () => {
 const loadLostReasons = async () => {
   try {
     const r: LostReasonsResponse = await getOppLostReasons()
-    lostReasons.value = r || []
+    lostReasons.value = Array.isArray(r?.data) ? r.data : []
   } catch (e) {
     lostReasons.value = []
   }
@@ -308,7 +308,7 @@ const loadLostReasons = async () => {
 const loadFunnel = async () => {
   try {
     const r: FunnelResponse = await getOppFunnel()
-    const rows = r || []
+    const rows = Array.isArray(r?.data) ? r.data : []
     const icons: Record<string, unknown> = {
       inquiry: Aim, qualification: Document, proposal: DocumentCopy,
       negotiating: Money, quoted: Promotion, won: Trophy, lost: ChatLineRound,
@@ -316,7 +316,7 @@ const loadFunnel = async () => {
     funnelData.value = stageOptionsComputed.value.map((s: StageOption) => {
       const found = rows.find((rr: FunnelRow) => rr.stage === s.value) || { count: 0, total_amount: 0 }
       return {
-        ...s, count: found.count, total_amount: found.total_amount,
+        ...s, count: found.count || 0, total_amount: found.total_amount || 0,
         icon: icons[s.value] || Document, color: s.color || '#0C447C',
       }
     })
@@ -414,8 +414,10 @@ const handleWin = (row: Opp) => {
 const confirmWin = async (data: WinFormData) => {
   submitting.value = true
   try {
-    await markOppWon(winTarget.value.id, data)
-    ElMessage.success(`「${winTarget.value.name}」已成交，自动创建项目池`)
+    const target = winTarget.value
+    if (!target) return
+    await markOppWon(Number(target.id), data)
+    ElMessage.success(`「${target.name || target.opp_no || ''}」已成交，自动创建项目池`)
     showWinDialog.value = false
     await loadList()
     loadFunnel()
@@ -438,7 +440,9 @@ const handleLost = (row: Opp) => {
 const confirmLost = async (data: LostFormData) => {
   submitting.value = true
   try {
-    await markOppLost(lostTarget.value.id, data)
+    const target = lostTarget.value
+    if (!target) return
+    await markOppLost(Number(target.id), data)
     ElMessage.success('已标记为战败')
     showLostDialog.value = false
     await loadList()
@@ -462,7 +466,7 @@ const handleRevive = async (row: Opp) => {
   }
   submitting.value = true
   try {
-    await reviveOpp(row.id)
+    await reviveOpp(Number(row.id))
     ElMessage.success('已复活到「需求确认」')
     await loadList()
     loadFunnel()

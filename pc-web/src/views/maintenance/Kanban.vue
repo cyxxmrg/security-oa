@@ -33,7 +33,7 @@
                   </el-tag>
                 </div>
                 <div class="card-eq">{{ wo.equipment_brand }} {{ wo.equipment_model }}</div>
-                <div class="card-fault">{{ wo.fault_description?.slice(0, 50) }}{{ wo.fault_description?.length > 50 ? '…' : '' }}</div>
+                <div class="card-fault">{{ wo.fault_description?.slice(0, 50) }}{{ (wo.fault_description?.length || 0) > 50 ? '…' : '' }}</div>
                 <div class="card-foot">
                   <span class="cust">{{ wo.customer_name || '—' }}</span>
                   <span class="time">{{ formatRelative(wo.created_at) }}</span>
@@ -112,14 +112,14 @@ const RO_COLUMNS = [
   { key: 'cancelled', label: '已取消' },
 ]
 
-const PRIORITY_TAG: Record<string, { type: string; label: string }> = {
+const PRIORITY_TAG: Record<string, { type: 'success' | 'primary' | 'info' | 'warning' | 'danger'; label: string }> = {
   urgent: { type: 'danger', label: '紧急' },
   high:   { type: 'warning', label: '高' },
   medium: { type: 'primary', label: '中' },
   low:    { type: 'info', label: '低' },
 }
 
-const METHOD_TAG: Record<string, { type: string; label: string }> = {
+const METHOD_TAG: Record<string, { type: 'success' | 'primary' | 'info' | 'warning' | 'danger'; label: string }> = {
   free_warranty: { type: 'success', label: '🆓 保内' },
   free_contract: { type: 'success', label: '🆓 合同' },
   paid_repair:   { type: 'warning', label: '💰 维修' },
@@ -127,17 +127,34 @@ const METHOD_TAG: Record<string, { type: string; label: string }> = {
   returned:      { type: 'info', label: '↩️ 退回' },
 }
 
-const woRows = ref<Record<string, unknown>[]>([])
-const roRows = ref<Record<string, unknown>[]>([])
+interface KanbanRow {
+  id: number | string
+  status: string
+  code?: string
+  priority?: string
+  method_type?: string
+  equipment_brand?: string
+  equipment_model?: string
+  fault_description?: string
+  customer_name?: string
+  created_at?: string
+  received_at?: string
+  converted_to_repair_code?: string
+  source_type?: string
+  source_code?: string
+}
+
+const woRows = ref<KanbanRow[]>([])
+const roRows = ref<KanbanRow[]>([])
 
 const woByStatus = computed(() => {
-  const map: Record<string, Record<string, unknown>[]> = {}
+  const map: Record<string, KanbanRow[]> = {}
   for (const wo of woRows.value) (map[wo.status] = map[wo.status] || []).push(wo)
   return map
 })
 
 const roByStatus = computed(() => {
-  const map: Record<string, Record<string, unknown>[]> = {}
+  const map: Record<string, KanbanRow[]> = {}
   for (const ro of roRows.value) (map[ro.status] = map[ro.status] || []).push(ro)
   return map
 })
@@ -148,15 +165,15 @@ const loadData = async () => {
       get('/work-orders', { per_page: 100 }),
       get('/repair-orders', { per_page: 100 }),
     ])
-    woRows.value = (wo.data?.data || wo.data || [])
-    roRows.value = (ro.data?.data || ro.data || [])
+    woRows.value = (wo.data?.data || wo.data || []) as KanbanRow[]
+    roRows.value = (ro.data?.data || ro.data || []) as KanbanRow[]
   } catch (e) { /* ignore */ }
 }
 
-const goWorkOrder = (id: number) => router.push(`/maintenance/work-orders/${id}`)
-const goRepair = (id: number) => router.push(`/maintenance/repairs/${id}`)
+const goWorkOrder = (id: number | string) => router.push(`/maintenance/work-orders/${id}`)
+const goRepair = (id: number | string) => router.push(`/maintenance/repairs/${id}`)
 
-const formatRelative = (s: string) => {
+const formatRelative = (s?: string) => {
   if (!s) return ''
   const ms = Date.now() - new Date(s).getTime()
   const d = Math.floor(ms / 86400000)

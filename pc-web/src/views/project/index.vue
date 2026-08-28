@@ -202,6 +202,16 @@ interface Project {
 
 interface Customer { id: number; name: string }
 
+interface DashboardStage { value: string; label: string; count: number }
+interface DashboardSummary {
+  by_stage: DashboardStage[]
+  in_progress: number
+  completed: number
+  overdue: number
+  deadline_30_days: number
+  total: number
+}
+
 const router = useRouter()
 const loading = ref(false)
 const page = ref(1)
@@ -219,7 +229,7 @@ const searchForm = reactive({ name: '', customer_id: null as number | null, stag
 
 const list = ref<Project[]>([])
 const customerOptions = ref<Customer[]>([])
-const dashboardSummary = ref<Record<string, unknown>>({
+const dashboardSummary = ref<DashboardSummary>({
   by_stage: [],
   in_progress: 0,
   completed: 0,
@@ -296,7 +306,7 @@ const loadDashboardSummary = async () => {
   try {
     const res = await get('/projects/dashboard-summary')
     // V0.6.3: res = {code, data: <summary>}
-    dashboardSummary.value = unwrapStats(res)
+    dashboardSummary.value = unwrapStats(res) as DashboardSummary
   } catch (e) {
     console.error('加载项目概览失败', e)
   }
@@ -322,8 +332,8 @@ const stageStats = computed(() => {
     closed: { bg: 'rgba(144, 147, 153, 0.1)', color: '#909399' },
   }
   // 优先用 dashboard-summary 接口真实数据
-  if (dashboardSummary.value?.by_stage?.length > 0) {
-    return dashboardSummary.value.by_stage.map((s: Record<string, unknown>) => ({
+  if (dashboardSummary.value.by_stage.length > 0) {
+    return dashboardSummary.value.by_stage.map((s: DashboardStage) => ({
       stage: s.label,
       count: s.count,
       bg: colorMap[s.value]?.bg || '#f5f7fa',
@@ -376,11 +386,11 @@ const statusTagType = (s: string): 'success' | 'warning' | 'info' | 'danger' => 
   if (s === 'suspended') return 'danger'
   return 'info'
 }
-const progressStatus = (row: Record<string, unknown>): '' | 'success' | 'warning' | 'exception' => {
+const progressStatus = (row: Project): '' | 'success' | 'warning' | 'exception' => {
   if (row.status === 'completed') return 'success'
   if (row.status === 'suspended') return 'exception'
-  if ((row.progress || 0) >= 80) return 'success'
-  if ((row.progress || 0) >= 50) return 'warning'
+  if (row.progress >= 80) return 'success'
+  if (row.progress >= 50) return 'warning'
   return ''
 }
 
@@ -393,11 +403,11 @@ const handleReset = () => {
   page.value = 1
   loadList()
 }
-const handleView = (row: Record<string, unknown>) => {
+const handleView = (row: Project) => {
   router.push(`/project/detail/${row.id}`)
 }
 
-const handleDelete = async (row: Record<string, unknown>) => {
+const handleDelete = async (row: Project) => {
   try {
     await ElMessageBox.confirm(`确定要删除项目「${row.name}」吗？`, '删除确认', { type: 'warning' })
   } catch { return }
@@ -406,15 +416,15 @@ const handleDelete = async (row: Record<string, unknown>) => {
     ElMessage.success('删除成功')
     loadList()
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '删除失败')
+    ElMessage.error(e instanceof Error ? e.message : '删除失败')
   }
 }
 
 const handleExport = () => {
   const headers = ['项目编号', '项目名称', '客户', '类型', '阶段', '进度', '负责人', '截止日期', '状态']
-  const rows = filteredList.value.map((r: Record<string, unknown>) => [
+  const rows = filteredList.value.map((r: Project) => [
     r.code || '-', r.name, r.customer?.name || '-', typeLabel(r.type),
-    stageLabel(r.stage), (r.progress || 0) + '%', r.manager?.name || '-',
+    stageLabel(r.stage), r.progress + '%', r.manager?.name || '-',
     r.end_date ? r.end_date.slice(0, 10) : '-', statusLabel(r.status),
   ])
   exportExcelLike(headers, rows, '项目列表', { title: '项目列表导出' })

@@ -118,11 +118,40 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { get } from '@/utils/request'
+
+interface Shipment {
+  direction: string
+  direction_label?: string
+  carrier?: string
+  tracking_no?: string
+  shipped_at?: string
+  actual_arrival?: string
+  estimated_arrival?: string
+}
+interface ProgressRecord {
+  action_at?: string
+  status_label?: string
+  description?: string
+}
+interface RepairResult {
+  status: string
+  status_label?: string
+  equipment_brand?: string
+  equipment_model?: string
+  code?: string
+  fault_description?: string
+  received_at?: string
+  expected_finish_at?: string
+  method_label?: string
+  is_paid?: boolean
+  shipments: Shipment[]
+  progress_count: number
+  progress: ProgressRecord[]
+}
 
 const form = reactive({ code: '', phone_suffix: '' })
 const loading = ref(false)
-const result = ref<Record<string, unknown> | null>(null)
+const result = ref<RepairResult | null>(null)
 
 const onQuery = async () => {
   if (!form.code) return ElMessage.warning('请输入返修单号')
@@ -133,12 +162,12 @@ const onQuery = async () => {
     const res = await fetch(`/api/portal/repair?code=${encodeURIComponent(form.code)}&phone_suffix=${form.phone_suffix}`)
     const data = await res.json()
     if (data.code === 0) {
-      result.value = data.data
+      result.value = data.data as RepairResult
     } else {
       ElMessage.error(data.message || '查询失败')
     }
   } catch (e: unknown) {
-    ElMessage.error('网络错误: ' + (e?.message || ''))
+    ElMessage.error('网络错误: ' + (e instanceof Error ? e.message : ''))
   } finally { loading.value = false }
 }
 

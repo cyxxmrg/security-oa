@@ -37,8 +37,8 @@ export interface Tracking {
   [key: string]: any
 }
 export interface ConstructionLog { id?: number; [key: string]: any }
-export interface ProcessInstance extends import('@/views/process/types').ProcessInstance { [key: string]: any }
-export interface ProcessInspection extends import('@/views/process/types').Inspection { [key: string]: any }
+export type ProcessInstance = import('@/views/process/types').ProcessInstance & Record<string, any>
+export type ProcessInspection = import('@/views/process/types').Inspection & Record<string, any>
 
 export interface EmployeeOption {
   id: number
@@ -153,6 +153,8 @@ export const riskActionLabel = (r: { is_mitigated?: boolean; is_closed?: boolean
   return '处理'
 }
 
-export const RISK_ACTION_MAP: Record<string, string> = {
-  mitigate: '缓解', close: '关闭', followup: '跟进',
+export const RISK_ACTION_MAP: Record<string, { tab: string; msg: string }> = {
+  mitigate: { tab: 'stage', msg: '请在阶段流程中完成风险缓解' },
+  close: { tab: 'stage', msg: '请在阶段流程中关闭风险' },
+  followup: { tab: 'stage', msg: '请在阶段流程中跟进风险' },
 }

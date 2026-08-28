@@ -120,12 +120,30 @@ const loading = ref(false)
 const saving = ref(false)
 const seeding = ref(false)
 const kinds = ref<Record<string, string>>({})
-const groups = ref<Record<string, unknown>[]>([])
+interface DictItem {
+  id?: number
+  kind: string
+  code: string
+  label: string
+  color?: string
+  sort_order: number
+  is_active: boolean
+  is_default: boolean
+  description?: string
+}
+interface DictGroup {
+  kind: string
+  label: string
+  count: number
+  items: DictItem[]
+}
+interface RequestError { response?: { data?: { message?: string } }; message?: string }
+const groups = ref<DictGroup[]>([])
 const activeKinds = ref<string[]>([])
 
 const dialogVisible = ref(false)
 const editing = ref(false)
-const form = ref<Record<string, unknown>>({ kind: '', code: '', label: '', color: '', sort_order: 0, is_active: true, is_default: false, description: '' })
+const form = ref<DictItem>({ kind: '', code: '', label: '', color: '', sort_order: 0, is_active: true, is_default: false, description: '' })
 
 const colorOptions = ['success', 'warning', 'danger', 'info', 'primary']
 
@@ -142,13 +160,13 @@ const loadData = async () => {
       get(`${API}/dict/kinds`),
       get(`${API}/dict/grouped`),
     ])
-    kinds.value = kindsRes.data || {}
-    groups.value = groupedRes.data || []
+    kinds.value = (kindsRes.data || {}) as Record<string, string>
+    groups.value = (groupedRes.data || []) as DictGroup[]
     if (activeKinds.value.length === 0) {
       activeKinds.value = groups.value.map(g => g.kind)
     }
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    ElMessage.error('加载失败: ' + (e instanceof Error ? e.message : ''))
   } finally { loading.value = false }
 }
 
@@ -158,7 +176,7 @@ const openAdd = () => {
   dialogVisible.value = true
 }
 
-const openEdit = (row: Record<string, unknown>) => {
+const openEdit = (row: any) => {
   editing.value = true
   form.value = { ...row }
   dialogVisible.value = true
@@ -181,11 +199,12 @@ const submitForm = async () => {
     dialogVisible.value = false
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '保存失败')
   } finally { saving.value = false }
 }
 
-const disableItem = async (row: Record<string, unknown>) => {
+const disableItem = async (row: any) => {
   try { await ElMessageBox.confirm(`停用 "${row.label}"?`, '确认', { type: 'warning' }) } catch { return }
   try {
     await del(`${API}/dict/${row.id}`)
@@ -194,7 +213,7 @@ const disableItem = async (row: Record<string, unknown>) => {
   } catch (e: unknown) { ElMessage.error('停用失败') }
 }
 
-const enableItem = async (row: Record<string, unknown>) => {
+const enableItem = async (row: any) => {
   try {
     await patch(`${API}/dict/${row.id}`, { is_active: true })
     ElMessage.success('已启用')
@@ -210,7 +229,8 @@ const seedDefaults = async () => {
     ElMessage.success(res.message || '导入完成')
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error(e?.response?.data?.message || '导入失败')
+    const error = e as RequestError
+    ElMessage.error(error.response?.data?.message || error.message || '导入失败')
   } finally { seeding.value = false }
 }
 
