@@ -91,11 +91,11 @@
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click.stop="emit('detail', row)">详情</el-button>
-          <el-button link type="success" size="small" @click.stop="emit('stock-in', row)">入库</el-button>
-          <el-button link type="warning" size="small" @click.stop="emit('stock-out', row)">出库</el-button>
-          <el-button link type="primary" size="small" @click.stop="emit('edit', row)">编辑</el-button>
-          <el-button link type="danger"  size="small" @click.stop="emit('delete', row)">删除</el-button>
+          <el-button link type="primary" size="small" @click.stop="emitDetail(row)">详情</el-button>
+          <el-button link type="success" size="small" @click.stop="emitStockIn(row)">入库</el-button>
+          <el-button link type="warning" size="small" @click.stop="emitStockOut(row)">出库</el-button>
+          <el-button link type="primary" size="small" @click.stop="emitEdit(row)">编辑</el-button>
+          <el-button link type="danger"  size="small" @click.stop="emitDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -119,6 +119,7 @@
 import { ref, watch } from 'vue'
 import { Search, Box } from '@element-plus/icons-vue'
 import type { InventoryItem, WarehouseOption } from '../types'
+import type { TableSortOrder } from 'element-plus'
 
 const props = defineProps<{
   list: InventoryItem[]
@@ -159,7 +160,7 @@ const sortField = ref('')
 const sortOrder = ref('')
 const maxHeight = ref(window.innerHeight - 320)
 
-const defaultSort = { prop: '', order: '' }
+const defaultSort: { prop: string; order: TableSortOrder } = { prop: '', order: null }
 
 watch(() => props.currentCategory, () => {
   // 切换分类时自动重发搜索
@@ -178,16 +179,21 @@ function doSearch() {
   })
 }
 
-function onSortChange({ prop, order }: { prop?: string; order?: string }) {
+function onSortChange({ prop, order }: { prop: string | null; order: TableSortOrder | null }) {
   sortField.value = prop || ''
   sortOrder.value = order === 'ascending' ? 'asc' : (order === 'descending' ? 'desc' : '')
   doSearch()
 }
 
-function onRowClick(row: InventoryItem) {
-  emit('row-click', row)
-  emit('detail', row)
+function onRowClick(row: any) {
+  emit('row-click', row as InventoryItem)
+  emit('detail', row as InventoryItem)
 }
+const emitDetail = (row: any) => emit('detail', row as InventoryItem)
+const emitStockIn = (row: any) => emit('stock-in', row as InventoryItem)
+const emitStockOut = (row: any) => emit('stock-out', row as InventoryItem)
+const emitEdit = (row: any) => emit('edit', row as InventoryItem)
+const emitDelete = (row: any) => emit('delete', row as InventoryItem)
 
 function stockClass(row: InventoryItem) {
   if (row.is_low_stock) return 'stock-text stock-text--danger'
