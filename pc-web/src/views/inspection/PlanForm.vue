@@ -160,9 +160,9 @@ const isEdit = computed(() => !!route.params.id)
 const loading = ref(false)
 const submitting = ref(false)
 const formRef = ref()
-const contracts = ref<Record<string, unknown>[]>([])
+const contracts = ref<any[]>([])
 
-const form = reactive<Record<string, unknown>>({
+const form = reactive<any>({
   contract_id: null,
   name: '',
   scope: '',
@@ -221,7 +221,7 @@ const loadPlan = async () => {
   loading.value = true
   try {
     const r = await inspection.getPlan(Number(route.params.id))
-    const p: InspectionPlan = r?.data
+    const p: InspectionPlan = (r as any)?.data ?? (r as any)
     if (p) {
       Object.assign(form, {
         contract_id: p.contract_id,
@@ -252,7 +252,7 @@ const onSubmit = async () => {
   submitting.value = true
   try {
     // 解析 assigned_to (逗号分隔转 JSON 数组)
-    let assignedTo: Record<string, unknown> = form.assigned_to
+    let assignedTo: any = form.assigned_to
     if (assignedToInput.value) {
       const ids = assignedToInput.value.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !!n)
       assignedTo = ids.length === 1 ? ids[0] : JSON.stringify(ids)
@@ -261,15 +261,15 @@ const onSubmit = async () => {
     }
 
     // 处理 checklist_template: options_str 转 options 数组
-    const checklist = (form.checklist_template || []).map((it: Record<string, unknown>) => {
-      const cleaned: Record<string, unknown> = { name: it.name, type: it.type, required: !!it.required, normal_value: it.normal_value }
+    const checklist = (form.checklist_template || []).map((it: any) => {
+      const cleaned: any = { name: it.name, type: it.type, required: !!it.required, normal_value: it.normal_value }
       if (it.type === 'select' && it.options_str) {
         cleaned.options = it.options_str.split(',').map((s: string) => s.trim()).filter(Boolean)
       }
       return cleaned
     })
 
-    const payload: Record<string, unknown> = {
+    const payload: any = {
       contract_id: form.contract_id,
       name: form.name,
       scope: form.scope,
@@ -297,7 +297,7 @@ const onSubmit = async () => {
     } else {
       router.push('/inspection/plans')
     }
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
   } finally {
     submitting.value = false

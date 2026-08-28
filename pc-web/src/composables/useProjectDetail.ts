@@ -14,7 +14,7 @@ import type {
  * 把分页响应解包成数组
  * 后端: {code, data: {current_page, data, total}} → 拦截器解包后 res = {current_page, data, total}
  */
-function extractList(res: Record<string, unknown>): Record<string, unknown>[] {
+function extractList(res: any): any[] {
   if (!res) return []
   if (Array.isArray(res)) return res
   if (Array.isArray(res.data)) return res.data
@@ -53,7 +53,7 @@ export function useProjectDetail(projectId: () => number) {
     try {
       const res = await get(`/projects/${pid}`)
       project.value = unwrapItem(res) || {}
-    } catch (e: unknown) {
+    } catch (e: any) {
       // V1.2.9k: 404 → 项目不存在/已删除, 友好提示 + 自动跳回列表 (替代红条 "资源不存在或参数错误")
       const status = e?.response?.status ?? e?.status
       if (status === 404 || /不存在|not found/i.test(e?.message || e?.response?.data?.message || '')) {
@@ -80,7 +80,7 @@ export function useProjectDetail(projectId: () => number) {
       const res = await get(`/projects/${pid}/tracking`)
       const d = unwrapItem(res) || {}
       tracking.value = d && d.payment ? d : JSON.parse(JSON.stringify(EMPTY_TRACKING))
-    } catch (e: unknown) {
+    } catch (e: any) {
       console.error('加载项目跟踪数据失败', e?.message || e)
     }
   }
@@ -109,7 +109,7 @@ export function useProjectDetail(projectId: () => number) {
       ])
       processInstances.value = extractList(instRes)
       processInspections.value = extractList(inspRes)
-    } catch (e: unknown) {
+    } catch (e: any) {
       console.error('[loadProcessData]', e)
       processInstances.value = []
       processInspections.value = []
@@ -125,7 +125,7 @@ export function useProjectDetail(projectId: () => number) {
       ElMessage.success('施工日志已记录')
       await loadLogs()
       return true
-    } catch (e: unknown) {
+    } catch (e: any) {
       ElMessage.error(e?.response?.data?.message || e?.message || '记录失败')
       return false
     }

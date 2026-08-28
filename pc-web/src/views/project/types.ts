@@ -1,5 +1,45 @@
 // 项目相关共享类型 — 由各组件统一引用, 收窄类型、消除隐式松散类型
 
+export type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+
+export interface Project {
+  id: number
+  name?: string
+  code?: string
+  status?: string
+  stage?: string
+  progress?: number | string
+  total_amount?: number | string
+  contract_amount?: number | string
+  budget_device?: number | string
+  budget_material?: number | string
+  budget_labor?: number | string
+  customer?: { id?: number; name?: string } | null
+  manager?: { id?: number; name?: string } | null
+  [key: string]: any
+}
+
+export interface PaymentNode { name?: string; amount?: number | string; paid_amount?: number | string; [key: string]: any }
+export interface TimelineEntry { time?: string; title?: string; description?: string; [key: string]: any }
+export interface Risk { id?: number; title?: string; is_mitigated?: boolean; is_closed?: boolean; [key: string]: any }
+export interface MaterialStats { issued_records?: number; issued_cost?: number | string; [key: string]: any }
+export interface PurchaseStats { fulfill_rate?: number | string; [key: string]: any }
+export interface Tracking {
+  current_stage?: string
+  current_stage_label?: string
+  display_progress?: number | string
+  stage_progress?: any[]
+  payment?: { contract_amount?: number | string; paid_amount?: number | string; payment_rate?: number | string; overdue_count?: number; overdue_amount?: number | string; pending_count?: number; nodes?: PaymentNode[]; [key: string]: any }
+  purchase_stats?: PurchaseStats
+  material_stats?: MaterialStats
+  risks?: Risk[]
+  timeline?: TimelineEntry[]
+  [key: string]: any
+}
+export interface ConstructionLog { id?: number; [key: string]: any }
+export type ProcessInstance = import('@/views/process/types').ProcessInstance
+export type ProcessInspection = import('@/views/process/types').Inspection
+
 export interface EmployeeOption {
   id: number
   name?: string
