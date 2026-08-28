@@ -226,7 +226,7 @@ const isSystem = computed(() => {
 })
 
 // 双向绑定一份本地副本（表单 v-model 需要）
-const settings = ref({ ...systemConfigStore.settings })
+const settings = ref<Record<string, any>>({ ...systemConfigStore.settings })
 const saving = ref(false)
 const loading = ref(false)
 const backingUp = ref(false)
