@@ -180,31 +180,35 @@ import PlanForm from './PlanForm.vue'
 
 const router = useRouter()
 const loading = ref(false)
-const stats = ref<Record<string, unknown>>({})
+interface OverviewStats { active_plans?: number; total_plans?: number; pending_tasks?: number; overdue_tasks?: number; monthly_tasks?: number; completed_tasks?: number; open_issues?: number; monthly_issues?: number; auto_work_orders?: number }
+interface OverviewData { stats?: OverviewStats; upcomingTasks?: InspectionTask[]; recentTasks?: InspectionTask[]; recentIssues?: InspectionIssue[] }
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+const stats = ref<OverviewStats>({})
 const upcomingTasks = ref<InspectionTask[]>([])
 const recentTasks = ref<InspectionTask[]>([])
 const recentIssues = ref<InspectionIssue[]>([])
 const showPlanForm = ref(false)
 
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
-const taskStatusColor = (s: string) => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: '', cancelled: '' }[s] || '')
+const taskStatusColor = (s: string): TagType => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: 'info', cancelled: 'info' }[s] as TagType || 'info')
 const issueStatusLabel = (s: string) => ISSUE_STATUS_LABEL[s as keyof typeof ISSUE_STATUS_LABEL] || s
-const issueStatusColor = (s: string) => ({ open: 'danger', work_order_created: 'warning', resolved: 'success', ignored: '' }[s] || '')
+const issueStatusColor = (s: string): TagType => ({ open: 'danger', work_order_created: 'warning', resolved: 'success', ignored: 'info' }[s] as TagType || 'info')
 const severityLabel = (s: string) => SEVERITY_LABEL[s as keyof typeof SEVERITY_LABEL] || s
-const severityColor = (s: string) => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] || '')
+const severityColor = (s: string): TagType => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] as TagType || 'info')
 
-const goTask = (row: InspectionTask) => router.push(`/inspection/tasks/checkin/${row.id}`)
+const goTask = (row: any) => router.push(`/inspection/tasks/checkin/${row.id}`)
 
 const loadAll = async () => {
   loading.value = true
   try {
-    const d: Record<string, unknown> = unwrapItem(await inspection.overview())
-    stats.value = d?.stats || {}
-    upcomingTasks.value = d?.upcomingTasks || []
-    recentTasks.value = d?.recentTasks || []
-    recentIssues.value = d?.recentIssues || []
+    const d = unwrapItem<OverviewData>(await inspection.overview())
+    stats.value = d.stats || {}
+    upcomingTasks.value = d.upcomingTasks || []
+    recentTasks.value = d.recentTasks || []
+    recentIssues.value = d.recentIssues || []
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '加载失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '加载失败')
   } finally {
     loading.value = false
   }
