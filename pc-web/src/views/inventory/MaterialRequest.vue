@@ -169,10 +169,10 @@ import RequestFormDialog from './components/material-request/RequestFormDialog.v
 import ItemPickerDialog from './components/material-request/ItemPickerDialog.vue'
 import type { MaterialRequest, InventoryItem, WarehouseOption } from './types'
 
-interface BusinessOption { id: number; name: string }
+interface BusinessOption { id: number; name: string; username?: string }
 
 const searchKey = ref('')
-const list = ref<MaterialRequest[]>([])
+const list = ref<any[]>([])
 const loading = ref(false)
 const pagination = reactive({ page: 1, per_page: 15, total: 0 })
 const itemOptions = ref<InventoryItem[]>([])
@@ -232,7 +232,7 @@ async function loadCurrentUser() {
     }
     // 异步刷新
     const res = await get('/auth/me')
-    const u = (res?.data?.user || res?.data) as { id?: number; name?: string } | null
+    const u = (res?.data?.user || res?.data) as { id?: number; name?: string; username?: string } | null
     if (u && u.id) curUser.value = { id: u.id, name: u.name || u.username || '' }
   } catch(e) { /* ignore */ }
 }
@@ -249,7 +249,7 @@ const curUser = ref<BusinessOption | null>(null)
 const showFormDialog = ref(false)
 // V1.2.14p: 详情弹窗
 const showDetail = ref(false)
-const detailItem = ref<Record<string, unknown> | null>(null)
+const detailItem = ref<any>(null)
 async function openDetail(id: number | string) {
   showDetail.value = true
   detailItem.value = null
