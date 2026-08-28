@@ -271,7 +271,7 @@ const confirmPay = async () => {
   } catch (e) {} finally { paying.value = false }
 }
 
-const showDetail = async (row: Record<string, unknown>) => {
+const showDetail = async (row: Record<string, any>) => {
   try {
     currentSettlement.value = (await getReferralSettlementDetail(row.id)).data
     showDetailDrawer.value = true

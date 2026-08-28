@@ -200,8 +200,8 @@ const props = defineProps<{
   visible: boolean
   oppId: number | string
   stage: string
-  record: StageRecord | null
-  stageSchema: Record<string, Record<string, StageField>>
+  record: any
+  stageSchema: Record<string, any>
   loading: boolean
 }>()
 
@@ -211,7 +211,7 @@ const emit = defineEmits<{
 }>()
 
 // ========== 表单状态 ==========
-interface FormState { data: Record<string, unknown>; note: string; entered_at: string; next_assignee_id: number | null; next_due_at: string }
+interface FormState { data: Record<string, any>; note: string; entered_at: string; next_assignee_id: number | null; next_due_at: string }
 const formRef = ref<FormInstance | null>(null)
 const formData = ref<FormState>({ data: {}, note: '', entered_at: '', next_assignee_id: null, next_due_at: '' })
 
