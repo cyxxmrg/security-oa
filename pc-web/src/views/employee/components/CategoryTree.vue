@@ -290,7 +290,7 @@ function cannotDelete(data: TreeNode) {
 function deleteHint(data: TreeNode) {
   if (!data) return ''
   if (data.type === 'dept') {
-    if (data.children?.length > 0) return '(有子部门)'
+    if ((data.children?.length ?? 0) > 0) return '(有子部门)'
     if (data.count > 0) return `(有 ${data.count} 名员工)`
   }
   if (data.type === 'position' && data.count > 0) {
@@ -346,7 +346,7 @@ function handleCtx(action: 'addChild' | 'addPos' | 'rename' | 'delete') {
     if (ctxMenu.data.type === 'dept') {
       deptId = Number(String(ctxMenu.data.id).replace('d-', ''))
     } else if (ctxMenu.data.type === 'position') {
-      deptId = ctxMenu.data.raw?.department_id || null
+      deptId = Number(ctxMenu.data.raw?.department_id) || null
     }
     emit('edit-pos', { id: 'new', type: 'position', label: '', department_id: deptId, isNew: true })
   } else if (action === 'rename') {
