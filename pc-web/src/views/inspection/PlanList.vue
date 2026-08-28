@@ -95,7 +95,8 @@ const showDetail = (id: number) => { detailPlanId.value = id; showDetailDialog.v
 const pagination = reactive({ total: 0, page: 1, per_page: 15 })
 const filter = reactive<{ keyword: string; status: string; frequency: string }>({ keyword: '', status: '', frequency: '' })
 
-const planStatusColor = (s: string) => ({ active: 'success', paused: 'warning', expired: 'info', cancelled: '' }[s] || '')
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+const planStatusColor = (s: string): TagType => ({ active: 'success', paused: 'warning', expired: 'info', cancelled: 'info' }[s] as TagType || 'info')
 
 const loadList = async (page = 1) => {
   pagination.page = page
@@ -112,7 +113,8 @@ const loadList = async (page = 1) => {
     list.value = d.data || []
     pagination.total = d.total || 0
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '加载失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '加载失败')
   } finally {
     loading.value = false
   }
@@ -125,25 +127,25 @@ const resetFilter = () => {
   loadList(1)
 }
 
-const handleToggle = async (row: InspectionPlan) => {
+const handleToggle = async (row: any) => {
   try {
     await ElMessageBox.confirm(`确定要${row.status === 'active' ? '暂停' : '启用'}计划 [${row.name}] 吗?`, '确认操作', { type: 'warning' })
     await inspection.togglePlan(row.id)
     ElMessage.success('操作成功')
     loadList(pagination.page)
   } catch (e: unknown) {
-    if (e !== 'cancel') ElMessage.error(e?.message || '操作失败')
+    if (e !== 'cancel') { const message = e && typeof e === 'object' && 'message' in e ? e.message : e; ElMessage.error(message || '操作失败') }
   }
 }
 
-const handleGenerate = async (row: InspectionPlan) => {
+const handleGenerate = async (row: any) => {
   try {
     await ElMessageBox.confirm(`立即为计划 [${row.name}] 增量生成执行任务?`, '确认', { type: 'info' })
     const r = await inspection.generateTasks(row.id)
     ElMessage.success(`已生成 ${r?.data?.generated ?? 0} 个任务`)
     loadList(pagination.page)
   } catch (e: unknown) {
-    if (e !== 'cancel') ElMessage.error(e?.message || '生成失败')
+    if (e !== 'cancel') { const message = e && typeof e === 'object' && 'message' in e ? e.message : e; ElMessage.error(message || '生成失败') }
   }
 }
 

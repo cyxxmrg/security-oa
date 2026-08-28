@@ -169,9 +169,10 @@ const checkoutForm = reactive<{ answers: Record<string, unknown>; summary: strin
 const checkoutSubmitting = ref(false)
 
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
-const taskStatusColor = (s: string) => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: '', cancelled: '' }[s] || '')
-const issueStatusColor = (s: string) => ({ open: 'danger', work_order_created: 'warning', resolved: 'success', ignored: '' }[s] || '')
-const severityColor = (s: string) => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] || '')
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+const taskStatusColor = (s: string): TagType => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: 'info', cancelled: 'info' }[s] as TagType || 'info')
+const issueStatusColor = (s: string): TagType => ({ open: 'danger', work_order_created: 'warning', resolved: 'success', ignored: 'info' }[s] as TagType || 'info')
+const severityColor = (s: string): TagType => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] as TagType || 'info')
 
 const addPhoto = () => {
   const url = prompt('输入照片 URL (演示用)')
@@ -194,7 +195,8 @@ const onCheckin = async () => {
     ElMessage.success('打卡成功, 任务进入执行中状态')
     loadTask()
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '打卡失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '打卡失败')
   } finally {
     checkinSubmitting.value = false
   }
@@ -213,7 +215,8 @@ const onCheckout = async () => {
     ElMessage.success('已完成, 高严重度异常已自动转工单')
     loadTask()
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '提交失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '提交失败')
   } finally {
     checkoutSubmitting.value = false
   }
@@ -223,9 +226,10 @@ const loadTask = async () => {
   loading.value = true
   try {
     const r = await inspection.getTask(Number(route.params.id))
-    task.value = r?.data
+    task.value = r?.data as InspectionTask
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '加载失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '加载失败')
   } finally {
     loading.value = false
   }
