@@ -37,7 +37,7 @@
           <el-descriptions-item label="计划完成">{{ formatDate(project.end_date) }}</el-descriptions-item>
           <el-descriptions-item label="阶段状态">
             <el-tag :type="statusTagType(project.status)" size="small">
-              {{ statusLabel(project.status) }}
+              {{ statusLabel(project.status || '') }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="完成进度">

@@ -44,10 +44,10 @@
         <template #default="{ row }"><span class="id-text">#{{ row.id }}</span></template>
       </el-table-column>
       <el-table-column label="工序名称" min-width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ (row as Record<string, unknown>).name || (row as Record<string, unknown>).template?.name || row.template_name || '-' }}</template>
+        <template #default="{ row }">{{ (row as any).name || (row as any).template?.name || row.template_name || '-' }}</template>
       </el-table-column>
       <el-table-column label="工序编号" min-width="110" show-overflow-tooltip>
-        <template #default="{ row }">{{ (row as Record<string, unknown>).template?.code || row.code || '-' }}</template>
+        <template #default="{ row }">{{ (row as any).template?.code || row.code || '-' }}</template>
       </el-table-column>
       <el-table-column label="计划工期" min-width="190">
         <template #default="{ row }">
@@ -71,7 +71,7 @@
         <template #default="{ row }">{{ row.location || '-' }}</template>
       </el-table-column>
       <el-table-column label="负责人" min-width="100" show-overflow-tooltip>
-        <template #default="{ row }">{{ (row as Record<string, unknown>).foreman?.name || row.foreman_name || row.assignee_name || '-' }}</template>
+        <template #default="{ row }">{{ (row as any).foreman?.name || row.foreman_name || row.assignee_name || '-' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
@@ -97,16 +97,16 @@
         <el-table :data="inspections" border @row-click="onRowClick">
           <el-table-column prop="id" label="ID" width="70" align="center" />
           <el-table-column label="工序" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">{{ (row as Record<string, unknown>).process_instance?.name || (row as Record<string, unknown>).processInstance?.name || row.process_name || row.process_instance_id || '-' }}</template>
+            <template #default="{ row }">{{ (row as any).process_instance?.name || (row as any).processInstance?.name || row.process_name || row.process_instance_id || '-' }}</template>
           </el-table-column>
           <el-table-column label="工序编号" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">{{ (row as Record<string, unknown>).process_instance?.code || (row as Record<string, unknown>).processInstance?.code || '-' }}</template>
+            <template #default="{ row }">{{ (row as any).process_instance?.code || (row as any).processInstance?.code || '-' }}</template>
           </el-table-column>
           <el-table-column label="验收类型" width="100" align="center">
             <template #default="{ row }">{{ inspectionTypeLabel(row.inspection_type) }}</template>
           </el-table-column>
           <el-table-column label="验收人" min-width="100" show-overflow-tooltip>
-            <template #default="{ row }">{{ (row as Record<string, unknown>).inspector?.name || row.inspector_name || '-' }}</template>
+            <template #default="{ row }">{{ (row as any).inspector?.name || row.inspector_name || '-' }}</template>
           </el-table-column>
           <el-table-column label="验收时间" min-width="150">
             <template #default="{ row }">{{ formatInspectionTime((row as Record<string, unknown>).inspection_date || row.inspected_at) }}</template>
@@ -218,7 +218,7 @@ const emit = defineEmits<{
 }>()
 
 const collapseOpen = ref<string[]>([])  // 默认折叠
-const templateOptions = ref<Array<{ id: number; name: string }>>([])
+const templateOptions = ref<any[]>([])
 
 const createDialog = reactive({
   visible: false,
@@ -232,7 +232,7 @@ const createDialog = reactive({
   rules: {
     template_id: [{ required: true, message: '请选择工序模板', trigger: 'change' }],
     planned_start: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
-  } as Record<string, unknown>,
+  } as any,
 })
 
 const createFormRef = ref<{ validate: () => Promise<boolean> } | null>(null)
@@ -242,7 +242,7 @@ const stats = computed(() => {
   const insp = props.inspections || []
   return {
     totalInstances: insts.length,
-    completedInstances: insts.filter((i: Record<string, unknown>) => i.status === 'completed').length,
+    completedInstances: insts.filter(i => i.status === 'completed').length,
     totalInspections: insp.length,
     passedInspections: insp.filter((i: Record<string, unknown>) => i.result === 'pass').length,
   }
@@ -331,7 +331,7 @@ const formatInspectionTime = (s?: string) => {
   return s.slice(0, 16)
 }
 
-const onRowClick = (row: Record<string, unknown>) => {
+const onRowClick = (row: ProcessInspection) => {
   if (row && row.process_instance_id) emit('open-instance', row.process_instance_id)
 }
 
@@ -345,7 +345,7 @@ const loadTemplateOptions = async () => {
   createDialog.templateLoading = true
   try {
     const res = await processApi.templateList({ per_page: 200 })
-    templateOptions.value = extractList<{ id: number; name: string }>(res)
+    templateOptions.value = extractList<any>(res)
   } catch (e) {
     console.error('[loadTemplateOptions]', e)
     templateOptions.value = []
@@ -382,7 +382,7 @@ const submitCreate = async () => {
     createDialog.visible = false
     resetCreateDialog()
     emit('refresh')
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || e?.message || '创建失败')
   } finally {
     createDialog.submitting = false

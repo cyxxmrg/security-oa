@@ -37,8 +37,8 @@ export interface Tracking {
   [key: string]: any
 }
 export interface ConstructionLog { id?: number; [key: string]: any }
-export type ProcessInstance = import('@/views/process/types').ProcessInstance
-export type ProcessInspection = import('@/views/process/types').Inspection
+export interface ProcessInstance extends import('@/views/process/types').ProcessInstance { [key: string]: any }
+export interface ProcessInspection extends import('@/views/process/types').Inspection { [key: string]: any }
 
 export interface EmployeeOption {
   id: number
