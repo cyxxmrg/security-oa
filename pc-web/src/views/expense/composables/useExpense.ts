@@ -81,7 +81,7 @@ export function useExpense() {
   }
 
   const formatMoney = (v: unknown) => {
-    const n = parseFloat(v)
+    const n = parseFloat(String(v ?? ''))
     return isNaN(n) ? '0.00' : n.toFixed(2)
   }
 
@@ -125,8 +125,9 @@ export function useExpense() {
       resetForm()
       showApplyDialog.value = false
       loadList(1)
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || e.message || '提交失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || error.message || '提交失败')
     } finally { submitting.value = false }
   }
 
@@ -287,8 +288,9 @@ export function useExpense() {
       loadList(pagination.page)
       loadStats()
       if (showDetailDialog.value) handleView(row)
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || e.message || '撤销失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || error.message || '撤销失败')
     }
   }
 
@@ -303,8 +305,9 @@ export function useExpense() {
       ElMessage.success(`${row.claim_no} 已删除`)
       loadList(pagination.page)
       loadStats()
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || e.message || '删除失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || error.message || '删除失败')
     }
   }
 
@@ -332,8 +335,9 @@ export function useExpense() {
       showPayDialog.value = false
       loadList(pagination.page)
       loadStats()
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || e.message || '付款失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || error.message || '付款失败')
     } finally {
       payLoading.value = false
     }

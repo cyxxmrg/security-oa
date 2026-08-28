@@ -64,7 +64,7 @@
         border
         stripe
         height="600"
-        :row-key="(row: Record<string, unknown>) => row.name"
+        :row-key="(row: Record<string, unknown>) => String(row.name || '')"
         style="width: 100%"
       >
         <el-table-column label="模块" prop="module" width="160" fixed>
@@ -103,9 +103,11 @@ interface Permission {
   name: string
   module: string
   label: string
+  [key: string]: unknown
 }
 
-const currentUser = ref<Record<string, unknown>>({ username: '', roles: [] })
+interface CurrentUser { username?: string; roles?: string[]; [key: string]: unknown }
+const currentUser = ref<CurrentUser>({ username: '', roles: [] })
 const myPerms = ref<Permission[]>([])
 const allPerms = ref<Permission[]>([])
 const roleInheritance = ref<{ edges: Array<{ parent: string; child: string }> }>({ edges: [] })
@@ -185,38 +187,39 @@ const loadData = async () => {
     const myRolesRes: Record<string, unknown> = userId
       ? await get(`/users/${userId}/roles/active`).catch(() => ({ data: { roles: [] } }))
       : { data: { roles: [] } }
-    currentUser.value = me?.user || me
-    myPerms.value = my || []
+    currentUser.value = (me?.user || me || {}) as CurrentUser
+    myPerms.value = Array.isArray(my) ? my as Permission[] : []
     // permissions/tree 返回树状, 平展为 Permission[]
-    const tree = perm || []
+    const tree = Array.isArray(perm) ? perm as Record<string, unknown>[] : []
     const flat: Permission[] = []
     const walk = (nodes: Record<string, unknown>[]) => {
       nodes.forEach(n => {
-        if (n.children) {
-          walk(n.children)
+        if (Array.isArray(n.children)) {
+          walk(n.children as Record<string, unknown>[])
         } else if (n.name) {
           flat.push({
-            id: n.id || 0,
-            name: n.name,
-            module: n.module || (n.id && typeof n.id === 'string' ? n.id : '其他'),
-            label: n.label || n.name,
+            id: Number(n.id) || 0,
+            name: String(n.name),
+            module: String(n.module || (n.id && typeof n.id === 'string' ? n.id : '其他')),
+            label: String(n.label || n.name),
           })
         }
       })
     }
     walk(tree)
     allPerms.value = flat
-    roleInheritance.value = inh || { edges: [] }
+    roleInheritance.value = inh && typeof inh === 'object' ? inh as { edges: Array<{ parent: string; child: string }> } : { edges: [] }
     // V0.5.3: 提取临时角色
-    const roles = (myRolesRes.data?.roles) || []
+    const roles = Array.isArray((myRolesRes.data as Record<string, unknown> | undefined)?.roles) ? (myRolesRes.data as { roles: Record<string, unknown>[] }).roles : []
     temporaryRoles.value = roles
       .filter((r: Record<string, unknown>) => r.expires_at)
       .map((r: Record<string, unknown>) => {
         const days = Math.max(0, Math.ceil((new Date(r.expires_at).getTime() - Date.now()) / 86400000))
-        return { name: r.name, days_left: days, expires_at: r.expires_at }
+        return { name: String(r.name || ''), days_left: days, expires_at: String(r.expires_at) }
       })
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载失败: ' + (message || ''))
   }
 }
 
