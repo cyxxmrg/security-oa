@@ -96,14 +96,14 @@ const loadProject = async () => {
   try {
     const res = await get(`/projects/${projectId.value}`)
     // V0.6.3: res = {code, data: <entity>}
-    const p = unwrapItem<Record<string, unknown>>(res)
+    const p = unwrapItem<any>(res)
     projectName.value = p.name || '项目甘特图'
     projectStatus.value = p.status || ''
     projectProgress.value = p.progress || 0
     if (p.start_date) projectStart.value = p.start_date.slice(0, 10)
     if (p.end_date) projectEnd.value = p.end_date.slice(0, 10)
     projectNotFound.value = false
-  } catch (e: unknown) {
+  } catch (e: any) {
     // V1.2.9k: 404 → 项目不存在 (DB wipe 后或 URL 拼错), 不再 ElMessage 红条
     const status = e?.response?.status ?? e?.status
     if (status === 404 || /不存在|not found/i.test(e?.message || '')) {
@@ -128,7 +128,7 @@ const loadLogs = async () => {
     // V0.6.3: res = {code, data: paginator}
     const d = res?.data ?? {}
     const items = Array.isArray(d?.data) ? d.data : []
-    tasks.value = items.map((log: Record<string, unknown>, i: number) => {
+    tasks.value = items.map((log: any, i: number) => {
       const start = log.work_date ? log.work_date.slice(0, 10) : projectStart.value
       return {
         name: log.content ? log.content.slice(0, 30) + (log.content.length > 30 ? '...' : '') : `施工日志 ${i + 1}`,
@@ -205,13 +205,13 @@ const submitUpdate = (payload: { name: string; progress: number; status: TaskSta
 }
 
 const handleExportGantt = () => {
-  const tasks = (ganttData.value && ganttData.value.tasks) || (Array.isArray(ganttData.value) ? ganttData.value : [])
-  if (!tasks.length) {
+  const exportTasks = tasks.value
+  if (!exportTasks.length) {
     ElMessage.warning('暂无甘特图数据可导出')
     return
   }
   const headers = ['任务', '开始日期', '结束日期', '进度', '负责人', '状态']
-  const rows = tasks.map((t: Record<string, unknown>) => [
+  const rows = exportTasks.map((t: any) => [
     t.name || t.text || '-',
     t.start || t.start_date || '-',
     t.end || t.end_date || '-',
@@ -222,13 +222,13 @@ const handleExportGantt = () => {
   exportExcelLike(headers, rows, '甘特图任务', { title: '项目甘特图任务清单' })
 }
 const handlePrint = () => {
-  const tasks = (ganttData.value && ganttData.value.tasks) || (Array.isArray(ganttData.value) ? ganttData.value : [])
-  if (!tasks.length) {
+  const printTasks = tasks.value
+  if (!printTasks.length) {
     ElMessage.warning('暂无甘特图数据可打印')
     return
   }
   const headers = ['任务', '开始日期', '结束日期', '进度', '负责人', '状态']
-  const rows = tasks.map((t: Record<string, unknown>) => [
+  const rows = printTasks.map((t: any) => [
     t.name || t.text || '-',
     t.start || t.start_date || '-',
     t.end || t.end_date || '-',
