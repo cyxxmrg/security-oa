@@ -168,7 +168,7 @@
 
 <script setup lang="ts">
 import { computed, watch, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type RouteRecordRaw } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useSystemConfigStore } from '@/stores/systemConfig'
@@ -195,6 +195,7 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 const systemConfigStore = useSystemConfigStore()
 const cachedViews = ref<string[]>([])
+type MenuRoute = { path: string; meta?: { title?: string; icon?: string }; children?: MenuRoute[] }
 
 // 移动端检测
 const deviceCheck = useDeviceCheck()
@@ -221,7 +222,7 @@ async function loadUnreadCount() {
   } catch (e: unknown) {
     // V1.2 fix: system 用户访问业务 API (如 /notifications) 会被 ensure_business 拦截
     // 这时 403 不应弹错误 toast (路由守卫已经做过提示), 这里直接静默
-    if (e?.status === 403) {
+    if (e && typeof e === 'object' && 'status' in e && e.status === 403) {
       unreadCount.value = 0
     } else {
       /* 未登录或网络异常: 静默 */
@@ -283,16 +284,17 @@ const MENU_GROUPS = [
   { name: '系统设置', icon: '', path: 'settings', paths: ['settings'] },
 ]
 
-const menuRoutes = computed(() => {
+const menuRoutes = computed<MenuRoute[]>(() => {
   const userType = (userStore.userInfo as Record<string, unknown>)?.user_type ?? 'business'
   const isSystem = userType === 'system'
   const mainRoute = router.options.routes.find(r => r.path === '/')
-  const allChildren = mainRoute?.children || []
+  const allChildren = (mainRoute?.children || []) as RouteRecordRaw[]
 
-  const isVisible = (item: Record<string, unknown>) => {
-    if (!item.meta?.title || item.meta?.hidden || item.meta?.hideInMenu) return false
-    if (item.meta?.systemOnly && !isSystem) return false
-    if (item.meta?.businessOnly && isSystem) return false
+  const isVisible = (item: RouteRecordRaw) => {
+    const meta = item.meta as Record<string, unknown> | undefined
+    if (!meta?.title || meta.hidden || meta.hideInMenu) return false
+    if (meta.systemOnly && !isSystem) return false
+    if (meta.businessOnly && isSystem) return false
     return true
   }
 
@@ -302,17 +304,17 @@ const menuRoutes = computed(() => {
       if (!route || !isVisible(route)) return []
       const children = (route.children || []).filter(isVisible)
       if (children.length === 0) {
-        return [{ path: `/${route.path}`, meta: route.meta }]
+        return [{ path: `/${route.path}`, meta: route.meta as MenuRoute['meta'] }]
       }
       // V1.2.13: 处理子路由 redirect (如 after-sales/work-orders → /maintenance/work-orders)
-      const toPath = (c: Record<string, unknown>): string => {
+      const toPath = (c: RouteRecordRaw): string => {
         if (typeof c.redirect === 'string' && c.redirect.startsWith('/')) return c.redirect as string
         return `/${route.path}/${c.path}`
       }
       if (children.length === 1) {
-        return [{ path: toPath(children[0]), meta: children[0].meta }]
+        return [{ path: toPath(children[0]), meta: children[0].meta as MenuRoute['meta'] }]
       }
-      return children.map(c => ({ path: toPath(c), meta: c.meta }))
+      return children.map(c => ({ path: toPath(c), meta: c.meta as MenuRoute['meta'] }))
     })
     return {
       // V1.2.13: 用 url path 作为父菜单的 key 和 index (不要用中文 group.name)
@@ -339,7 +341,7 @@ const breadcrumbs = computed(() => {
 })
 
 // 菜单索引（处理只有1个子路由的情况）
-function getMenuIndex(route: Record<string, unknown>): string {
+function getMenuIndex(route: MenuRoute): string {
   if (route.children?.length === 1) {
     return `/${route.path}/${route.children[0].path}`
   }

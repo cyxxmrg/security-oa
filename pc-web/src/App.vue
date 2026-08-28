@@ -35,10 +35,11 @@ const skeletonRows = ref(5)
 
 function applySkeletonMeta() {
   const meta = route.meta as Record<string, unknown>
-  if (meta?.skeleton) {
+  const skeleton = meta.skeleton as { type?: 'table' | 'card' | 'detail' | 'form'; rows?: number } | undefined
+  if (skeleton) {
     showSkeleton.value = true
-    skeletonType.value = meta.skeleton.type || 'table'
-    skeletonRows.value = meta.skeleton.rows || 5
+    skeletonType.value = skeleton.type || 'table'
+    skeletonRows.value = skeleton.rows || 5
   } else {
     showSkeleton.value = false
   }
@@ -49,13 +50,13 @@ function startRouteLoading() {
   isRouteLoading.value = true
   applySkeletonMeta()
   // 兜底:如果 800ms 还没结束,自动收起(防 loading 卡死)
-  clearTimeout(loadTimer)
+  if (loadTimer !== null) clearTimeout(loadTimer)
   loadTimer = setTimeout(() => { isRouteLoading.value = false }, 3000)
 }
 
 function endRouteLoading() {
   isRouteLoading.value = false
-  clearTimeout(loadTimer)
+  if (loadTimer !== null) clearTimeout(loadTimer)
   // 骨架屏至少显示 200ms,避免闪烁
   if (showSkeleton.value) {
     setTimeout(() => { showSkeleton.value = false }, 200)
@@ -78,7 +79,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearTimeout(loadTimer)
+  if (loadTimer !== null) clearTimeout(loadTimer)
   offAfter?.()
 })
 </script>

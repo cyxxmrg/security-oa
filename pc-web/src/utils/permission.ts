@@ -13,7 +13,7 @@
  *  4) 组件用 v-permission="'project.view'" 或 :disabled="!hasPermission('x')"
  */
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, type ObjectDirective, type DirectiveBinding } from 'vue'
 import { getUserInfo } from './auth'
 import http from './request'
 
@@ -28,11 +28,15 @@ export const usePermissionStore = defineStore('permission', () => {
       const user = getUserInfo()
       if (user && Array.isArray(user.roles)) {
         // 兼容两种形态: ['admin','user'] 或 [{name:'admin'}, {name:'user'}]
-        roles.value = user.roles.map((r: Record<string, unknown>) => (typeof r === 'string' ? r : r?.name)).filter(Boolean)
+        roles.value = user.roles
+          .map((r: unknown) => typeof r === 'string' ? r : (r && typeof r === 'object' && 'name' in r ? String(r.name) : ''))
+          .filter((r): r is string => Boolean(r))
       }
       const res = await http.get('/permissions/my')
       const list = Array.isArray(res) ? res : (res?.data || [])
-      permissions.value = list.map((p: Record<string, unknown>) => typeof p === 'string' ? p : p.name).filter(Boolean)
+      permissions.value = list
+        .map((p: unknown) => typeof p === 'string' ? p : (p && typeof p === 'object' && 'name' in p ? String(p.name) : ''))
+        .filter((p: string): p is string => Boolean(p))
       loaded.value = true
     } catch (e) {
       // 静默失败 — 视为无权限
@@ -86,16 +90,16 @@ export function hasPermission(perm: string): boolean {
  *
  *   <el-button v-permission.or="['x', 'y']">有任一权限即显示</el-button>
  */
-export const permissionDirective = {
-  mounted(el: HTMLElement, binding: { value: string | string[]; modifiers?: Record<string, boolean> }) {
+export const permissionDirective: ObjectDirective<HTMLElement, string | string[]> = {
+  mounted(el: HTMLElement, binding: DirectiveBinding<string | string[]>) {
     applyPermission(el, binding)
   },
-  updated(el: HTMLElement, binding: { value: string | string[]; modifiers?: Record<string, boolean> }) {
+  updated(el: HTMLElement, binding: DirectiveBinding<string | string[]>) {
     applyPermission(el, binding)
   },
 }
 
-function applyPermission(el: HTMLElement, binding: { value: string | string[]; modifiers?: Record<string, boolean> }) {
+function applyPermission(el: HTMLElement, binding: DirectiveBinding<string | string[]>) {
   const { value, modifiers } = binding
   const perms = Array.isArray(value) ? value : [value]
   const store = usePermissionStore()

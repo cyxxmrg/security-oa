@@ -70,7 +70,7 @@
               <template #default="{ row }">
                 <el-switch
                   v-model="row.enabled"
-                  @change="(val: boolean) => onToggle(row, val)"
+                  @change="(val: string | number | boolean) => onToggle(row, val === true)"
                 />
               </template>
             </el-table-column>
@@ -286,7 +286,7 @@ const getGroupType = (endpoint: string): 'success' | 'primary' | 'info' | 'warni
   return 'info'
 }
 
-const roleColor = (r: string) => {
+const roleColor = (r: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
   if (r === 'admin') return 'danger'
   if (r === 'finance') return 'warning'
   if (r === 'manager') return 'primary'
@@ -301,14 +301,15 @@ const loadData = async () => {
     const res = await get('/field-masks')
     const arr = unwrapList(res)
     groupedData.value = arr.map((g: Record<string, unknown>) => ({
-      endpoint: g.endpoint,
-      allowed_roles: g.allowed_roles,
-      items: g.items,
+      endpoint: String(g.endpoint || ''),
+      allowed_roles: String(g.allowed_roles || ''),
+      items: Array.isArray(g.items) ? g.items as MaskRule[] : [],
     }))
     // 默认展开前 3 个
     activeNames.value = groupedData.value.slice(0, 3).map(g => g.endpoint)
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载失败: ' + (message || ''))
   } finally {
     loading.value = false
   }
@@ -364,7 +365,8 @@ const onSave = async () => {
     dialogVisible.value = false
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error('保存失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('保存失败: ' + (message || ''))
   } finally {
     saving.value = false
   }
@@ -376,7 +378,8 @@ const onToggle = async (row: MaskRule, val: boolean) => {
     ElMessage.success(val ? '已启用' : '已停用')
   } catch (e: unknown) {
     row.enabled = !val
-    ElMessage.error('切换失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('切换失败: ' + (message || ''))
   }
 }
 
@@ -395,7 +398,8 @@ const onDelete = async (row: MaskRule) => {
     ElMessage.success('已删除')
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error('删除失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('删除失败: ' + (message || ''))
   }
 }
 
@@ -405,7 +409,8 @@ const onFlushCache = async () => {
     await post('/field-masks/flush-cache', {})
     ElMessage.success('缓存已清, 5 分钟内会重新加载')
   } catch (e: unknown) {
-    ElMessage.error('失败: ' + (e?.message || ''))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('失败: ' + (message || ''))
   } finally {
     flushing.value = false
   }
@@ -427,7 +432,8 @@ const runTest = async () => {
   try {
     parsed = JSON.parse(testDataJson.value)
   } catch (e: unknown) {
-    return ElMessage.error('JSON 解析失败: ' + e.message)
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    return ElMessage.error('JSON 解析失败: ' + (message || ''))
   }
   testLoading.value = true
   try {
@@ -468,7 +474,8 @@ const runTest = async () => {
     }
     ElMessage.success(`命中脱敏 ${maskedCount} / ${(d.original || []).length}`)
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '测试失败')
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error(message || '测试失败')
   } finally { testLoading.value = false }
 }
 

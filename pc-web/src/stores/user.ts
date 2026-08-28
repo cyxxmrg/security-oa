@@ -74,7 +74,8 @@ export const useUserStore = defineStore('user', () => {
     } catch (e: unknown) {
       // V1.2 fix: 兜底 — system 用户的 userType 已通过 /auth/login 顶层透出, 不应再卡死登录
       // 只在 /auth/userinfo 失败时静默回退到 login 阶段已写入的 userInfo, 不抛错
-      console.warn('[userStore] getUserInfoAction failed, fallback to login data:', e?.message)
+      const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+      console.warn('[userStore] getUserInfoAction failed, fallback to login data:', message)
       return null
     }
   }
