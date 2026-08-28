@@ -195,7 +195,7 @@ const openInventoryPicker = (idx: number) => {
   pickerVisible.value = true
 }
 
-const handleInventorySelected = (items: Record<string, unknown>[]) => {
+const handleInventorySelected = (items: Record<string, any>[]) => {
   if (!items.length || pickingIndex.value === null) return
   // 第一项填充当前行
   const first = items[0]

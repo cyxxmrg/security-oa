@@ -11,7 +11,7 @@
       </el-form-item>
       <el-form-item label="审批人 ID">
         <el-select :model-value="approver" @update:model-value="(v: string) => emit('update:approver', v)" placeholder="全部" clearable style="width: 140px">
-          <el-option v-for="u in approverOptions" :key="u" :label="u" :value="u" />
+          <el-option v-for="u in approverOptions" :key="u.id" :label="u.name" :value="u.id" />
         </el-select>
       </el-form-item>
       <el-form-item>

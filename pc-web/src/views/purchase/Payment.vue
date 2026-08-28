@@ -163,8 +163,8 @@ import PaymentTable from './components/payment/PaymentTable.vue'
 
 // === 类型 ===
 import type { PaymentItem, PaymentRequest } from './types'
-type ContractOption = { id: number; code?: string; name?: string }
-type PaymentRequestOption = PaymentRequest
+type ContractOption = { id: number; code?: string; name?: string; title?: string }
+type PaymentRequestOption = PaymentRequest & { contract_id?: number | null; supplier_id?: number | null }
 
 // === 选项 ===
 const methodOptions = [
