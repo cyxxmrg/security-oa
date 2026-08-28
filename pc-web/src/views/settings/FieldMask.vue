@@ -217,6 +217,7 @@ import { unwrapList } from '@/utils/response'
 
 interface MaskRule {
   id: number
+  endpoint?: string
   field: string
   allowed_roles: string
   description: string
@@ -256,7 +257,7 @@ const testDialogVisible = ref(false)
 const testRow = ref<MaskRule | null>(null)
 const testUsername = ref('eng_qian')
 const testValue = ref('13800138000')
-const testResult = ref({ output: '', masked: false })
+const testResult = ref<any>({ output: '', masked: false })
 
 const totalRules = computed(() => groupedData.value.reduce((sum, g) => sum + g.items.length, 0))
 
@@ -278,7 +279,7 @@ const filteredGroups = computed(() => {
 const hasAnyCustom = (g: MaskGroup) =>
   g.items.some(r => !['admin', 'admin,finance', 'admin,finance,manager'].includes(r.allowed_roles))
 
-const getGroupType = (endpoint: string) => {
+const getGroupType = (endpoint: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => {
   if (endpoint.includes('user') || endpoint.includes('employee')) return 'primary'
   if (endpoint.includes('finance') || endpoint.includes('payment')) return 'warning'
   if (endpoint.includes('customer') || endpoint.includes('client')) return 'success'
@@ -290,7 +291,7 @@ const roleColor = (r: string) => {
   if (r === 'finance') return 'warning'
   if (r === 'manager') return 'primary'
   if (r === 'user') return 'info'
-  return ''
+  return 'info'
 }
 
 const loadData = async () => {
