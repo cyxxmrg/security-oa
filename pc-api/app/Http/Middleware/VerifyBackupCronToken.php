@@ -1,11 +1,11 @@
 <?php
 
-namespace AppHttpMiddleware;
+namespace App\Http\Middleware;
 
 use Closure;
-use IlluminateHttpRequest;
-use IlluminateSupportFacadesDB;
-use SymfonyComponentHttpFoundationResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 class VerifyBackupCronToken
 {
