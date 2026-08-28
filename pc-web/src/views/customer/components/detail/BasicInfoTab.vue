@@ -5,8 +5,8 @@
       <el-descriptions-item label="客户名称">{{ customer.name }}</el-descriptions-item>
       <el-descriptions-item label="所属行业">{{ customer.industry || '—' }}</el-descriptions-item>
       <el-descriptions-item label="客户分类">
-        <el-tag :type="categoryType(displayCategory(customer.category))" size="small">
-          {{ displayCategory(customer.category) }}
+        <el-tag :type="categoryType(displayCategory(customer.category || ''))" size="small">
+          {{ displayCategory(customer.category || '') }}
         </el-tag>
       </el-descriptions-item>
       <el-descriptions-item label="客户来源">{{ customer.source || '—' }}</el-descriptions-item>

@@ -19,7 +19,7 @@
       </el-table-column>
       <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="emit('view', row)">查看</el-button>
+          <el-button type="primary" link size="small" @click="emit('view', toServiceOrder(row))">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -38,4 +38,5 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'view', order: ServiceOrder): void
 }>()
+const toServiceOrder = (row: unknown): ServiceOrder => row as ServiceOrder
 </script>

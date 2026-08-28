@@ -65,6 +65,7 @@ const categoryTagType = (cat: string): 'warning' | 'info' | 'success' => {
 }
 
 const formatDate = (d?: string) => (d ? String(d).slice(0, 16).replace('T', ' ') : '-')
+const toCustomer = (row: unknown): Customer => row as Customer
 </script>
 
 <template>
@@ -85,7 +86,7 @@ const formatDate = (d?: string) => (d ? String(d).slice(0, 16).replace('T', ' ')
             <el-icon><OfficeBuilding /></el-icon>
           </el-avatar>
           <div class="cust-info">
-            <a class="cust-name" @click="emit('view', row)">{{ row.name }}</a>
+            <a class="cust-name" @click="emit('view', toCustomer(row))">{{ row.name }}</a>
             <span v-if="row.credit_code" class="cust-credit">{{ row.credit_code }}</span>
           </div>
         </div>
@@ -141,10 +142,10 @@ const formatDate = (d?: string) => (d ? String(d).slice(0, 16).replace('T', ' ')
     </el-table-column>
     <el-table-column label="操作" width="240" fixed="right" align="center">
       <template #default="{ row }">
-        <el-button :icon="View" size="small" text type="primary" @click="emit('view', row)">详情</el-button>
-        <el-button :icon="ChatLineRound" size="small" text type="success" @click="emit('follow', row)">跟进</el-button>
-        <el-button :icon="Edit" size="small" text type="warning" @click="emit('edit', row)">编辑</el-button>
-        <el-button :icon="Delete" size="small" text type="danger" @click="emit('delete', row)">删除</el-button>
+        <el-button :icon="View" size="small" text type="primary" @click="emit('view', toCustomer(row))">详情</el-button>
+        <el-button :icon="ChatLineRound" size="small" text type="success" @click="emit('follow', toCustomer(row))">跟进</el-button>
+        <el-button :icon="Edit" size="small" text type="warning" @click="emit('edit', toCustomer(row))">编辑</el-button>
+        <el-button :icon="Delete" size="small" text type="danger" @click="emit('delete', toCustomer(row))">删除</el-button>
       </template>
     </el-table-column>
     <template #empty>

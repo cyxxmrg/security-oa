@@ -10,7 +10,23 @@ export interface CalCell {
   inMonth: boolean
   isToday: boolean
   isWeekend: boolean
-  events: Record<string, unknown>[]
+  events: FollowEvent[]
+}
+
+export interface FollowEvent {
+  id?: number | string
+  scheduled_at?: string
+  time?: string
+  customer_name?: string
+  title?: string
+  status?: string | null
+  type?: string | null
+  user_name?: string
+  owner_name?: string
+  follower?: string
+  content?: string
+  note?: string
+  [key: string]: unknown
 }
 
 defineProps<{
@@ -18,7 +34,7 @@ defineProps<{
   calendarCells: CalCell[]
   weekdays: string[]
   formatTime: (t: string | undefined) => string
-  eventColor: (ev: Record<string, unknown>) => string
+  eventColor: (ev: FollowEvent) => string
 }>()
 
 const emit = defineEmits<{

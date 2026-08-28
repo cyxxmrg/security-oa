@@ -3,9 +3,10 @@
  * 未来 7 天待办列表
  */
 import { User } from '@element-plus/icons-vue'
+import type { FollowEvent } from './FollowCalendarGrid.vue'
 
 defineProps<{
-  upcoming: Record<string, unknown>[]
+  upcoming: FollowEvent[]
   formatTime: (t: string | undefined) => string
   countdownLabel: (t: string | undefined) => string
   statusTagType: (s: string | null | undefined) => 'success' | 'primary' | 'warning' | 'danger' | 'info'
@@ -13,7 +14,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'openItem', item: Record<string, unknown>): void
+  (e: 'openItem', item: FollowEvent): void
 }>()
 </script>
 

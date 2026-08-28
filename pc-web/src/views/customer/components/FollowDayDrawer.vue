@@ -3,11 +3,12 @@
  * 跟进详情抽屉
  */
 import { User, Postcard } from '@element-plus/icons-vue'
+import type { FollowEvent } from './FollowCalendarGrid.vue'
 
 defineProps<{
   visible: boolean
   title: string
-  events: Record<string, unknown>[]
+  events: FollowEvent[]
   formatTime: (t: string | undefined) => string
   statusTagType: (s: string | null | undefined) => 'success' | 'primary' | 'warning' | 'danger' | 'info'
   statusLabel: (s: string | null | undefined) => string

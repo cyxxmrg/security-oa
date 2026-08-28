@@ -20,7 +20,7 @@
       <el-table-column prop="end_date" label="计划完成" width="120" />
       <el-table-column label="操作" width="160" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="emit('view', row)">查看</el-button>
+          <el-button type="primary" link size="small" @click="emit('view', toProject(row))">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -39,4 +39,5 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'view', project: Project): void
 }>()
+const toProject = (row: unknown): Project => row as Project
 </script>

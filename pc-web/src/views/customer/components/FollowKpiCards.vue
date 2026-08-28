@@ -5,7 +5,7 @@
 import { computed } from 'vue'
 import { DataLine, CircleCheckFilled, Clock, WarningFilled } from '@element-plus/icons-vue'
 
-defineProps<{
+const props = defineProps<{
   summary: {
     total: number
     completed: number
@@ -13,6 +13,7 @@ defineProps<{
     overdue: number
   }
 }>()
+const completionRate = computed(() => props.summary.total ? Math.round(props.summary.completed / props.summary.total * 100) : 0)
 
 const _ = DataLine
 </script>
