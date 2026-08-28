@@ -214,8 +214,9 @@ const loadData = async () => {
     temporaryRoles.value = roles
       .filter((r: Record<string, unknown>) => r.expires_at)
       .map((r: Record<string, unknown>) => {
-        const days = Math.max(0, Math.ceil((new Date(r.expires_at).getTime() - Date.now()) / 86400000))
-        return { name: String(r.name || ''), days_left: days, expires_at: String(r.expires_at) }
+        const expiresAt = String(r.expires_at || '')
+        const days = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000))
+        return { name: String(r.name || ''), days_left: days, expires_at: expiresAt }
       })
   } catch (e: unknown) {
     const message = e && typeof e === 'object' && 'message' in e ? e.message : e

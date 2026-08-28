@@ -255,12 +255,12 @@ export function useExpense() {
   function canCancel(row: ExpenseListItem) {
     if (!row) return false
     if (row.user_id && currentUserId.value && row.user_id !== currentUserId.value) return false
-    return ['submitted', 'draft'].includes(row.status)
+    return ['submitted', 'draft'].includes(row.status || '')
   }
 
   function canDelete(row: ExpenseListItem) {
     if (!row) return false
-    if (['approved', 'paid'].includes(row.status)) return false
+    if (['approved', 'paid'].includes(row.status || '')) return false
     if (row.user_id && currentUserId.value && row.user_id === currentUserId.value) return true
     return userStore.hasPermission('expense.delete')
   }
@@ -328,6 +328,7 @@ export function useExpense() {
       ElMessage.warning('请输入付款金额')
       return
     }
+    if (!payTarget.value) return
     payLoading.value = true
     try {
       await post(`/expenses/${payTarget.value.id}/pay`, { paid_amount: payForm.paid_amount })
