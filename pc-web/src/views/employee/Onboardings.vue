@@ -155,10 +155,11 @@ async function loadList() {
     const items = Array.isArray(payload)
       ? payload
       : (Array.isArray(payload?.data) ? payload.data : (payload?.items ?? []))
-    list.value = items
-    pagination.total = Number(payload?.total ?? payload?.meta?.total ?? items.length)
-  } catch (e: ApiError) {
-    ElMessage.error(e?.message || '鍔犺浇澶辫触')
+    list.value = items as Onboarding[]
+    const paged = payload as { total?: number; meta?: { total?: number } } | Onboarding[]
+    pagination.total = Number(Array.isArray(paged) ? paged.length : paged.total ?? paged.meta?.total ?? (items as unknown[]).length)
+  } catch (e: unknown) {
+    ElMessage.error(e instanceof Error ? e.message : '鍔犺浇澶辫触')
   } finally {
     loading.value = false
   }
@@ -199,8 +200,9 @@ async function handleArchive(row: Onboarding) {
     ElMessage.success('档案已归档')
     loadList()
     loadStats()
-  } catch (e: ApiError) {
-    ElMessage.error(e?.response?.data?.message || e?.message || '归档失败')
+  } catch (e: unknown) {
+    const error = e as ApiError
+    ElMessage.error(error.response?.data?.message || error.message || '归档失败')
   }
 }
 
@@ -209,7 +211,7 @@ const detailRow = ref<Onboarding | null>(null)
 async function openDetail(row: Onboarding) {
   try {
     const data: OnboardingShowResult = await onboardings.show(row.id)
-    detailRow.value = data?.data || data || row
+    detailRow.value = (data?.data || row) as Onboarding
   } catch (e) {
     detailRow.value = row
   }
@@ -255,9 +257,10 @@ async function handleRenewUpload(opt: UploadOpt) {
     } else {
       opt.onError?.(new Error(res?.message || '上传失败'))
     }
-  } catch (e: ApiError) {
+  } catch (e: unknown) {
     opt.onError?.(e)
-    ElMessage.error(e?.response?.data?.message || e?.message || '上传失败')
+    const error = e as ApiError
+    ElMessage.error(error.response?.data?.message || error.message || '上传失败')
   }
 }
 
@@ -273,8 +276,9 @@ async function submitRenew() {
     ElMessage.success('合同已续签')
     renewDialogVisible.value = false
     loadList()
-  } catch (e: ApiError) {
-    ElMessage.error(e?.response?.data?.message || e?.message || '保存失败')
+  } catch (e: unknown) {
+    const error = e as ApiError
+    ElMessage.error(error.response?.data?.message || error.message || '保存失败')
   } finally {
     submitting.value = false
   }
@@ -348,7 +352,7 @@ function prevStep() {
   wizardStep.value = Math.max(0, wizardStep.value - 1)
 }
 
-async function handleFileUpload(opt: UploadOpt, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id') {
+async function handleFileUpload(opt: any, field: 'id_card_file_id' | 'driver_license_file_id' | 'education_file_id' | 'contract_file_id') {
   const nameField = field.replace('_file_id', '_file_name') as 'id_card_file_name' | 'driver_license_file_name' | 'education_file_name' | 'contract_file_name'
   try {
     const fd = new FormData()
@@ -363,9 +367,10 @@ async function handleFileUpload(opt: UploadOpt, field: 'id_card_file_id' | 'driv
     } else {
       opt.onError?.(new Error(res?.message || '上传失败'))
     }
-  } catch (e: ApiError) {
+  } catch (e: unknown) {
     opt.onError?.(e)
-    ElMessage.error(e?.response?.data?.message || e?.message || '上传失败')
+    const error = e as ApiError
+    ElMessage.error(error.response?.data?.message || error.message || '上传失败')
   }
 }
 
@@ -403,8 +408,9 @@ async function submitWizard() {
     wizardVisible.value = false
     loadList()
     loadStats()
-  } catch (e: ApiError) {
-    ElMessage.error(e?.response?.data?.message || e?.message || '提交失败')
+  } catch (e: unknown) {
+    const error = e as ApiError
+    ElMessage.error(error.response?.data?.message || error.message || '提交失败')
   } finally {
     submitting.value = false
   }

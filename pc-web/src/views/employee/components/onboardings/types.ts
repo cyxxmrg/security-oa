@@ -4,6 +4,8 @@ export interface Onboarding {
   id: number
   name: string
   username: string
+  employee_name?: string
+  employee_no?: string
   user?: { id?: number; name?: string; username?: string }
   phone?: string
   email?: string

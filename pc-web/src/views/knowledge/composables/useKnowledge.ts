@@ -27,6 +27,8 @@ interface Category {
   children?: Category[]
   articles_count?: number
 }
+interface RequestError { response?: { data?: { message?: string } }; message?: string }
+interface UploadFile { name: string; size: number; status?: string; raw?: Blob; [key: string]: unknown }
 
 export function useKnowledge() {
   const keyword = ref('')
@@ -91,7 +93,7 @@ export function useKnowledge() {
     loadArticles()
   }
 
-  function openArticle(item: Record<string, unknown>) {
+  function openArticle(item: Article & Record<string, unknown>) {
     if (item.content_type === 'file') {
       const fileName = item.file_name || item.title || '(未知文件)'
       const fileUrl = item.file_url || '#'
@@ -100,7 +102,7 @@ export function useKnowledge() {
         item.title,
         { dangerouslyUseHTMLString: false, confirmButtonText: '下载文件', cancelButtonText: '关闭', showCancelButton: true }
       ).then(() => {
-        if (fileUrl !== '#') window.open(fileUrl, '_blank')
+        if (fileUrl !== '#') window.open(String(fileUrl), '_blank')
       }).catch(() => { /* 关闭 */ })
       return
     }
@@ -149,7 +151,7 @@ export function useKnowledge() {
     return (bytes/1024/1024).toFixed(1) + ' MB'
   }
 
-  function handleFileChange(file: Record<string, unknown>) {
+  function handleFileChange(file: UploadFile) {
     const ext = (file.name.split('.').pop() || '').toLowerCase()
     if (!ALLOWED_EXTS.includes(ext)) {
       ElMessage.error(`不支持的文件格式：.${ext}，仅支持 PDF / Word / Excel / PPT / 图片 / TXT / MD`)
@@ -215,7 +217,7 @@ export function useKnowledge() {
           saving.value = false
           return
         }
-        const fileObj = form.fileList[0].raw || form.fileList[0]
+        const fileObj = (form.fileList[0].raw || form.fileList[0]) as Blob
         const fd = new FormData()
         fd.append('file', fileObj)
         const upRes = await post('/knowledge/upload', fd)
@@ -259,7 +261,8 @@ export function useKnowledge() {
       form.fileList = []
       loadArticles()
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '发布失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '发布失败')
     } finally {
       saving.value = false
     }
@@ -271,7 +274,8 @@ export function useKnowledge() {
       ElMessage.success('已删除')
       loadArticles()
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '删除失败')
     }
   }
 
@@ -338,7 +342,8 @@ export function useKnowledge() {
       categoryDialogVisible.value = false
       await loadCategories()
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '操作失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '操作失败')
     } finally {
       categoryDialogSaving.value = false
     }
@@ -361,7 +366,8 @@ export function useKnowledge() {
       if (currentCategoryId.value === c.id) currentCategoryId.value = null
       await loadCategories()
     } catch (e: unknown) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '删除失败')
+      const error = e as RequestError
+      ElMessage.error(error.response?.data?.message || error.message || '删除失败')
     }
   }
 
