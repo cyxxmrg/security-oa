@@ -12,6 +12,10 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'update', t: GanttTask): void
 }>()
+
+const toGanttTask = (row: unknown): GanttTask => row as GanttTask
+const statusTagOf = (status: unknown) => STATUS_TAG_TYPE[status as GanttTask['status']] || 'info'
+const statusLabelOf = (status: unknown) => STATUS_LABEL[status as GanttTask['status']] || '-'
 </script>
 
 <template>
@@ -30,20 +34,20 @@ const emit = defineEmits<{
       <el-table-column prop="duration" label="工期(天)" width="90" align="center" />
       <el-table-column prop="progress" label="进度" width="160">
         <template #default="{ row }">
-          <el-progress :percentage="row.progress" :status="progressStatusOf(row)" :stroke-width="10" />
+          <el-progress :percentage="row.progress" :status="progressStatusOf(toGanttTask(row))" :stroke-width="10" />
         </template>
       </el-table-column>
       <el-table-column prop="owner" label="负责人" width="100" />
       <el-table-column prop="status" label="状态" width="100" align="center">
         <template #default="{ row }">
-          <el-tag :type="STATUS_TAG_TYPE[row.status] || 'info'" size="small" effect="light">
-            {{ STATUS_LABEL[row.status] || '-' }}
+          <el-tag :type="statusTagOf(row.status)" size="small" effect="light">
+            {{ statusLabelOf(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="160" align="center">
         <template #default="{ row }">
-          <el-button type="success" link size="small" @click="emit('update', row)">更新进度</el-button>
+          <el-button type="success" link size="small" @click="emit('update', toGanttTask(row))">更新进度</el-button>
         </template>
       </el-table-column>
     </el-table>

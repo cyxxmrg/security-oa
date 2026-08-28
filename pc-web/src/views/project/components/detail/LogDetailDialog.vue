@@ -18,10 +18,10 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ visible: boolean; log: Record<string, unknown> }>()
+defineProps<{ visible: boolean; log: { date?: string; weather?: string; work_hours?: number | string; operator_name?: string; content?: string; problems?: string } }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
-function formatDate(d: string) {
+function formatDate(d?: string) {
   return d ? d.slice(0, 10) : '-'
 }
 </script>

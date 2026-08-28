@@ -11,7 +11,7 @@
       <el-form-item label="所属客户">
         <el-select
           :model-value="form.customer_id"
-          @update:model-value="(v: Record<string, unknown>) => emit('update:form', { ...form, customer_id: v })"
+          @update:model-value="(v: string | number | boolean | null | undefined) => emit('update:form', { ...form, customer_id: typeof v === 'boolean' ? null : v ?? null })"
           placeholder="全部客户" clearable style="width: 200px" filterable
         >
           <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
@@ -46,9 +46,9 @@
 <script setup lang="ts">
 import { Search, Refresh } from '@element-plus/icons-vue'
 
-defineProps<{ form: Record<string, unknown>; customerOptions: Array<{ id: number; name: string }>; stageOptions: Array<{ value: string; label: string }>; statusOptions: Array<{ value: string; label: string }> }>()
+defineProps<{ form: { name?: string; customer_id?: number | string | null; stage?: string; status?: string }; customerOptions: Array<{ id: number; name: string }>; stageOptions: Array<{ value: string; label: string }>; statusOptions: Array<{ value: string; label: string }> }>()
 const emit = defineEmits<{
-  (e: 'update:form', v: Record<string, unknown>): void
+  (e: 'update:form', v: { name?: string; customer_id?: number | string | null; stage?: string; status?: string }): void
   (e: 'search'): void
   (e: 'reset'): void
 }>()

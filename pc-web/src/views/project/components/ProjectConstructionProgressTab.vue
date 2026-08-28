@@ -20,7 +20,7 @@
         style="margin-bottom: 16px"
       />
       <!-- V0.4.9 A1: 真实甘特图 -->
-      <MiniGantt :instances="processInstances" />
+      <MiniGantt :instances="ganttInstances" />
 
       <el-row :gutter="16" style="margin-top: 16px">
         <el-col :span="8">
@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Connection, View } from '@element-plus/icons-vue'
@@ -69,6 +70,10 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const ganttInstances = computed(() => props.processInstances.map((instance) => ({
+  ...instance,
+  name: instance.name || instance.template_name || instance.code || '-',
+})))
 
 const goConstructionProcessList = () => {
   if (!props.projectId) {

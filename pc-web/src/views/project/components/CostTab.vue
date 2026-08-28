@@ -14,7 +14,7 @@
       <el-col :span="6">
         <div class="kpi-card">
           <div class="kpi-label">预算总额</div>
-          <div class="kpi-value">¥ {{ formatWan(totalBudgetYuan) }}</div>
+          <div class="kpi-value">¥ {{ formatWan(Number(totalBudgetYuan)) }}</div>
           <div class="kpi-sub">万元</div>
         </div>
       </el-col>
@@ -59,7 +59,7 @@
       <el-col :span="8">
         <div class="kpi-card">
           <div class="kpi-label">物料领用金额</div>
-          <div class="kpi-value">¥ {{ formatMoney(materialStats.issued_cost) }}</div>
+          <div class="kpi-value">¥ {{ formatMoney(materialStats.issued_cost ?? 0) }}</div>
           <div class="kpi-sub">元</div>
         </div>
       </el-col>
@@ -119,7 +119,7 @@ const props = defineProps<{
 }>()
 
 const totalBudgetYuan = computed(() => computeTotalBudgetYuan(props.project))
-const estimatedProfit = computed(() => Math.max(0, props.totalContract - totalBudgetYuan.value))
+const estimatedProfit = computed(() => Math.max(0, props.totalContract - Number(totalBudgetYuan.value)))
 const profitRate = computed(() => {
   if (props.totalContract <= 0) return '0.0'
   return ((estimatedProfit.value / props.totalContract) * 100).toFixed(1)
@@ -143,7 +143,7 @@ const budgetVsActual = computed(() => {
   })
 })
 
-const formatMoney = (n: number) => (Number(n) || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatMoney = (n: number | string) => (Number(n) || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 const formatWan = (n: number) => (Number(n) / 10000).toFixed(2)
 const getProgressColor = (rate: number) => {
   if (rate > 100) return '#A32D2D'

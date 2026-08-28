@@ -95,12 +95,24 @@ import { ref, computed, watch } from 'vue'
 import { get } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 
+interface PurchaseRow {
+  code?: string
+  po_no?: string
+  title?: string
+  quantity?: number | string
+  status?: string
+  created_at?: string
+  total_amount?: number | string
+  supplier?: { name?: string }
+  [key: string]: any
+}
+
 const props = defineProps<{
   projectId: number | string
-  tracking?: { purchase_stats?: Record<string, unknown> }
+  tracking?: { purchase_stats?: Record<string, any> }
 }>()
 
-const groups = ref<{ requirements: unknown[]; orders: unknown[]; contracts: unknown[] }>({
+const groups = ref<{ requirements: PurchaseRow[]; orders: PurchaseRow[]; contracts: PurchaseRow[] }>({
   requirements: [], orders: [], contracts: [],
 })
 const activeGroups = ref(['requirements', 'orders', 'contracts'])
@@ -127,11 +139,11 @@ const statusTagType = (s?: string): 'success' | 'warning' | 'info' | 'danger' | 
   return 'primary'
 }
 
-const extractList = (res: unknown): unknown[] => {
+const extractList = (res: unknown): PurchaseRow[] => {
   if (Array.isArray(res)) return res
   if (res && typeof res === 'object') {
     const r = res as { data?: unknown }
-    if (Array.isArray(r.data)) return r.data
+    if (Array.isArray(r.data)) return r.data as PurchaseRow[]
   }
   return []
 }

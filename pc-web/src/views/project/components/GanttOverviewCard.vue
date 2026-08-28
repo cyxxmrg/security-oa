@@ -45,7 +45,7 @@ const zoomOut = () => emit('update:zoom', Math.max(props.zoom - 0.1, 0.5))
       <el-tag effect="light" type="info">{{ projectName }}</el-tag>
     </div>
     <div class="header-actions">
-      <el-radio-group :model-value="viewMode" @update:model-value="(v: string) => setView(v)" size="default">
+      <el-radio-group :model-value="viewMode" @update:model-value="(v: string | number | boolean | undefined) => setView(v === 'week' || v === 'month' ? v : 'day')" size="default">
         <el-radio-button label="day">日</el-radio-button>
         <el-radio-button label="week">周</el-radio-button>
         <el-radio-button label="month">月</el-radio-button>

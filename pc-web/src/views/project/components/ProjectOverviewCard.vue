@@ -88,12 +88,12 @@
       <el-col :span="6" class="overview-item">
         <div class="ov-label">采购计划</div>
         <div class="ov-value small">
-          总 {{ tracking.purchase_stats.total_orders }} · 已完成 {{ tracking.purchase_stats.completed_orders }}
+          总 {{ tracking.purchase_stats?.total_orders || 0 }} · 已完成 {{ tracking.purchase_stats?.completed_orders || 0 }}
         </div>
       </el-col>
       <el-col :span="6" class="overview-item">
         <div class="ov-label">物料领用</div>
-        <div class="ov-value small">{{ tracking.material_stats.issued_records || 0 }} 笔</div>
+        <div class="ov-value small">{{ tracking.material_stats?.issued_records || 0 }} 笔</div>
       </el-col>
     </el-row>
   </div>
