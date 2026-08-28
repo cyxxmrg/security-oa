@@ -92,8 +92,11 @@ const dateRange = ref<[string, string]>([
   new Date(Date.now() - 365 * 86400e3).toISOString().slice(0, 7),
   new Date().toISOString().slice(0, 7),
 ])
-const rows = ref<Record<string, unknown>[]>([])
-const summary = ref<Record<string, unknown>>({ total_revenue: 0, total_cost: 0, total_expense: 0, total_profit: 0, avg_margin: 0 })
+interface PnlRow { period_key?: string; total_revenue?: number; total_cost?: number; total_expense?: number; net_profit?: number; profit_margin?: number }
+interface PnlSummary { total_revenue: number; total_cost: number; total_expense: number; total_profit: number; avg_margin: number }
+interface PnlData { rows?: PnlRow[]; summary?: PnlSummary }
+const rows = ref<PnlRow[]>([])
+const summary = ref<PnlSummary>({ total_revenue: 0, total_cost: 0, total_expense: 0, total_profit: 0, avg_margin: 0 })
 
 const trendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -146,11 +149,12 @@ async function load() {
   if (dateRange.value?.[1]) params.end = dateRange.value[1]
   try {
     const resp = await getFinancePnl(params)
-    const data = resp?.data ?? resp
+    const data = (resp?.data ?? resp) as PnlData
     rows.value = data.rows || []
     summary.value = data.summary || summary.value
   } catch (e: unknown) {
-    ElMessage.error('加载财务数据失败: ' + (e.message || '未知错误'))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载财务数据失败: ' + (message || '未知错误'))
   }
 }
 

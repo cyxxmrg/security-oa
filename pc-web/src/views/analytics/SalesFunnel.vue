@@ -131,7 +131,8 @@ async function load() {
     rows.value = data.rows || []
     bottleneck.value = data.bottleneck || null
   } catch (e: unknown) {
-    ElMessage.error('加载漏斗数据失败: ' + (e.message || '未知错误'))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载漏斗数据失败: ' + (message || '未知错误'))
   }
 }
 

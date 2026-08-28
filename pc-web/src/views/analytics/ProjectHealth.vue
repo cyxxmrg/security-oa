@@ -106,7 +106,7 @@ import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, BarChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
-const color = ref<string>('')
+const color = ref<'green' | 'yellow' | 'red' | ''>('')
 const rows = ref<Record<string, unknown>[]>([])
 const stats = ref<Record<string, unknown>>({})
 
@@ -145,7 +145,8 @@ async function load() {
     rows.value = data.rows || []
     stats.value = data.stats || {}
   } catch (e: unknown) {
-    ElMessage.error('加载项目数据失败: ' + (e.message || '未知错误'))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载项目数据失败: ' + (message || '未知错误'))
   }
 }
 

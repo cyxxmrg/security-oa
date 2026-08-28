@@ -83,13 +83,16 @@ import { ElMessage } from 'element-plus'
 use([CanvasRenderer, BarChart, PieChart, HeatmapChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, VisualMapComponent])
 
 const segment = ref<string>('')
-const rows = ref<Record<string, unknown>[]>([])
-const matrix = ref<Record<string, unknown>>({})
-const segments = ref<Record<string, unknown>[]>([])
-const segmentOptions = computed(() => segments.value.map((s: Record<string, unknown>) => s.segment_label))
+interface RfmRow { customer_name?: string; industry?: string; customer_level?: string; r_score?: number; f_score?: number; m_score?: number; frequency?: number; monetary?: number; segment_label?: string }
+interface RfmCell { count?: number; monetary?: number }
+interface RfmData { rows?: RfmRow[]; matrix?: Record<string, RfmCell>; segments?: Array<{ segment_label?: string; cnt?: number }> }
+const rows = ref<RfmRow[]>([])
+const matrix = ref<Record<string, RfmCell>>({})
+const segments = ref<Array<{ segment_label?: string; cnt?: number }>>([])
+const segmentOptions = computed(() => segments.value.map(s => s.segment_label || '').filter(Boolean))
 
 const segmentOption = computed(() => {
-  const data = segments.value.map((s: Record<string, unknown>) => ({ name: s.segment_label, value: Number(s.cnt) }))
+  const data = segments.value.map(s => ({ name: s.segment_label, value: Number(s.cnt) }))
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { bottom: 0, type: 'scroll' },
@@ -113,13 +116,13 @@ function getCellType(r: string, f: string) {
   return 'dormant'
 }
 
-function segmentType(seg: string) {
+function segmentType(seg: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' {
   if (seg.includes('重要价值')) return 'success'
   if (seg.includes('发展')) return 'primary'
   if (seg.includes('保持')) return 'warning'
   if (seg.includes('挽留')) return 'danger'
   if (seg.includes('潜在')) return 'info'
-  return ''
+  return 'info'
 }
 
 function formatNumber(n: number) {
@@ -129,12 +132,13 @@ function formatNumber(n: number) {
 async function load() {
   try {
     const resp = await getCustomerRfm({ segment: segment.value || undefined, limit: 200 })
-    const data = resp?.data ?? resp
+    const data = (resp?.data ?? resp) as RfmData
     rows.value = data.rows || []
     matrix.value = data.matrix || {}
     segments.value = data.segments || []
   } catch (e: unknown) {
-    ElMessage.error('加载客户 RFM 失败: ' + (e.message || '未知错误'))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载客户 RFM 失败: ' + (message || '未知错误'))
   }
 }
 

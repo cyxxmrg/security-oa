@@ -88,8 +88,11 @@ import { ElMessage } from 'element-plus'
 use([CanvasRenderer, BarChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
 const status = ref<string>('')
-const rows = ref<Record<string, unknown>[]>([])
-const stats = ref<Record<string, unknown>>({})
+interface AgingRow { item_code?: string; item_name?: string; category?: string; current_stock?: number; unit?: string; safety_stock?: number; outbound_90d?: number; aging_days?: number; stock_value?: number; status?: string }
+interface AgingStats { shortage?: number; stockout?: number; stagnant?: number; overstock?: number; normal?: number; total_value?: number }
+interface AgingData { rows?: AgingRow[]; stats?: AgingStats }
+const rows = ref<AgingRow[]>([])
+const stats = ref<AgingStats>({})
 
 const statusOption = computed(() => ({
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -112,23 +115,24 @@ const statusOption = computed(() => ({
 function statusLabel(s: string) {
   return { shortage: '缺货', stockout: '断货', stagnant: '呆滞', overstock: '超储', normal: '正常' }[s] || s
 }
-function statusType(s: string) {
+function statusType(s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' {
   if (s === 'shortage' || s === 'stockout') return 'danger'
   if (s === 'stagnant' || s === 'overstock') return 'warning'
   return 'success'
 }
-function formatNumber(n: number) {
+function formatNumber(n: number | undefined) {
   return (Number(n) || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
 async function load() {
   try {
     const resp = await getInventoryAging({ status: status.value || undefined })
-    const data = resp?.data ?? resp
+    const data = (resp?.data ?? resp) as AgingData
     rows.value = data.rows || []
     stats.value = data.stats || {}
   } catch (e: unknown) {
-    ElMessage.error('加载库存数据失败: ' + (e.message || '未知错误'))
+    const message = e && typeof e === 'object' && 'message' in e ? e.message : e
+    ElMessage.error('加载库存数据失败: ' + (message || '未知错误'))
   }
 }
 
