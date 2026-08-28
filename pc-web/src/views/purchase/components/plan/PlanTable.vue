@@ -105,9 +105,9 @@ const statusOptions = [
 
 const priorityLabel = (v: string) => priorityOptions.find(o => o.value === v)?.label || v
 const statusLabel = (s: string) => statusOptions.find(o => o.value === s)?.label || s || '-'
-const statusTagType = (s: string): string => statusOptions.find(o => o.value === s)?.type || 'info'
-const priorityTagType = (p: string): string => priorityOptions.find(o => o.value === p)?.type || ''
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const statusTagType = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => statusOptions.find(o => o.value === s)?.type || 'info'
+const priorityTagType = (p: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => priorityOptions.find(o => o.value === p)?.type || 'info'
+const formatMoney = (n: number | string | null | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 
 import type { PurchasePlan } from '../../types'
 

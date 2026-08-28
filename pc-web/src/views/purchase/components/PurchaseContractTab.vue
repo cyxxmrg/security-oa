@@ -94,6 +94,7 @@
 import { Plus, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { PurchaseContract, PurchaseContractFile, PurchaseItem } from '../types'
+import type { UploadRequestOptions, UploadRawFile } from 'element-plus'
 
 defineProps<{
   contract: PurchaseContract | null
@@ -110,13 +111,13 @@ const emit = defineEmits<{
   'cancel-edit-item': []
   'edit-item': [id: number]
   'delete-contract-item': [row: PurchaseItem]
-  'upload-contract-file': [opts: Record<string, unknown>]
+  'upload-contract-file': [opts: UploadRequestOptions]
   'preview-file': [row: PurchaseContractFile]
   'download-file': [row: PurchaseContractFile]
   'delete-contract-file': [row: PurchaseContractFile]
 }>()
 
-const beforeUpload = (file: { size: number }) => {
+const beforeUpload = (file: UploadRawFile) => {
   const maxSize = 20 * 1024 * 1024
   if (file.size > maxSize) {
     ElMessage.error('文件大小不能超过 20MB')
@@ -124,7 +125,7 @@ const beforeUpload = (file: { size: number }) => {
   }
   return true
 }
-const handleUploadRequest = (opts: Record<string, unknown>) => emit('upload-contract-file', opts)
+const handleUploadRequest = (opts: UploadRequestOptions) => emit('upload-contract-file', opts)
 
 const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 </script>
