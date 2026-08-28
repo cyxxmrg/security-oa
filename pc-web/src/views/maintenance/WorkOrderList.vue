@@ -184,7 +184,7 @@ import ResolveWorkOrderDialog from './components/ResolveWorkOrderDialog.vue'
 
 const router = useRouter()
 
-const STATUS_OPTIONS = [
+const STATUS_OPTIONS: Array<{ value: string; label: string; color: TagColor }> = [
   { value: 'pending', label: '待派单', color: 'info' },
   { value: 'assigned', label: '已派单', color: 'primary' },
   { value: 'in_progress', label: '进行中', color: 'warning' },
@@ -192,21 +192,42 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: '已取消', color: 'info' },
   { value: 'converted_to_repair', label: '已转返修', color: 'danger' },
 ]
-const PRIORITY_OPTIONS = [
+const PRIORITY_OPTIONS: Array<{ value: string; label: string; color: TagColor }> = [
   { value: 'low', label: '低', color: 'info' },
   { value: 'medium', label: '中', color: 'primary' },
   { value: 'high', label: '高', color: 'warning' },
   { value: 'urgent', label: '紧急', color: 'danger' },
 ]
 
+type TagColor = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+interface WorkOrder {
+  id: number | string
+  code?: string
+  status: string
+  priority?: string
+  priority_color: TagColor
+  priority_label?: string
+  status_color: TagColor
+  status_label?: string
+  fault_description?: string
+  customer_name?: string
+  contact_name?: string
+  contact_phone?: string
+  equipment_brand?: string
+  equipment_model?: string
+  assignee_name?: string
+  created_at?: string
+  is_locked?: boolean
+}
+
 const boardColumns = computed(() => {
-  const groups: Record<string, Record<string, unknown>[]> = {
+  const groups: Record<string, WorkOrder[]> = {
     pending: [],
     assigned: [],
     in_progress: [],
     resolved: [],
   }
-  list.value.forEach((wo: Record<string, unknown>) => {
+  list.value.forEach((wo: WorkOrder) => {
     if (groups[wo.status]) groups[wo.status].push(wo)
   })
   return [
@@ -217,7 +238,7 @@ const boardColumns = computed(() => {
   ]
 })
 
-const list = ref<Record<string, unknown>[]>([])
+const list = ref<WorkOrder[]>([])
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
@@ -229,7 +250,7 @@ const viewMode = ref<'list' | 'board'>('list')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const debouncedSearch = () => {
-  clearTimeout(debounceTimer)
+  if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => { page.value = 1; loadData() }, 300)
 }
 
@@ -245,10 +266,10 @@ const loadData = async () => {
     })
     // V0.6.3 不再解包, 兼容两种形态: {code,data:{data,total}} 或直接 {data,total}
     const { list: l, total: t } = unwrapPaginate(res)
-    list.value = l
+    list.value = l as WorkOrder[]
     total.value = t
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    ElMessage.error('加载失败: ' + (e instanceof Error ? e.message : ''))
   } finally {
     loading.value = false
   }
@@ -257,32 +278,32 @@ const loadData = async () => {
 const filteredWOs = computed(() => list.value)  // 后端已过滤
 
 const goCreate = () => { showCreate.value = true }
-const goDetail = (id: number) => router.push(`/maintenance/work-orders/${id}`)
+const goDetail = (id: number | string) => router.push(`/maintenance/work-orders/${id}`)
 
 const showCreate = ref(false)
 const showView = ref(false)
 const showDispatch = ref(false)
-const viewWO = ref<Record<string, unknown> | null>(null)
-const dispatchWO = ref<Record<string, unknown> | null>(null)
-const resolveWO = ref<Record<string, unknown> | null>(null)
+const viewWO = ref<WorkOrder | null>(null)
+const dispatchWO = ref<WorkOrder | null>(null)
+const resolveWO = ref<WorkOrder | null>(null)
 const showResolve = ref(false)
 
-const openView = async (id: number) => {
+const openView = async (id: number | string) => {
   try {
     const res = await get(`/work-orders/${id}`)
-    viewWO.value = (res as { data?: Record<string, unknown> })?.data || (res as Record<string, unknown>)
+    viewWO.value = ((res as { data?: WorkOrder })?.data || res) as WorkOrder
     showView.value = true
   } catch { ElMessage.error('加载工单详情失败') }
 }
-const openDispatch = (row: Record<string, unknown>) => {
+const openDispatch = (row: any) => {
   dispatchWO.value = row
   showDispatch.value = true
 }
-const openResolve = (row: Record<string, unknown>) => {
+const openResolve = (row: any) => {
   resolveWO.value = row
   showResolve.value = true
 }
-const startWork = async (row: Record<string, unknown>) => {
+const startWork = async (row: any) => {
   try {
     await post(`/work-orders/${row.id}/start`)
     ElMessage.success('已开始施工')
@@ -293,17 +314,17 @@ const startWork = async (row: Record<string, unknown>) => {
 }
 
 const onViewDialogResolve = (id: number) => {
-  const wo = list.value.find((w: Record<string, unknown>) => Number(w.id) === id)
+  const wo = list.value.find((w: WorkOrder) => Number(w.id) === id)
   if (wo) { resolveWO.value = wo; showResolve.value = true }
 }
 
-const formatTime = (s: string) => {
+const formatTime = (s?: string) => {
   if (!s) return ''
   const d = new Date(s)
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
 }
 
-const timeAgo = (s: string) => {
+const timeAgo = (s?: string) => {
   if (!s) return ''
   const ms = Date.now() - new Date(s).getTime()
   const min = Math.floor(ms / 60000)

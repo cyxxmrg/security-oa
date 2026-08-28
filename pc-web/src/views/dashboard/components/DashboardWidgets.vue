@@ -113,9 +113,12 @@ const days = props.days || 90
 
 const loading = ref(false)
 const methodData = ref<Record<string, number>>({})
-const cycle = ref<Record<string, unknown>>({})
-const faultTop = ref<Record<string, unknown>[]>([])
-const techRank = ref<Record<string, unknown>[]>([])
+interface CycleStats { available?: boolean; sample_count?: number; p50_days?: number; p90_days?: number; max_days?: number }
+interface FaultItem { code: string; label?: string; percentage?: number; count?: number }
+interface TechItem { user_id: number | string; name?: string; avg_days?: number; total_revenue?: number; completed_count?: number }
+const cycle = ref<CycleStats>({})
+const faultTop = ref<FaultItem[]>([])
+const techRank = ref<TechItem[]>([])
 
 const totalCount = computed(() => Object.values(methodData.value).reduce((a, b) => a + b, 0))
 
@@ -141,7 +144,7 @@ const methodColor = (c: string) => ({
   free_warranty: 'success', free_contract: 'success',
   paid_repair: 'warning', paid_replace: 'warning',
   returned: 'info', unspecified: 'info',
-}[c] as Record<string, unknown> || 'info')
+}[c] as 'success' | 'warning' | 'info' || 'info')
 
 const methodHex = (c: string) => ({
   free_warranty: '#67C23A', free_contract: '#67C23A',
@@ -161,10 +164,10 @@ const loadData = async () => {
     const res = await get(`/dashboard/widget/all?days=${days}`)
     // V0.6.3: request.ts 不解包
     const d = unwrapStats<Record<string, unknown>>(res)
-    methodData.value = d.method_distribution || {}
-    cycle.value = d.cycle_percentile || {}
-    faultTop.value = d.fault_top || []
-    techRank.value = d.technician_ranking || []
+    methodData.value = (d.method_distribution || {}) as Record<string, number>
+    cycle.value = (d.cycle_percentile || {}) as CycleStats
+    faultTop.value = (d.fault_top || []) as FaultItem[]
+    techRank.value = (d.technician_ranking || []) as TechItem[]
   } catch (e) {
     methodData.value = {}; cycle.value = {}; faultTop.value = []; techRank.value = []
   } finally { loading.value = false }
