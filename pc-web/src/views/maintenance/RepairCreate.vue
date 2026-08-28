@@ -111,11 +111,11 @@ import { unwrapList, unwrapItem } from '@/utils/response'
 const router = useRouter()
 const formRef = ref()
 const submitting = ref(false)
-const customers = ref<Record<string, unknown>[]>([])
-const workOrderOptions = ref<Record<string, unknown>[]>([])
+const customers = ref<any[]>([])
+const workOrderOptions = ref<any[]>([])
 const searching = ref(false)
 
-const form = ref({
+const form = ref<any>({
   source_type: 'customer',
   source_id: null as number | null,
   customer_id: null as number | null,
@@ -187,7 +187,7 @@ const onSubmit = async () => {
       // 兜底: 跳到列表
       router.push('/maintenance/repairs')
     }
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '创建失败')
   } finally { submitting.value = false }
 }

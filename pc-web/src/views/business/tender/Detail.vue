@@ -55,7 +55,7 @@
           :deposits="deposits"
           :deposit-summary="depositSummary"
           :loading-deposits="loadingDeposits"
-          :can-edit-deposit-rule="canEditDepositRule"
+          :can-edit-deposit-rule="!!canEditDepositRule"
           @edit-rule="showDepositRuleDialog = true"
           @mark-paid="onMarkPaid"
           @refund="onRefund"

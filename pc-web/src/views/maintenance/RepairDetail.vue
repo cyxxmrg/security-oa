@@ -409,7 +409,7 @@ const uploadAttachment = async (option: any) => {
     await post(`/repair-orders/${ro.value?.id}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     ElMessage.success('上传成功')
     await loadAttachments()
-  } catch (e: unknown) { ElMessage.error(e?.message || '上传失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '上传失败') }
 }
 const deleteAttachment = async (id: number) => {
   try { await ElMessageBox.confirm('确定删除这张凭证图?', '提示', { type: 'warning' }) } catch { return }
@@ -417,7 +417,7 @@ const deleteAttachment = async (id: number) => {
     await del(`/repair-orders/${ro.value?.id}/attachments/${id}`)
     ElMessage.success('已删除')
     await loadAttachments()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const loadData = async () => {
@@ -426,7 +426,7 @@ const loadData = async () => {
     // V0.6.3: res = {code, data: <entity>}
     const res = await get(`/repair-orders/${id}`)
     ro.value = unwrapItem(res) || {}
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error('加载失败: ' + (e?.message || ''))
   } finally { loading.value = false }
 }
@@ -467,7 +467,7 @@ const onShipConfirm = async () => {
     ElMessage.success(shipDirection.value === 'outbound' ? '已寄出' : '已寄回')
     shipOutVisible.value = false
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
   finally { shipping.value = false }
 }
 
@@ -476,7 +476,7 @@ const onInRepair = async () => {
     await post(`/repair-orders/${id}/in-repair`)
     ElMessage.success('已进入维修')
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onRepaired = async () => {
@@ -490,7 +490,7 @@ const onRepaired = async () => {
     await post(`/repair-orders/${id}/repaired`)
     ElMessage.success('已修好')
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onClose = async () => {
@@ -499,17 +499,18 @@ const onClose = async () => {
     await post(`/repair-orders/${id}/close`)
     ElMessage.success('已关闭')
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onCancel = async () => {
-  const { value } = await ElMessageBox.prompt('请输入取消原因', '取消返修', { inputType: 'textarea' }).catch(() => null)
+  const result = await ElMessageBox.prompt('请输入取消原因', '取消返修', { inputType: 'textarea' }).catch(() => null)
+  const value = result?.value
   if (!value) return
   try {
     await post(`/repair-orders/${id}/cancel`, { reason: value })
     ElMessage.success('已取消')
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const onAddMethod = () => {
@@ -524,18 +525,19 @@ const onMethodConfirm = async () => {
     ElMessage.success('已添加')
     methodVisible.value = false
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
   finally { savingMethod.value = false }
 }
 
 const onAddLog = async () => {
-  const { value } = await ElMessageBox.prompt('进度说明 (例: 已诊断, 主板烧毁, 报价 ¥750)', '添加进度', { inputType: 'textarea' }).catch(() => null)
+  const result = await ElMessageBox.prompt('进度说明 (例: 已诊断, 主板烧毁, 报价 ¥750)', '添加进度', { inputType: 'textarea' }).catch(() => null)
+  const value = result?.value
   if (!value) return
   try {
     await post(`/repair-orders/${id}/progress-logs`, { progress: '进度更新', description: value })
     ElMessage.success('已添加')
     await loadData()
-  } catch (e: unknown) { ElMessage.error(e?.message || '失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 const formatDate = (s: string) => {
@@ -546,7 +548,7 @@ const formatDate = (s: string) => {
 
 const deliveryLabel = (s: string) => ({ pending: '待发出', in_transit: '在途中', delivered: '已签收', exception: '异常' }[s] || s)
 const paymentLabel = (s: string) => ({ unpaid: '未付', partial: '部分付', paid: '已付', refunded: '已退' }[s] || s)
-const paymentColor = (s: string): string => ({ unpaid: 'danger', partial: 'warning', paid: 'success', refunded: 'info' }[s] || '')
+const paymentColor = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => ({ unpaid: 'danger', partial: 'warning', paid: 'success', refunded: 'info' }[s] as 'success' | 'primary' | 'info' | 'warning' | 'danger' || 'info')
 
 onMounted(() => { loadData(); loadAttachments() })
 </script>
@@ -634,4 +636,3 @@ onMounted(() => { loadData(); loadAttachments() })
   .show-mobile { display: flex; }
 }
 </style>
-

@@ -88,17 +88,17 @@ import { depositStatusTag, fmt } from '../utils'
 
 defineProps<{
   depositRule: TenderDepositRule | null
-  deposits: TenderDeposit[]
-  depositSummary: Record<string, unknown>
+  deposits: any[]
+  depositSummary: any
   loadingDeposits: boolean
   canEditDepositRule: boolean
 }>()
 
 defineEmits<{
   'edit-rule': []
-  'mark-paid': [row: TenderDeposit]
-  refund: [row: TenderDeposit]
-  forfeit: [row: TenderDeposit]
+  'mark-paid': [row: any]
+  refund: [row: any]
+  forfeit: [row: any]
 }>()
 </script>
 

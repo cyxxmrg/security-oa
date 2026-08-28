@@ -66,7 +66,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen, Document, CircleCheck } from '@element-plus/icons-vue'
 import { get, post } from '@/utils/request'
 import { resignations } from '@/api/modules'
-import { todayStr } from './components/resignations/types'
+import { todayStr, type Resignation } from './components/resignations/types'
 import ResignationStatCards from './components/resignations/ResignationStatCards.vue'
 import ResignationFilterBar from './components/resignations/ResignationFilterBar.vue'
 import ResignationTable from './components/resignations/ResignationTable.vue'
@@ -75,16 +75,7 @@ import CompleteResignationDialog, { type CompleteForm } from './components/resig
 import ResignationDetailDialog from './components/resignations/ResignationDetailDialog.vue'
 
 // 离职申请列表项
-interface ResignationItem {
-  id: number
-  status?: string
-  user_id?: number
-  user?: { name?: string; department?: string }
-  resign_date?: string
-  resign_type?: string
-  reason?: string
-  [key: string]: unknown
-}
+type ResignationItem = Resignation & Record<string, any>
 
 // 员工（用户列表项）
 interface EmployeeUser {
@@ -153,20 +144,20 @@ const stats = reactive([
 
 async function loadStats() {
   try {
-    const r = await resignations.list({ per_page: 1, status: 'draft' }) as PaginatedResponse<unknown>
+    const r = await resignations.list({ per_page: 1, status: 'draft' }) as any
     // V0.6.3+ 响应: {code, data: {data, total, current_page, ...}}, 后端 paginate 包装
     const total = Number(r?.data?.total ?? r?.total ?? 0)
     stats[0].value = String(total)
   } catch (e) { /* ignore */ }
   try {
-    const r = await resignations.list({ per_page: 1, status: 'pending' }) as PaginatedResponse<unknown>
+    const r = await resignations.list({ per_page: 1, status: 'pending' }) as any
     const total = Number(r?.data?.total ?? r?.total ?? 0)
     stats[1].value = String(total)
   } catch (e) { /* ignore */ }
   try {
     const now = new Date()
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    const r = await resignations.list({ per_page: 1, status: 'completed', month: ym }) as PaginatedResponse<unknown>
+    const r = await resignations.list({ per_page: 1, status: 'completed', month: ym }) as any
     const total = Number(r?.data?.total ?? r?.total ?? 0)
     stats[2].value = String(total)
   } catch (e) { /* ignore */ }
@@ -194,7 +185,7 @@ async function loadList() {
     }
     if (activeStatus.value) params.status = activeStatus.value
     if (filters.keyword) params.keyword = filters.keyword
-const data = await resignations.list(params) as PaginatedResponse<ResignationItem>
+    const data = await resignations.list(params as any) as any
     // V0.6.3+ 响应: {code, data: {data: [...], total, current_page, ...}}
     const payload = (data?.data ?? data ?? {}) as { data?: ResignationItem[]; items?: ResignationItem[]; total?: number } | ResignationItem[]
     const items = Array.isArray(payload) ? payload : (payload?.data ?? payload?.items ?? [])
@@ -220,7 +211,7 @@ const detailDialogVisible = ref(false)
 const detailRow = ref<ResignationItem | null>(null)
 async function openDetail(row: ResignationItem) {
   try {
-    const data = await resignations.show(row.id) as PaginatedResponse<ResignationItem>
+    const data = await resignations.show(row.id) as any
     detailRow.value = (data?.data as ResignationItem) || data || row
   } catch (e) {
     detailRow.value = row
@@ -266,7 +257,7 @@ function openCreate() {
     social_security_cutoff: '',
   })
   previewVisible.value = false
-  Object.keys(preview).forEach(k => delete preview[k])
+  Object.keys(preview as any).forEach(k => delete (preview as any)[k])
   createDialogVisible.value = true
 }
 
@@ -411,7 +402,7 @@ function openComplete(row: ResignationItem) {
   completeDialogVisible.value = true
 }
 
-async function handleCompleteFileUpload(opt: UploadOpt) {
+async function handleCompleteFileUpload(opt: any) {
   try {
     const fd = new FormData()
     fd.append('file', opt.file)

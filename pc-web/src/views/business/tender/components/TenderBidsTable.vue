@@ -47,15 +47,15 @@ import type { TenderBid } from '@/api/tender'
 import { bidStatusTag, fmt } from '../utils'
 
 defineProps<{
-  bids: TenderBid[]
+  bids: any[]
   loadingBids: boolean
   canAward: boolean
 }>()
 
 defineEmits<{
   compare: []
-  view: [row: TenderBid]
-  award: [row: TenderBid]
+  view: [row: any]
+  award: [row: any]
 }>()
 </script>
 

@@ -22,14 +22,15 @@
 
 <script setup lang="ts">
 import { Upload } from '@element-plus/icons-vue'
+import type { UploadRequestHandler } from 'element-plus'
 import type { TenderAttachment } from '@/api/tender'
 import { formatSize } from '../utils'
 
 defineProps<{
   attachments: TenderAttachment[]
   beforeUpload: (file: File) => boolean | void
-  onUpload: (opt: Record<string, unknown>) => void | Promise<void>
-  openFile: (att: TenderAttachment) => void
-  onDeleteAtt: (att: TenderAttachment) => void | Promise<void>
+  onUpload: UploadRequestHandler
+  openFile: (att: any) => void
+  onDeleteAtt: (att: any) => void | Promise<void>
 }>()
 </script>

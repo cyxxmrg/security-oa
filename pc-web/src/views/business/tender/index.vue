@@ -61,10 +61,10 @@
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="goDetail(row)">详情</el-button>
-          <el-button link v-if="row.status === 'draft'" type="primary" @click="onEdit(row)">编辑</el-button>
+          <el-button link v-if="row.status === 'draft'" type="primary" @click="onEdit(row as any)">编辑</el-button>
           <el-button link v-if="row.status === 'draft'" type="warning" @click="onSubmitReviewRow(row)">提交审核</el-button>
-          <el-button link v-if="row.status === 'draft'" type="success" @click="onPublish(row)">发布(旧)</el-button>
-          <el-button link v-if="['open','bidding','evaluating'].includes(row.status)" type="danger" @click="onCancel(row)">取消</el-button>
+          <el-button link v-if="row.status === 'draft'" type="success" @click="onPublish(row as any)">发布(旧)</el-button>
+          <el-button link v-if="['open','bidding','evaluating'].includes(row.status)" type="danger" @click="onCancel(row as any)">取消</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -91,7 +91,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="goReview(row)">审核</el-button>
+            <el-button link type="primary" @click="goReview(row as any)">审核</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -145,7 +145,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh, Bell, Connection } from '@element-plus/icons-vue'
-import { tender } from '@/api/tender'
+import { tender, type TenderProject } from '@/api/tender'
 import { externalWorkApi } from '@/api/construction'
 import { getProjectList } from '@/api/modules'
 import { get } from '@/utils/request'
@@ -154,7 +154,7 @@ import EditTenderDialog from './components/EditTenderDialog.vue'
 import type { FormInstance } from 'element-plus'
 
 const router = useRouter()
-const list = ref<TenderProject[]>([])
+const list = ref<any[]>([])
 const loading = ref(false)
 const filter = reactive({ keyword: '', status: '' })
 
@@ -180,7 +180,7 @@ const supplierOptions = ref<{ id: number; name: string }[]>([])
 
 // V0.6.5 Sprint 4: 审核队列
 const showReviewQueue = ref(false)
-const pendingReviewList = ref<TenderProject[]>([])
+const pendingReviewList = ref<any[]>([])
 const loadingReview = ref(false)
 const pendingReviewCount = ref(0)
 
@@ -198,24 +198,24 @@ const STATUS_OPTIONS = [
 const typeLabel = (t?: string) =>
   t === 'tender' ? '招标' : t === 'rfq' ? '询价' : t === 'negotiation' ? '议价' : t === 'construction' ? '施工询价' : t || '-'
 
-const statusTag = (s: string) => {
+const statusTag = (s: string): 'success' | 'warning' | 'info' | 'primary' | 'danger' => {
   return ({
     draft: 'info',
     pending_review: 'warning',
     open: 'success',
     bidding: 'warning', evaluating: 'primary',
-    awarded: 'success', closed: '',
+    awarded: 'success', closed: 'info',
     cancelled: 'danger',
     withdrawn: 'info', rejected: 'danger',
-  } as Record<string, '' | 'success' | 'warning' | 'info' | 'primary' | 'danger'>)[s] || ''
+  } as Record<string, 'success' | 'warning' | 'info' | 'primary' | 'danger'>)[s] || 'info'
 }
 
 const fmt = (s?: string) => (s ? s.replace('T', ' ').slice(0, 16) : '-')
 
 const filteredList = computed(() => {
   // 合并招标 + 施工询价
-  const tenders = list.value.map((r: Record<string, unknown>) => ({ ...r, _type: 'tender' }))
-  const works = constructionList.value.map((r: Record<string, unknown>) => ({
+  const tenders = list.value.map((r: any) => ({ ...r, _type: 'tender' }))
+  const works = constructionList.value.map((r: any) => ({
     id: r.id, code: r.code, name: r.title,
     project: r.project, status: r.status,
     deadline: r.deadline, awardedSupplier: r.awardedSupplier,
@@ -336,7 +336,7 @@ const goDetail = (row: Record<string, unknown>) => {
 }
 
 // V0.6.5: 列表行操作 — 用 submit-review 替代旧 publish
-const onSubmitReviewRow = async (row: TenderProject) => {
+const onSubmitReviewRow = async (row: any) => {
   try {
     await ElMessageBox.confirm(`提交「${row.name}」进入待审核状态?`, '提交审核', { type: 'warning' })
   } catch { return }
@@ -345,7 +345,7 @@ const onSubmitReviewRow = async (row: TenderProject) => {
     ElMessage.success('已提交审核')
     loadList()
     loadReviewQueue()
-  } catch (e: unknown) {
+  } catch (e: any) {
     ElMessage.error(e?.message || '提交失败')
   }
 }

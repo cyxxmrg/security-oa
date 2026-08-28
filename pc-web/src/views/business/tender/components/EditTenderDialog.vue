@@ -128,8 +128,8 @@ const isEdit = computed(() => !!props.tender?.id)
 const formRef = ref()
 const loading = ref(false)
 const saving = ref(false)
-const supplierOptions = ref<{ id: number; name: string; code: string }[]>([])
-const projectOptions = ref<{ id: number; name: string; code: string }[]>([])
+const supplierOptions = ref<any[]>([])
+const projectOptions = ref<any[]>([])
 
 const form = reactive({
   name: '',
@@ -172,7 +172,7 @@ const fillForm = (t: TenderProject | null) => {
   form.deadline = t.deadline
   form.open_at = t.open_at
   form.description = t.description || ''
-  form.required_items = (t.required_items || []).map((it: Record<string, unknown>) => ({ ...it }))
+  form.required_items = (t.required_items || []).map((it: any) => ({ ...it })) as any
   form.invited_supplier_ids = t.invited_supplier_ids || []
   if (t.score_config) form.score_config = { ...form.score_config, ...t.score_config }
 }
@@ -183,10 +183,10 @@ const addItem = () => {
 
 // V0.6.3 从库存选择物料 (批量加入必购清单)
 const showInventoryPicker = ref(false)
-const onInventorySelect = (items: Record<string, unknown>[]) => {
+const onInventorySelect = (items: any[]) => {
   if (!items || items.length === 0) return
   let added = 0
-  items.forEach((it: Record<string, unknown>) => {
+  items.forEach((it: any) => {
     form.required_items.push({
       name: it.name,
       spec: it.spec || '',
@@ -201,12 +201,12 @@ const onInventorySelect = (items: Record<string, unknown>[]) => {
 
 const loadOptions = async () => {
   try {
-    const [s, p]: Record<string, unknown>[] = await Promise.all([
+    const [s, p]: any[] = await Promise.all([
       supplier.list({ per_page: 500 }),
       getProjectList({ per_page: 200 }),
     ])
-    supplierOptions.value = (s?.data?.items ?? s?.items ?? s?.data ?? []) as Record<string, unknown>[]
-    projectOptions.value = (p?.data?.items ?? p?.items ?? p?.data ?? []) as Record<string, unknown>[]
+    supplierOptions.value = s?.data?.items ?? s?.items ?? s?.data ?? []
+    projectOptions.value = p?.data?.items ?? p?.items ?? p?.data ?? []
   } catch { /* 静默, 选项可为空 */ }
 }
 

@@ -47,7 +47,7 @@
               ¥ {{ Number(it.unit_price).toFixed(2) }} × {{ it.quantity }} = <strong>¥ {{ Number(it.total_price).toLocaleString() }}</strong>
             </span>
           </div>
-          <span v-if="!b.items?.some((it: Record<string, unknown>) => it.name === row.name)" class="muted">未报价</span>
+          <span v-if="!b.items?.some((it: any) => it.name === row.name)" class="muted">未报价</span>
         </template>
       </el-table-column>
     </el-table>
@@ -58,7 +58,7 @@
 import { computed } from 'vue'
 import type { TenderBid } from '@/api/tender'
 
-const props = defineProps<{ visible: boolean; bids: TenderBid[]; requiredItems?: Record<string, unknown>[] }>()
+const props = defineProps<{ visible: boolean; bids: TenderBid[]; requiredItems?: any[] }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 const visible = computed({ get: () => props.visible, set: (v) => emit('update:visible', v) })
