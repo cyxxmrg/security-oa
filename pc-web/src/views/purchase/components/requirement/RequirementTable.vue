@@ -100,12 +100,12 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'view', row: Requirement): void
-  (e: 'viewProject', row: Requirement): void
-  (e: 'edit', row: Requirement): void
-  (e: 'delete', row: Requirement): void
-  (e: 'approve', row: Requirement): void
-  (e: 'convertToPlan', row: Requirement): void
+  (e: 'view', row: any): void
+  (e: 'viewProject', row: any): void
+  (e: 'edit', row: any): void
+  (e: 'delete', row: any): void
+  (e: 'approve', row: any): void
+  (e: 'convertToPlan', row: any): void
 }>()
 </script>
 

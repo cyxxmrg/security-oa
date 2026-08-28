@@ -52,9 +52,9 @@ defineProps<{
   total: number
 }>()
 const emit = defineEmits<{
-  (e: 'view', row: PurchaseApproval): void
-  (e: 'edit', row: PurchaseApproval): void
-  (e: 'delete', row: PurchaseApproval): void
+  (e: 'view', row: any): void
+  (e: 'edit', row: any): void
+  (e: 'delete', row: any): void
   (e: 'pageChange', p: number): void
   (e: 'sizeChange', s: number): void
 }>()
