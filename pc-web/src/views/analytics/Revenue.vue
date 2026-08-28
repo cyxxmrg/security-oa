@@ -97,8 +97,8 @@ const dateRange = ref<[string, string]>([
   new Date(Date.now() - 365 * 86400e3).toISOString().slice(0, 7),
 ].reverse() as [string, string])
 const industry = ref<string>('')
-const rows = ref<Record<string, unknown>[]>([])
-const summary = ref<Record<string, unknown>>({ total_gross: 0, total_received: 0, total_pending: 0, collection_rate: 0 })
+const rows = ref<any[]>([])
+const summary = ref<any>({ total_gross: 0, total_received: 0, total_pending: 0, collection_rate: 0 })
 const refreshedAt = ref<string>('')
 
 // 提取行业列表
@@ -106,9 +106,9 @@ const industryOptions = computed(() => Array.from(new Set(rows.value.map(r => r.
 
 // 按月聚合
 const monthRows = computed(() => {
-  const map = new Map<string, Record<string, unknown>>()
+  const map = new Map<string, any>()
   for (const r of rows.value) {
-    const k = r.period_key
+    const k = String(r.period_key || '')
     if (!map.has(k)) {
       map.set(k, { period_key: k, orders: 0, customers: 0, gross: 0, received: 0, pending: 0 })
     }
@@ -130,7 +130,7 @@ const chartOption = computed(() => {
     grid: { left: 60, right: 30, top: 50, bottom: 60 },
     toolbox: { feature: { dataZoom: {}, restore: {} } },
     xAxis: { type: 'category', data: data.map(d => d.period_key) },
-    yAxis: { type: 'value', axisLabel: { formatter: v => '¥' + (v / 1000).toFixed(0) + 'k' } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => '¥' + (v / 1000).toFixed(0) + 'k' } },
     series: [
       { name: '毛收入', type: 'line', smooth: true, data: data.map(d => d.gross), itemStyle: { color: '#1e3a8a' }, areaStyle: { opacity: 0.2 } },
       { name: '已回款', type: 'bar', data: data.map(d => d.received), itemStyle: { color: '#10b981' } },
@@ -157,7 +157,7 @@ const pieOption = computed(() => {
 const scatterOption = computed(() => {
   const data = monthRows.value.map(d => [d.orders, d.received, d.period_key])
   return {
-    tooltip: { trigger: 'item', formatter: (p: Record<string, unknown>) => `${p.data[2]}<br/>订单 ${p.data[0]}<br/>回款 ¥${p.data[1]}` },
+    tooltip: { trigger: 'item', formatter: (p: any) => `${p.data[2]}<br/>订单 ${p.data[0]}<br/>回款 ¥${p.data[1]}` },
     grid: { left: 50, right: 30, top: 30, bottom: 40 },
     xAxis: { name: '订单数' },
     yAxis: { name: '回款额', axisLabel: { formatter: (v: number) => '¥' + (v / 1000).toFixed(0) + 'k' } },
@@ -165,7 +165,7 @@ const scatterOption = computed(() => {
   }
 })
 
-function formatNumber(n: number | string) {
+function formatNumber(n: number | string | null | undefined) {
   const num = Number(n) || 0
   return num.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
@@ -181,8 +181,8 @@ async function load() {
     rows.value = data.rows || []
     summary.value = data.summary || summary.value
     refreshedAt.value = new Date().toLocaleString('zh-CN')
-  } catch (e: unknown) {
-    ElMessage.error('加载营收数据失败: ' + (e.message || '未知错误'))
+  } catch (e: any) {
+    ElMessage.error('加载营收数据失败: ' + (e?.message || '未知错误'))
   }
 }
 
