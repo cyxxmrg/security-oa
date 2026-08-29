@@ -29,7 +29,7 @@
       border
       v-loading="loadingOrders"
       highlight-current-row
-      @row-click="(row: Record<string, unknown>) => $emit('select-order', row)"
+      @row-click="(row: any) => $emit('select-order', row)"
       :header-cell-style="{ background: '#f5f7fa', color: '#303133', fontWeight: 600 }"
     >
       <el-table-column label="PO 号" width="170" fixed>
@@ -74,14 +74,14 @@ const props = defineProps<{
   searchForm: { keyword: string; status: string }
   loadingOrders: boolean
   orderStatusOptions: { value: string; label: string }[]
-  pagedOrders: Record<string, unknown>[]
+  pagedOrders: any[]
   total: number
 }>()
 
 defineEmits<{
   (e: 'search'): void
   (e: 'reset'): void
-  (e: 'select-order', row: Record<string, unknown>): void
+  (e: 'select-order', row: any): void
 }>()
 
 const pageModel = defineModel<number>('page', { default: 1 })
@@ -90,7 +90,7 @@ const pageSizeModel = defineModel<number>('pageSize', { default: 10 })
 const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 const orderStatusLabel = (s: string) => props.orderStatusOptions.find(o => o.value === s)?.label || s || '-'
 const ORDER_STATUS_TYPES: Record<string, string> = { draft: 'info', pending: 'warning', approved: 'success', fulfilled: 'success', rejected: 'danger', cancelled: 'info' }
-const orderStatusTagType = (s: string): string => ORDER_STATUS_TYPES[s] || ''
+const orderStatusTagType = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => (ORDER_STATUS_TYPES[s] as 'success' | 'primary' | 'info' | 'warning' | 'danger') || 'info'
 </script>
 
 <style scoped>

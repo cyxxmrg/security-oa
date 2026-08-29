@@ -107,14 +107,14 @@ defineProps<{
 const emit = defineEmits<{
   'add-contract-item': []
   'load-contract-items': []
-  'save-contract-item': [row: PurchaseItem]
+  'save-contract-item': [row: any]
   'cancel-edit-item': []
   'edit-item': [id: number]
-  'delete-contract-item': [row: PurchaseItem]
+  'delete-contract-item': [row: any]
   'upload-contract-file': [opts: UploadRequestOptions]
-  'preview-file': [row: PurchaseContractFile]
-  'download-file': [row: PurchaseContractFile]
-  'delete-contract-file': [row: PurchaseContractFile]
+  'preview-file': [row: any]
+  'download-file': [row: any]
+  'delete-contract-file': [row: any]
 }>()
 
 const beforeUpload = (file: UploadRawFile) => {
@@ -125,9 +125,9 @@ const beforeUpload = (file: UploadRawFile) => {
   }
   return true
 }
-const handleUploadRequest = (opts: UploadRequestOptions) => emit('upload-contract-file', opts)
+const handleUploadRequest = async (opts: UploadRequestOptions) => { emit('upload-contract-file', opts) }
 
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatMoney = (n: number | string | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 </script>
 
 <style scoped>

@@ -31,7 +31,7 @@
         </div>
         <div class="order-meta">
           <span>金额：<b class="money-text">¥ {{ formatMoney(currentOrder.total_amount) }}</b></span>
-          <span>供应商：{{ currentOrder.supplier?.name || `#${currentOrder.supplier_id}` }}</span>
+          <span>供应商：{{ currentOrder.supplier?.name || `#${Number(currentOrder.supplier_id || 0)}` }}</span>
           <span>创建：{{ currentOrder.created_at ? String(currentOrder.created_at).slice(0, 16) : '-' }}</span>
         </div>
       </div>
@@ -137,7 +137,7 @@
       <el-form :model="newShipping" label-width="100px">
         <el-form-item label="物料 / 范围">
           <el-select v-model="newShipping.contract_item_id" placeholder="整单 (不选 = 整单)" clearable filterable style="width:100%">
-            <el-option label="整单 (合同整体)" :value="undefined" />
+            <el-option label="整单 (合同整体)" value="" />
             <el-option
               v-for="it in contractItems"
               :key="it.id"

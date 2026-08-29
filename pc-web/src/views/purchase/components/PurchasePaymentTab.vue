@@ -34,7 +34,7 @@
           <el-upload
             :show-file-list="false"
             :before-upload="(f: UploadRawFile) => beforeUploadVoucher(f, pr.id)"
-            :http-request="(opts: UploadRequestOptions) => $emit('upload-voucher', opts, pr.id)"
+            :http-request="(opts: UploadRequestOptions) => handleUploadRequest(opts, pr.id)"
             accept=".pdf,.png,.jpeg,.jpg"
             style="display:inline-block;margin-left:8px"
           >
@@ -66,10 +66,10 @@ defineProps<{
   loadingPayments: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'upload-voucher', opts: UploadRequestOptions, prId: number): void
-  (e: 'preview-voucher', row: Record<string, any>): void
-  (e: 'download-voucher', row: Record<string, any>): void
+  (e: 'preview-voucher', row: any): void
+  (e: 'download-voucher', row: any): void
 }>()
 
 const activePayReqIdsModel = defineModel<number[]>('activePayReqIds', { default: () => [] })
@@ -81,6 +81,10 @@ const beforeUploadVoucher = (file: UploadRawFile, _prId: number) => {
     return false
   }
   return true
+}
+
+const handleUploadRequest = async (opts: UploadRequestOptions, prId: number) => {
+  emit('upload-voucher', opts, prId)
 }
 
 const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })

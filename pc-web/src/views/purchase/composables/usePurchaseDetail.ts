@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { purchase } from '@/api/modules'
 import { unwrapList } from '@/utils/response'
 import { purchaseFlow } from '@/api/purchase-flow'
+import type { UploadRequestOptions } from 'element-plus'
 
 // 采购订单
 interface PurchaseOrder {
@@ -87,10 +88,7 @@ interface InventoryPickItem {
 }
 
 // 上传回调参数
-interface UploadOpts {
-  file: File
-  [key: string]: unknown
-}
+type UploadOpts = UploadRequestOptions
 
 // API 列表响应
 interface ListResponse<T> {
@@ -121,7 +119,7 @@ export function usePurchaseDetail() {
     { value: 'cancelled', label: '已取消' },
   ]
   const orderStatusLabel = (s: string) => orderStatusOptions.find(o => o.value === s)?.label || s || '-'
-  const orderStatusTagType = (s: string): string => ({ draft: 'info', pending: 'warning', approved: 'success', fulfilled: 'success', rejected: 'danger', cancelled: 'info' } as Record<string, string>)[s] || ''
+  const orderStatusTagType = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => ({ draft: 'info', pending: 'warning', approved: 'success', fulfilled: 'success', rejected: 'danger', cancelled: 'info' } as Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'>)[s] || 'info'
 
   const filteredOrders = computed(() => {
     let arr = [...orders.value]
@@ -424,7 +422,7 @@ export function usePurchaseDetail() {
   const shippingStatusType = (s: string): string => ({ planned: 'info', shipped: 'warning', in_transit: 'warning', arrived: 'success', received: 'success' } as Record<string, string>)[s] || ''
 
   // ========== 工具 ==========
-  const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  const formatMoney = (n: number | string | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 
   // ========== 监听 Tab 切换 — 切换时按需加载 ==========
   watch(activeTab, (tab) => {
