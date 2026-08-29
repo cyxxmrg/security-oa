@@ -4,7 +4,7 @@
     <el-table-column prop="code" label="编号" width="160" />
     <el-table-column prop="name" label="供应商名称" min-width="180" show-overflow-tooltip>
       <template #default="{ row }">
-        <el-link type="primary" :underline="false" @click="$emit('view', row)">{{ row.name }}</el-link>
+        <el-link type="primary" :underline="false" @click="$emit('view', toSupplier(row))">{{ row.name }}</el-link>
       </template>
     </el-table-column>
     <el-table-column prop="type" label="类型" width="90">
@@ -16,7 +16,7 @@
     <el-table-column prop="phone" label="电话" width="130" />
     <el-table-column label="联系人库" width="100" align="center">
       <template #default="{ row }">
-        <el-button size="small" link type="success" @click="$emit('view', row)">
+        <el-button size="small" link type="success" @click="$emit('view', toSupplier(row))">
           {{ row.contacts_count ?? 0 }} 人
         </el-button>
       </template>
@@ -38,10 +38,10 @@
     </el-table-column>
     <el-table-column label="操作" width="240" fixed="right">
       <template #default="{ row }">
-        <el-button size="small" link type="primary" @click="$emit('view', row)">详情</el-button>
-        <el-button size="small" link type="primary" @click="$emit('edit', row)">编辑</el-button>
-        <el-button size="small" link type="warning" @click="$emit('evaluate', row)">评价</el-button>
-        <el-button size="small" link type="danger" @click="$emit('delete', row)">删除</el-button>
+        <el-button size="small" link type="primary" @click="$emit('view', toSupplier(row))">详情</el-button>
+        <el-button size="small" link type="primary" @click="$emit('edit', toSupplier(row))">编辑</el-button>
+        <el-button size="small" link type="warning" @click="$emit('evaluate', toSupplier(row))">评价</el-button>
+        <el-button size="small" link type="danger" @click="$emit('delete', toSupplier(row))">删除</el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -49,11 +49,12 @@
 
 <script setup lang="ts">
 import type { Supplier } from '@/api/supplier'
+import { withDefaults } from 'vue'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   data: Supplier[]
   loading?: boolean
-}>()
+}>(), { loading: false })
 
 defineEmits<{
   view: [row: Supplier]
@@ -66,17 +67,19 @@ const typeLabel = (t?: string) => ({
   material: '材料', labor: '人工', outsource: '外包', service: '服务',
 }[t ?? ''] ?? t ?? '-')
 
-const typeTagType = (t?: string) => ({
+const typeTagType = (t?: string): 'success' | 'primary' | 'warning' | 'info' | 'danger' => ({
   material: 'primary', labor: 'success', outsource: 'warning', service: 'info',
-}[t ?? ''] ?? '')
+}[t ?? ''] as 'success' | 'primary' | 'warning' | 'info' | 'danger' || 'info')
 
 const statusLabel = (s?: string) => ({
   active: '正常', paused: '暂停', blacklist: '黑名单',
 }[s ?? ''] ?? s ?? '-')
 
-const statusTagType = (s?: string) => ({
+const statusTagType = (s?: string): 'success' | 'primary' | 'warning' | 'info' | 'danger' => ({
   active: 'success', paused: 'warning', blacklist: 'danger',
-}[s ?? ''] ?? '')
+}[s ?? ''] as 'success' | 'primary' | 'warning' | 'info' | 'danger' || 'info')
+
+const toSupplier = (row: unknown): Supplier => row as Supplier
 
 const paymentLabel = (p?: string) => ({
   cash: '现款', '30days': '30天', '60days': '60天', '90days': '90天',

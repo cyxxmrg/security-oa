@@ -153,7 +153,7 @@
             </el-table-column>
             <el-table-column label="主联系人" width="80" align="center">
               <template #default="{ row }">
-                <el-radio v-model="primaryIdx" :value="form.contacts.indexOf(row)">
+                <el-radio v-model="primaryIdx" :value="form.contacts.indexOf(toContact(row))">
                   <span></span>
                 </el-radio>
               </template>
@@ -246,6 +246,8 @@ const rules = {
 const addContact = () => {
   form.value.contacts.push({ name: '', phone: '', position: '', email: '', is_primary: false })
 }
+
+const toContact = (row: unknown): SupplierContact => row as SupplierContact
 
 watch(
   () => props.editing,
