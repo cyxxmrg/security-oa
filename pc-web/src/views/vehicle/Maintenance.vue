@@ -9,7 +9,7 @@
 
     <div class="filter-bar">
       <el-select v-model="searchForm.vehicle_id" placeholder="选择车辆" clearable filterable style="width: 200px">
-        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id" />
+        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id ?? 0" />
       </el-select>
       <el-select v-model="searchForm.maintenance_type" placeholder="保养类型" clearable style="width: 140px">
         <el-option v-for="(label, k) in typeMap" :key="k" :label="label" :value="k" />
@@ -81,7 +81,7 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="车辆" prop="vehicle_id">
           <el-select v-model="form.vehicle_id" placeholder="选择车辆" filterable style="width: 100%">
-            <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id" />
+          <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id ?? 0" />
           </el-select>
         </el-form-item>
         <el-form-item label="保养类型" prop="maintenance_type">

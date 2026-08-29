@@ -11,7 +11,7 @@
 
     <div class="filter-bar">
       <el-select v-model="searchForm.vehicle_id" placeholder="选择车辆" clearable filterable style="width: 200px">
-        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id" />
+        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id ?? 0" />
       </el-select>
       <el-select v-model="searchForm.status" placeholder="保险状态" clearable style="width: 140px">
         <el-option label="在保" value="active" />
@@ -84,7 +84,7 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="车辆" prop="vehicle_id">
           <el-select v-model="form.vehicle_id" placeholder="选择车辆" filterable style="width: 100%">
-            <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id" />
+            <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id ?? 0" />
           </el-select>
         </el-form-item>
         <el-form-item label="保险公司" prop="insurance_company">

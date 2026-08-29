@@ -9,7 +9,7 @@
         <el-col :span="8">
           <el-form-item label="油卡" prop="card_id">
             <el-select v-model="form.card_id" placeholder="选择油卡" filterable style="width: 100%">
-              <el-option v-for="c in cardList" :key="c.id" :label="`${c.card_no} (${c.card_name || '-'}) - 余 ¥${formatMoney(c.balance ?? 0)}`" :value="c.id" />
+        <el-option v-for="c in cardList" :key="c.id" :label="`${c.card_no} (${c.card_name || '-'}) - 余 ¥${formatMoney(c.balance ?? 0)}`" :value="c.id ?? 0" />
             </el-select>
           </el-form-item>
         </el-col>

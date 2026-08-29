@@ -108,7 +108,7 @@
         </el-descriptions>
         <el-form-item label="分配车辆">
           <el-select v-model="dispatchForm.vehicle_id" placeholder="请选择车辆" filterable style="width: 100%">
-            <el-option v-for="v in availableVehicles" :key="v.id" :label="`${v.plate_no} / ${v.brand} ${v.model}`" :value="v.id" />
+            <el-option v-for="v in availableVehicles" :key="v.id" :label="`${v.plate_no} / ${v.brand} ${v.model}`" :value="v.id ?? 0" />
           </el-select>
         </el-form-item>
       </el-form>

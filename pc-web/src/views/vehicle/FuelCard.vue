@@ -12,7 +12,7 @@
 
     <div class="filter-bar">
       <el-select v-model="searchForm.vehicle_id" placeholder="选择车辆" clearable filterable style="width: 200px">
-        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id" />
+        <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand})`" :value="v.id ?? 0" />
       </el-select>
       <el-select v-model="searchForm.status" placeholder="卡片状态" clearable style="width: 130px">
         <el-option label="在用" value="active" />
@@ -81,7 +81,7 @@
     <div class="content-card">
       <div class="filter-bar">
         <el-select v-model="rechargeForm.card_id" placeholder="选择油卡" clearable filterable style="width: 200px" @change="loadRecharges">
-          <el-option v-for="c in cardList" :key="c.id" :label="`${c.card_no} (${c.card_name || '-'})`" :value="c.id" />
+          <el-option v-for="c in cardList" :key="c.id" :label="`${c.card_no} (${c.card_name || '-'})`" :value="c.id ?? 0" />
         </el-select>
         <el-input v-model="rechargeForm.keyword" placeholder="搜索凭证号/经办人" clearable style="width: 220px" @keyup.enter="loadRecharges" />
         <el-button type="primary" @click="loadRecharges">搜索</el-button>

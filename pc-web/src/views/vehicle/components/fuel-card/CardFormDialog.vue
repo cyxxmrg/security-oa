@@ -19,7 +19,7 @@
         <el-col :span="8">
           <el-form-item label="绑定车辆">
             <el-select v-model="form.vehicle_id" placeholder="选择车辆 (可空)" clearable filterable style="width: 100%">
-              <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id" />
+            <el-option v-for="v in vehicles" :key="v.id" :label="`${v.plate_no} (${v.brand} ${v.model})`" :value="v.id ?? 0" />
             </el-select>
           </el-form-item>
         </el-col>
