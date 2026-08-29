@@ -78,7 +78,7 @@
       >
         <el-table-column prop="opp_no" label="商机编号" width="160" fixed>
           <template #default="{ row }">
-            <span class="link-text" @click="handleView(row)">{{ row.opp_no }}</span>
+            <span class="link-text" @click="handleView(row as unknown as Opp)">{{ row.opp_no }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="商机名称" min-width="220" fixed show-overflow-tooltip />
@@ -117,8 +117,8 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleView(row)">查看</el-button>
-            <el-button v-if="row.stage !== 'lost'" link type="warning" @click="handleEdit(row)">
+            <el-button link type="primary" @click="handleView(row as unknown as Opp)">查看</el-button>
+            <el-button v-if="row.stage !== 'lost'" link type="warning" @click="handleEdit(row as unknown as Opp)">
               编辑
             </el-button>
             <el-button
@@ -130,14 +130,14 @@
               报价
             </el-button>
             <template v-if="!isClosed(row.stage)">
-              <el-button link type="success" @click="handleWin(row)">成交</el-button>
-              <el-button link type="danger" @click="handleLost(row)">战败</el-button>
+              <el-button link type="success" @click="handleWin(row as unknown as Opp)">成交</el-button>
+              <el-button link type="danger" @click="handleLost(row as unknown as Opp)">战败</el-button>
             </template>
             <el-button
               v-if="row.stage === 'lost'"
               link
               type="warning"
-              @click="handleRevive(row)"
+              @click="handleRevive(row as unknown as Opp)"
             >
               战败复活
             </el-button>
@@ -232,10 +232,10 @@ interface FunnelItem {
   [k: string]: unknown
 }
 interface FunnelRow { stage?: string; count?: number; total_amount?: number; [k: string]: unknown }
-interface LostReason { value?: string; label?: string; [k: string]: unknown }
-interface UserOption { id: number | string; name?: string; [k: string]: unknown }
-interface CustomerOption { id: number | string; name?: string; [k: string]: unknown }
-interface ReferrerOption { id: number | string; name?: string; [k: string]: unknown }
+interface LostReason { value: string; label: string }
+interface UserOption { id: number; name: string }
+interface CustomerOption { id: number; name: string }
+interface ReferrerOption { id: number; name: string; commission_rate: number }
 interface OppListResponse { data?: { data?: Opp[]; total?: number }; [k: string]: unknown }
 interface StageOptionsResponse { data?: StageOption[]; [k: string]: unknown }
 interface LostReasonsResponse { data?: LostReason[]; [k: string]: unknown }
@@ -328,7 +328,8 @@ const loadFunnel = async () => {
 const loadUsers = async () => {
   try {
     const r = await getEmployeeList({ per_page: 200 })
-    userOptions.value = unwrapList(r as unknown as Record<string, unknown>) as UserOption[]
+    userOptions.value = unwrapList(r as unknown as Record<string, unknown>)
+      .map((item) => ({ id: Number(item.id) || 0, name: String(item.name ?? '') }))
   } catch (e) {
     userOptions.value = []
   }
@@ -337,7 +338,8 @@ const loadUsers = async () => {
 const loadCustomers = async () => {
   try {
     const r = await getCustomerOptions({ per_page: 200 })
-    customerOptions.value = unwrapList(r as unknown as Record<string, unknown>) as CustomerOption[]
+    customerOptions.value = unwrapList(r as unknown as Record<string, unknown>)
+      .map((item) => ({ id: Number(item.id) || 0, name: String(item.name ?? '') }))
   } catch (e) {
     customerOptions.value = []
   }
@@ -346,7 +348,8 @@ const loadCustomers = async () => {
 const loadReferrers = async () => {  // V1.2.5
   try {
     const r = await getReferrers({ per_page: 200 })
-    referrerOptions.value = unwrapList(r as unknown as Record<string, unknown>) as ReferrerOption[]
+    referrerOptions.value = unwrapList(r as unknown as Record<string, unknown>)
+      .map((item) => ({ id: Number(item.id) || 0, name: String(item.name ?? ''), commission_rate: Number(item.commission_rate) || 0 }))
   } catch (e) {
     referrerOptions.value = []
   }

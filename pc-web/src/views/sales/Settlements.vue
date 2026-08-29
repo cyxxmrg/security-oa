@@ -24,7 +24,7 @@
       </el-form-item>
       <el-form-item label="推荐人">
         <el-select v-model="filter.referrer_id" placeholder="全部" clearable filterable style="width: 200px">
-          <el-option v-for="r in referrerOptions" :key="r.id" :label="r.name" :value="r.id" />
+          <el-option v-for="r in referrerOptions" :key="r.id ?? ''" :label="r.name ?? ''" :value="r.id ?? ''" />
         </el-select>
       </el-form-item>
       <el-form-item label="关键词">
@@ -58,7 +58,7 @@
       </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="statusTagType(row.status)" effect="dark">{{ statusLabel(row.status) }}</el-tag>
+          <el-tag :type="statusTagType(row.status ?? undefined)" effect="dark">{{ statusLabel(row.status ?? undefined) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="审核" width="160">
@@ -141,7 +141,7 @@
           <el-descriptions-item label="商机">{{ currentSettlement.opportunity?.name }} (#{{ currentSettlement.opportunity_id }})</el-descriptions-item>
           <el-descriptions-item label="推荐人">{{ currentSettlement.referrer?.name }}</el-descriptions-item>
           <el-descriptions-item label="结算金额">¥ {{ currentSettlement.amount }} ({{ currentSettlement.commission_rate }}% × ¥{{ currentSettlement.contract_amount }})</el-descriptions-item>
-          <el-descriptions-item label="状态"><el-tag :type="statusTagType(currentSettlement.status)">{{ statusLabel(currentSettlement.status) }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="状态"><el-tag :type="statusTagType(currentSettlement.status ?? undefined)">{{ statusLabel(currentSettlement.status ?? undefined) }}</el-tag></el-descriptions-item>
           <el-descriptions-item label="创建人">{{ currentSettlement.creator?.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="审核人">{{ currentSettlement.approver?.name || '-' }} / {{ currentSettlement.approved_at || '-' }}</el-descriptions-item>
           <el-descriptions-item label="发放人">{{ currentSettlement.payer?.name || '-' }} / {{ currentSettlement.paid_at || '-' }}</el-descriptions-item>
@@ -176,7 +176,7 @@ const canPay = computed(() =>
 )
 
 const loading = ref(false)
-const list = ref<Record<string, unknown>[]>([])
+const list = ref<Settlement[]>([])
 const total = ref(0)
 const page = ref(1)
 const perPage = ref(20)
@@ -202,12 +202,12 @@ const statCards = computed(() => [
   { label: '已发放', value: stats.value.paid || 0, sub: '¥ ' + Number(stats.value.total_amount_paid || 0).toLocaleString(), color: '#1D9E75' },
 ])
 
-const statusLabel = (s: string) => ({
+const statusLabel = (s?: string) => ({
   pending: '待审核', approved: '已审核', paid: '已发放', cancelled: '已取消',
-}[s] || s)
-const STATUS_TAG_TYPES: Record<string, string> = { pending: 'warning', approved: 'primary', paid: 'success', cancelled: 'info' }
-const statusTagType = (s: string): string => STATUS_TAG_TYPES[s] || 'info'
-const formatDate = (d: string) => d ? d.slice(0, 16).replace('T', ' ') : '-'
+}[s || ''] || s || '-')
+const STATUS_TAG_TYPES: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = { pending: 'warning', approved: 'primary', paid: 'success', cancelled: 'info' }
+const statusTagType = (s?: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => STATUS_TAG_TYPES[s || ''] || 'info'
+const formatDate = (d?: string | null) => d ? d.slice(0, 16).replace('T', ' ') : '-'
 
 const loadList = async () => {
   loading.value = true
@@ -247,6 +247,7 @@ const approve = async (row: Settlement) => {
     await ElMessageBox.confirm(`确认审核通过结算单 #${row.id} (¥${row.amount})?`, '财务审核', { type: 'warning' })
   } catch { return }
   try {
+    if (!row.id) return
     await approveReferralSettlement(row.id)
     ElMessage.success('审核通过')
     loadList(); loadStats()
@@ -264,7 +265,9 @@ const confirmPay = async () => {
   if (!payForm.payment_no) { ElMessage.warning('请输入流水号'); return }
   paying.value = true
   try {
-    await payReferralSettlement(payTarget.value.id, payForm)
+    const target = payTarget.value
+    if (!target?.id) return
+    await payReferralSettlement(target.id, payForm)
     ElMessage.success('已发放')
     showPayDialog.value = false
     loadList(); loadStats()

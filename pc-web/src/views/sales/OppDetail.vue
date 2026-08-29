@@ -212,8 +212,8 @@
             </el-table-column>
             <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openStageDialog(s.value, row)">编辑</el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteRecord(row)">删除</el-button>
+                <el-button link type="primary" size="small" @click="openStageDialog(s.value, row as unknown as StageRecord)">编辑</el-button>
+                <el-button link type="danger" size="small" @click="handleDeleteRecord(row as unknown as StageRecord)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -451,9 +451,10 @@ const handleCreateProject = async () => {
   try {
     const r = await postApi(`/sales/opps/${oppId.value}/convert-to-project`)
     const resp = r as unknown as { data?: { project_id?: number; name?: string; project_no?: string } }
-    const projectId = resp?.data?.project_id
+    const projectData = resp?.data
+    const projectId = projectData?.project_id
     if (projectId) {
-      ElMessage.success(`项目「${resp.data.name || ''}」创建成功`)
+      ElMessage.success(`项目「${projectData?.name || ''}」创建成功`)
       router.push(`/project/detail/${projectId}`)
     } else {
       ElMessage.error('创建项目失败')

@@ -195,6 +195,7 @@ const handleDelete = async (row: Referrer) => {
     await ElMessageBox.confirm(`确认删除推荐人「${row.name}」？已关联商机的推荐人不可删除。`, '删除', { type: 'warning' })
   } catch { return }
   try {
+    if (!row.id) return
     await deleteReferrer(row.id)
     ElMessage.success('推荐人已删除')
     if (list.value.length === 1 && page.value > 1) page.value -= 1
@@ -202,7 +203,7 @@ const handleDelete = async (row: Referrer) => {
   } catch (e) { /* toast */ }
 }
 
-const formatMoney = (n: number) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatMoney = (n?: number | string | null) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 
 onMounted(() => { loadCustomers(); loadList() })
 </script>
