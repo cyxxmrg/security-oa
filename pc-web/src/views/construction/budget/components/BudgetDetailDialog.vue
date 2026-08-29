@@ -288,7 +288,7 @@ const handlePrint = () => {
     it.budget ? ((Number(it.actual || 0) / Number(it.budget)) * 100).toFixed(1) + '%' : '-',
   ])
   if (rows.length === 0) rows.push(['暂无明细', '-', '-', '-', '-'])
-  printTable(`项目预算 - ${d.code || d.id || ''}`, headers, rows, { orientation: 'landscape' })
+  printTable(`项目预算 - ${d.code || d.id || ''}`, headers, rows as unknown as Record<string, unknown>[][], { orientation: 'landscape' })
 }
 
 const handleExport = () => {
@@ -305,7 +305,7 @@ const handleExport = () => {
     it.budget ? ((Number(it.actual || 0) / Number(it.budget)) * 100).toFixed(1) + '%' : '-',
   ])
   if (rows.length === 0) rows.push(['暂无明细', '-', '-', '-', '-'])
-  exportExcelLike(headers, rows, `预算明细_${d.code || d.id}`, { title: `项目预算明细 - ${d.code || d.id}` })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], `预算明细_${d.code || d.id}`, { title: `项目预算明细 - ${d.code || d.id}` })
 }
 </script>
 

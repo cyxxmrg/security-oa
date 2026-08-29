@@ -57,10 +57,10 @@
               :readonly="row.category === 'material'"
               size="small"
               :placeholder="row.category === 'material' ? '请选择库存材料' : '名称'"
-              @click="row.category === 'material' && openInventoryPicker(row)"
+              @click="row.category === 'material' && openInventoryPicker(row as unknown as BudgetItem)"
             >
               <template v-if="row.category === 'material'" #append>
-                <el-button @click.stop="openInventoryPicker(row)">选择</el-button>
+                <el-button @click.stop="openInventoryPicker(row as unknown as BudgetItem)">选择</el-button>
               </template>
             </el-input>
           </template>
@@ -83,7 +83,7 @@
               :precision="2"
               size="small"
               style="width: 100%"
-              @change="(v: number) => recalcRow(row)"
+               @change="() => recalcRow(row as unknown as BudgetItem)"
             />
           </template>
         </el-table-column>
@@ -96,7 +96,7 @@
               :step="0.01"
               size="small"
               style="width: 100%"
-              @change="(v: number) => recalcRow(row)"
+               @change="() => recalcRow(row as unknown as BudgetItem)"
             />
           </template>
         </el-table-column>
