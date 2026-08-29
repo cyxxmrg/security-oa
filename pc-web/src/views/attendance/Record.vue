@@ -194,7 +194,7 @@ const todayStatusMap: Record<string, { label: string; type: 'success' | 'warning
   field_work: { label: '外勤', type: 'info' },
 }
 const todayStatusLabel = (s?: string) => todayStatusMap[s || '']?.label || s || '-'
-const todayStatusTag = (s: string): 'success' | 'warning' | 'danger' | 'info' => todayStatusMap[s]?.type || 'info'
+const todayStatusTag = (s?: string): 'success' | 'warning' | 'danger' | 'info' => todayStatusMap[s || '']?.type || 'info'
 
 function formatDate(d: unknown): string {
   if (!d) return '-'

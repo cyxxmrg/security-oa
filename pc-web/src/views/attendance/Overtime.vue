@@ -138,7 +138,7 @@ const compTypeMap: Record<string, { label: string; type: 'success' | 'warning' |
   time_off: { label: '调休', type: 'success' },
 }
 const compTypeLabel = (s?: string) => compTypeMap[s || '']?.label || s || '-'
-const compTypeTag = (s: string): 'success' | 'warning' | 'info' => compTypeMap[s]?.type || 'info'
+const compTypeTag = (s?: string): 'success' | 'warning' | 'info' => compTypeMap[s || '']?.type || 'info'
 
 const statusMap: Record<string, { label: string; type: 'warning' | 'success' | 'danger' | 'info' }> = {
   pending: { label: '待审批', type: 'warning' },
