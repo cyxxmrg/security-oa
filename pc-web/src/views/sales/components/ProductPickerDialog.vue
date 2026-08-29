@@ -39,7 +39,7 @@
       </el-form-item>
       <el-form-item>
         <el-button
-          :type="filter.invert ? 'warning' : ''"
+          :type="filter.invert ? 'warning' : undefined"
           size="small"
           @click="filter.invert = !filter.invert"
         >

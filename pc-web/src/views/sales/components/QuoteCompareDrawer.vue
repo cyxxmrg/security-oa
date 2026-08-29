@@ -168,7 +168,7 @@ const close = () => {
       <div v-if="leftDetail && rightDetail" class="cmp-header">
         <div class="cmp-side">
           <div class="cs-version">V{{ leftVersion }}</div>
-          <el-tag :type="quoteStatusTagType(leftDetail.status)" effect="dark" size="large">
+          <el-tag :type="quoteStatusTagType(leftDetail.status ?? undefined)" effect="dark" size="large">
             {{ quoteStatusLabel(leftDetail.status) }}
           </el-tag>
           <div class="cs-amount">¥ {{ formatMoney(totalLeft) }}</div>
@@ -178,7 +178,7 @@ const close = () => {
         <el-icon :size="40" color="#909399"><ArrowRight /></el-icon>
         <div class="cmp-side right">
           <div class="cs-version">V{{ rightVersion }}</div>
-          <el-tag :type="quoteStatusTagType(rightDetail.status)" effect="dark" size="large">
+          <el-tag :type="quoteStatusTagType(rightDetail.status ?? undefined)" effect="dark" size="large">
             {{ quoteStatusLabel(rightDetail.status) }}
           </el-tag>
           <div class="cs-amount">¥ {{ formatMoney(totalRight) }}</div>
@@ -212,7 +212,7 @@ const close = () => {
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag
-              :type="({added:'success', removed:'danger', modified:'warning', unchanged:'info'} as Record<string, string>)[row.status]"
+              :type="({added:'success', removed:'danger', modified:'warning', unchanged:'info'} as Record<string, TagType>)[row.status]"
               size="small"
               effect="dark"
             >
