@@ -88,7 +88,7 @@
               <span :class="`sev-${cacheRateSeverity}`">{{ metrics.db?.cache_hit_rate }}%</span>
             </el-descriptions-item>
             <el-descriptions-item label="慢查询">
-              <el-tag :type="metrics.db?.slow_count > 0 ? 'danger' : 'success'" size="small">
+              <el-tag :type="(metrics.db?.slow_count ?? 0) > 0 ? 'danger' : 'success'" size="small">
                 {{ metrics.db?.slow_count }} 个 (>1s)
               </el-tag>
             </el-descriptions-item>
@@ -116,7 +116,7 @@
             </el-descriptions-item>
             <el-descriptions-item label="opcache 命中率">{{ metrics.services?.opcache_hit_rate }}%</el-descriptions-item>
             <el-descriptions-item label="opcache 内存">
-              {{ fmtSize(metrics.services?.opcache_memory_used) }} / {{ fmtSize(metrics.services?.opcache_memory_used + metrics.services?.opcache_memory_free) }}
+              {{ fmtSize(metrics.services?.opcache_memory_used) }} / {{ fmtSize((metrics.services?.opcache_memory_used ?? 0) + (metrics.services?.opcache_memory_free ?? 0)) }}
             </el-descriptions-item>
             <el-descriptions-item label="Load Average (1m)">{{ metrics.services?.load_avg_1?.toFixed(2) }}</el-descriptions-item>
             <el-descriptions-item label="Load Average (5m)">{{ metrics.services?.load_avg_5?.toFixed(2) }}</el-descriptions-item>
@@ -223,7 +223,8 @@ const loadAll = async () => {
     const res = await get('/admin/monitor/metrics')
     metrics.value = unwrapStats(res)
   } catch (e: unknown) {
-    ElMessage.error('加载失败: ' + (e?.response?.data?.message || e?.message))
+    const error = e as { response?: { data?: { message?: string } }; message?: string }
+    ElMessage.error('加载失败: ' + (error.response?.data?.message || error.message || '未知错误'))
   } finally { loading.value = false }
 }
 
@@ -231,13 +232,13 @@ const toggleAuto = (val: boolean | string | number) => {
   if (val) {
     timer = setInterval(loadAll, 30000)
   } else {
-    clearInterval(timer)
+    if (timer !== null) clearInterval(timer)
     timer = null
   }
 }
 
 onMounted(loadAll)
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => { if (timer !== null) clearInterval(timer) })
 </script>
 
 <style scoped lang="scss">

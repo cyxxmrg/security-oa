@@ -334,8 +334,11 @@ async function handleCreateSubmit() {
     // 如果填了质保金额，自动创建质保金
     const amount = Number(createForm.deposit_amount || 0)
     if (amount > 0) {
-      const warrantyData = (res as Record<string, unknown>)?.data || (res as Record<string, unknown>)
-      const warrantyId = warrantyData?.id
+      const responseData = (res as Record<string, unknown>)?.data
+      const warrantyData = responseData && typeof responseData === 'object'
+        ? responseData as Record<string, unknown>
+        : (res as Record<string, unknown>)
+      const warrantyId = warrantyData.id
       if (warrantyId) {
         try {
           await warrantyDepositApi.create({
