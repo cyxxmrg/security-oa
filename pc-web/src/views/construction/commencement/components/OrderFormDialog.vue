@@ -108,9 +108,9 @@ import type { Commencement, ProjectOption, TeamOption } from '../../types'
 
 const props = defineProps<{
   visible: boolean
-  projectOptions: Record<string, unknown>[]
-  teamOptions: Record<string, unknown>[]
-  editing?: Record<string, unknown>
+  projectOptions: ProjectOption[]
+  teamOptions: TeamOption[]
+  editing?: Record<string, unknown> | null
 }>()
 
 const emit = defineEmits<{
@@ -152,8 +152,8 @@ const resetForm = () => {
 
 const fillFromEditing = (row: Commencement) => {
   if (!row) { resetForm(); return }
-  formData.project_id = row.project_id || null
-  formData.team_id = row.team_id || null
+  formData.project_id = row.project_id == null ? null : Number(row.project_id)
+  formData.team_id = row.team_id == null ? null : Number(row.team_id)
   formData.planned_start_date = (row.planned_start_date as string) || (row.commencement_date as string) || ''
   formData.planned_end_date = (row.planned_end_date as string) || ''
   formData.work_content = (row.work_content as string) || (row.work_scope as string) || ''
@@ -162,7 +162,7 @@ const fillFromEditing = (row: Commencement) => {
 }
 
 const handleOpen = () => {
-  if (props.editing) fillFromEditing(props.editing)
+  if (props.editing) fillFromEditing(props.editing as Commencement)
   else resetForm()
 }
 

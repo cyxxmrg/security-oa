@@ -344,7 +344,7 @@ const handleSubmitForApproval = async (row: CommencementOrder) => {
     )
   } catch { return }
   try {
-    await commencementApi.submit(row.id)
+      await commencementApi.approve(row.id)
     ElMessage.success('已提交审批, 请前往审批中心处理')
     await loadList()
   } catch { /* 拦截器已提示 */ }

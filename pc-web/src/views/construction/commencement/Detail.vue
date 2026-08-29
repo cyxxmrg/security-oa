@@ -104,15 +104,15 @@ const order = ref<Commencement | null>(null)
 const logs = ref<LogRow[]>([])
 const logsLoading = ref(false)
 
-const statusMap: Record<string, { label: string; tagType: string; step: number }> = {
+const statusMap: Record<string, { label: string; tagType: 'primary' | 'success' | 'warning' | 'info' | 'danger'; step: number }> = {
   draft:       { label: '草稿',     tagType: 'info',    step: 0 },
   approved:    { label: '已审批',   tagType: 'success', step: 1 },
   in_progress: { label: '施工中',   tagType: 'warning', step: 2 },
-  completed:   { label: '已完工',   tagType: '',        step: 3 },
+  completed:   { label: '已完工',   tagType: 'success', step: 3 },
   cancelled:   { label: '已取消',   tagType: 'danger',  step: 0 },
 }
 const statusLabel = (s: string) => statusMap[s]?.label || s || '-'
-const statusTagType = (s: string): string => statusMap[s]?.tagType || 'info'
+const statusTagType = (s?: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => statusMap[s || '']?.tagType || 'info'
 const stepIndex = (s: string) => statusMap[s]?.step ?? 0
 
 const orderId = computed(() => Number(route.params.id))
@@ -173,7 +173,7 @@ const handlePrint = () => {
     ['状态', o.status || '-'],
     ['备注', o.remarks || '-'],
   ]
-  printTable(`开工单 - ${o.code || o.id || ''}`, headers, rows, { orientation: 'portrait' })
+  printTable(`开工单 - ${o.code || o.id || ''}`, headers, rows as unknown as Record<string, unknown>[][], { orientation: 'portrait' })
 }
 
 watch(orderId, () => { if (orderId.value) loadDetail() })
