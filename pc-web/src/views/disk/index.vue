@@ -124,7 +124,7 @@
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                      <el-dropdown-item command="delete" :disabled="!!data.system_type" divided>删除</el-dropdown-item>
+                    <el-dropdown-item command="delete" :disabled="!!data.system_type" divided>删除</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -159,7 +159,7 @@
             <el-table-column type="selection" width="40" />
             <el-table-column label="文件名" min-width="320" sortable>
               <template #default="{ row }">
-                <div class="file-name" :class="{ 'is-folder': row.type==='folder' }" @click="row.type==='folder' && goToFolder(row)">
+                <div class="file-name" :class="{ 'is-folder': row.type==='folder' }" @click="row.type==='folder' && goToFolder(toDiskItem(row))">
                   <el-icon :size="22" :color="row.type==='folder' ? '#BA7517' : fileColor(row.extension)">
                     <Folder v-if="row.type==='folder'" />
                     <Document v-else-if="['doc','docx'].includes(row.extension)" />
@@ -171,7 +171,7 @@
                     <Document v-else />
                   </el-icon>
                   <span class="file-name__text">{{ row.original_name || row.name }}</span>
-                  <el-tag v-if="row.type==='folder' && row.system_type" size="small" :type="systemTag(row.system_type)" effect="plain" round>
+                <el-tag v-if="row.type==='folder' && row.system_type" size="small" :type="systemTag(row.system_type)" effect="plain" round>
                     {{ systemLabel(row.system_type) }}
                   </el-tag>
                 </div>
@@ -191,9 +191,9 @@
             </el-table-column>
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
-                <el-button v-if="row.type!=='folder'" text type="primary" size="small" @click="handleDownload(row)">下载</el-button>
-                <el-button text type="primary" size="small" @click="handleRename(row)">重命名</el-button>
-                <el-button text type="danger" size="small" :disabled="row.type==='folder' && !!row.system_type" @click="handleDelete(row)">删除</el-button>
+                <el-button v-if="row.type!=='folder'" text type="primary" size="small" @click="handleDownload(toDiskItem(row))">下载</el-button>
+                <el-button text type="primary" size="small" @click="handleRename(toDiskItem(row))">重命名</el-button>
+                <el-button text type="danger" size="small" :disabled="row.type==='folder' && !!row.system_type" @click="handleDelete(toDiskItem(row))">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -400,6 +400,7 @@ const keyword = ref('')
 const currentFolder = ref<DiskItem | null>(null)
 const breadcrumb = ref<DiskItem[]>([])
 const tableData = ref<DiskItem[]>([])
+const toDiskItem = (row: unknown): DiskItem => row as DiskItem
 
 // 整棵文件夹树
 const folderTree = ref<DiskItem[]>([])
@@ -450,7 +451,7 @@ const SYSTEM_LABELS: Record<string, { label: string; type: string }> = {
   project_doc:  { label: '项目文档', type: 'warning' },
 }
 function systemLabel(t: string) { return SYSTEM_LABELS[t]?.label || t }
-function systemTag(t: string): string { return SYSTEM_LABELS[t]?.type || 'info' }
+function systemTag(t: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' { return (SYSTEM_LABELS[t]?.type as 'success' | 'primary' | 'info' | 'warning' | 'danger') || 'info' }
 
 // 是否受保护（根目录不可改/删）
 function isProtected(f: DiskItem | null | undefined) { return !!f?.is_protected }
@@ -477,7 +478,8 @@ async function loadData() {
       })
     ])
     const folders = ((folRes.data || folRes || []) as DiskItem[]).map((f: DiskItem) => ({ ...f, type: 'folder' as const }))
-    const filesRaw = (fileRes as { data?: { data?: { items?: DiskItem[] } | DiskItem[] } | DiskItem[] })?.data?.data?.items || (fileRes as { data?: { data?: DiskItem[] } })?.data?.data || (fileRes as { data?: DiskItem[] })?.data || []
+    const filePayload = fileRes as any
+    const filesRaw = filePayload?.data?.data?.items || filePayload?.data?.data || filePayload?.data || []
     const files = (Array.isArray(filesRaw) ? filesRaw : []).map((f: DiskItem) => ({ ...f, type: 'file' as const }))
     tableData.value = [...folders, ...files]
   } catch (e) {
@@ -564,10 +566,12 @@ function handleRename(row: DiskItem) {
 async function confirmRename() {
   if (!renameValue.value.trim()) { ElMessage.warning('名称不能为空'); return }
   try {
-    if (renameTarget.value.type === 'folder') {
-      await put(`/disk/folders/${renameTarget.value.id}`, { name: renameValue.value.trim() })
+    const target = renameTarget.value
+    if (!target) return
+    if (target.type === 'folder') {
+      await put(`/disk/folders/${target.id}`, { name: renameValue.value.trim() })
     } else {
-      await put(`/disk/files/${renameTarget.value.id}`, { name: renameValue.value.trim() })
+      await put(`/disk/files/${target.id}`, { name: renameValue.value.trim() })
     }
     ElMessage.success('已重命名')
     showRenameDialog.value = false
@@ -579,7 +583,7 @@ async function confirmRename() {
 
 function triggerUpload() { fileInput.value?.click() }
 
-async function uploadOne(file: File, item: UploadItem) {
+  async function uploadOne(file: File, item: UploadItem) {
   const ctrl = new AbortController()
   uploadCtrls.set(item.id, ctrl)
   // 速度/剩余时间估算
@@ -605,7 +609,7 @@ async function uploadOne(file: File, item: UploadItem) {
   try {
     const fd = new FormData()
     fd.append('file', file)
-    fd.append('folder_id', String(currentFolder.value.id))
+    fd.append('folder_id', String(currentFolder.value?.id || 0))
     const res = await post<UploadResponse>('/disk/upload', fd, {
       signal: ctrl.signal,
       onUploadProgress: onProgress,
