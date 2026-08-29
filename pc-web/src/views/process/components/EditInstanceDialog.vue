@@ -82,7 +82,7 @@ export interface InstanceEditForm {
 const props = defineProps<{
   visible: boolean
   submitting: boolean
-  target: Record<string, unknown> | null
+  target: (Partial<InstanceEditForm> & Record<string, any>) | null
   userOptions: { id: number; name: string }[]
 }>()
 
@@ -109,12 +109,12 @@ watch(
   () => props.target,
   (row) => {
     if (!row) return
-    form.name = row.name || row.template_name || ''
-    form.foreman_id = row.foreman_id ?? null
-    form.planned_start_date = row.planned_start_date || row.planned_start || ''
-    form.planned_end_date = row.planned_end_date || row.planned_end || ''
-    form.location = row.location || ''
-    form.description = row.description || row.remark || ''
+    form.name = String(row.name || row.template_name || '')
+    form.foreman_id = Number(row.foreman_id) || null
+    form.planned_start_date = String(row.planned_start_date || row.planned_start || '')
+    form.planned_end_date = String(row.planned_end_date || row.planned_end || '')
+    form.location = String(row.location || '')
+    form.description = String(row.description || row.remark || '')
   },
   { immediate: true },
 )

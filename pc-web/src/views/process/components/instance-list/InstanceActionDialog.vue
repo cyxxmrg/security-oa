@@ -53,6 +53,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { FormRules } from 'element-plus'
 
 // v0.3.19 抽自 process/InstanceList.vue:156-173 + 456-537
 const props = defineProps<{
@@ -65,8 +66,8 @@ const props = defineProps<{
   commentLabel?: string
   commentKey: string
   commentPlaceholder?: string
-  form: Record<string, unknown>
-  rules: Record<string, unknown>
+  form: Record<string, any>
+  rules: FormRules
 }>()
 
 const emit = defineEmits<{
