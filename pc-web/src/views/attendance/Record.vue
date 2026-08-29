@@ -193,7 +193,7 @@ const todayStatusMap: Record<string, { label: string; type: 'success' | 'warning
   absent: { label: '缺勤', type: 'danger' },
   field_work: { label: '外勤', type: 'info' },
 }
-const todayStatusLabel = (s: string) => todayStatusMap[s]?.label || s || '-'
+const todayStatusLabel = (s?: string) => todayStatusMap[s || '']?.label || s || '-'
 const todayStatusTag = (s: string): 'success' | 'warning' | 'danger' | 'info' => todayStatusMap[s]?.type || 'info'
 
 function formatDate(d: unknown): string {
@@ -297,7 +297,7 @@ const handleExport = () => {
     r.location || '-',
     r.remark || '-',
   ])
-  exportExcelLike(headers, rows, '打卡记录', { title: '员工打卡记录' })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '打卡记录', { title: '员工打卡记录' })
 }
 
 const handleSupplement = () => {
