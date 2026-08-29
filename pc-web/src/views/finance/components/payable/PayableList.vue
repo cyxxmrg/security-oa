@@ -31,10 +31,10 @@
         </div>
       </div>
       <div class="pcard__actions">
-        <el-button link type="primary" size="small" @click="emit('pay', row)" :disabled="Number(row.remaining_amount) <= 0"><el-icon><CreditCard /></el-icon>登记付款</el-button>
-        <el-button link type="primary" size="small" @click="emit('edit', row)">编辑</el-button>
-        <el-button link type="info" size="small" @click="emit('detail', row)">详情</el-button>
-        <el-button link type="danger" size="small" @click="emit('delete', row)">删除</el-button>
+        <el-button link type="primary" size="small" @click="emit('pay', toPayable(row))" :disabled="Number(row.remaining_amount) <= 0"><el-icon><CreditCard /></el-icon>登记付款</el-button>
+        <el-button link type="primary" size="small" @click="emit('edit', toPayable(row))">编辑</el-button>
+        <el-button link type="info" size="small" @click="emit('detail', toPayable(row))">详情</el-button>
+        <el-button link type="danger" size="small" @click="emit('delete', toPayable(row))">删除</el-button>
       </div>
     </div>
     <div v-if="!loading && list.length === 0" class="empty-wrap">
@@ -65,14 +65,14 @@
       </el-table-column>
       <el-table-column label="付款进度" width="180">
         <template #default="{ row }">
-          <el-progress :percentage="computeRate(row)" :color="progressColor(row)" :stroke-width="8" />
+          <el-progress :percentage="computeRate(toPayable(row))" :color="progressColor(toPayable(row))" :stroke-width="8" />
         </template>
       </el-table-column>
       <el-table-column prop="due_date" label="到期日" width="140">
         <template #default="{ row }">
           <div class="cell-stack">
             <span>{{ row.due_date || '-' }}</span>
-            <el-tag v-if="isOverdue(row)" type="danger" size="small" effect="plain">逾期 {{ overdueDays(row) }} 天</el-tag>
+            <el-tag v-if="isOverdue(toPayable(row))" type="danger" size="small" effect="plain">逾期 {{ overdueDays(toPayable(row)) }} 天</el-tag>
           </div>
         </template>
       </el-table-column>
@@ -86,9 +86,9 @@
       </el-table-column>
       <el-table-column label="操作" width="240" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="emit('pay', row)" :disabled="Number(row.remaining_amount) <= 0">登记付款</el-button>
-          <el-button link type="primary" size="small" @click="emit('edit', row)">编辑</el-button>
-          <el-button link type="danger" size="small" @click="emit('delete', row)">删除</el-button>
+          <el-button link type="primary" size="small" @click="emit('pay', toPayable(row))" :disabled="Number(row.remaining_amount) <= 0">登记付款</el-button>
+          <el-button link type="primary" size="small" @click="emit('edit', toPayable(row))">编辑</el-button>
+          <el-button link type="danger" size="small" @click="emit('delete', toPayable(row))">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -113,6 +113,8 @@ const emit = defineEmits<{
   (e: 'detail', row: Payable): void
   (e: 'delete', row: Payable): void
 }>()
+
+const toPayable = (row: unknown): Payable => row as Payable
 
 function rowClass({ row }: { row: Payable }): string {
   return isOverdue(row) ? 'row-overdue' : ''

@@ -40,7 +40,7 @@
       <el-table :data="form.allocations" border>
         <el-table-column label="选择" width="60" align="center">
           <template #default="{ row }">
-            <el-checkbox v-model="row.selected" @change="onSelectChange(row)" />
+            <el-checkbox v-model="row.selected" @change="onSelectChange(toPaymentAllocation(row))" />
           </template>
         </el-table-column>
         <el-table-column prop="ref_no" label="单号" width="140" />
@@ -144,6 +144,8 @@ const onSelectChange = (row: PaymentAllocation) => {
   // 同步 form.amount
   form.value.amount = totalAlloc.value
 }
+
+const toPaymentAllocation = (row: unknown): PaymentAllocation => row as PaymentAllocation
 
 const loadPayables = async () => {
   const res = await ledger.getSupplierPayables(props.supplierId, {})

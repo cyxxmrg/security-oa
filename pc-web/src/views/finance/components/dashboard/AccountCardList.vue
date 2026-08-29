@@ -1,6 +1,6 @@
 <template>
   <el-row :gutter="16">
-    <el-col v-for="acc in accounts" :key="acc.id" :span="6">
+    <el-col v-for="acc in accounts" :key="String(acc.id)" :span="6">
       <div class="account-card" :class="'account-' + acc.type">
         <div class="account-icon">
           <el-icon :size="28"><component :is="iconFn(acc.type || '')" /></el-icon>
