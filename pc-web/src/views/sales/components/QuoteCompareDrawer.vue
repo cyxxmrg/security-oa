@@ -169,7 +169,7 @@ const close = () => {
         <div class="cmp-side">
           <div class="cs-version">V{{ leftVersion }}</div>
           <el-tag :type="quoteStatusTagType(leftDetail.status ?? undefined)" effect="dark" size="large">
-            {{ quoteStatusLabel(leftDetail.status) }}
+            {{ quoteStatusLabel(leftDetail.status ?? undefined) }}
           </el-tag>
           <div class="cs-amount">¥ {{ formatMoney(totalLeft) }}</div>
           <div class="cs-meta">折扣 {{ leftDetail.discount_rate || 0 }}% · 税 {{ leftDetail.tax_rate || 0 }}%</div>
@@ -179,7 +179,7 @@ const close = () => {
         <div class="cmp-side right">
           <div class="cs-version">V{{ rightVersion }}</div>
           <el-tag :type="quoteStatusTagType(rightDetail.status ?? undefined)" effect="dark" size="large">
-            {{ quoteStatusLabel(rightDetail.status) }}
+            {{ quoteStatusLabel(rightDetail.status ?? undefined) }}
           </el-tag>
           <div class="cs-amount">¥ {{ formatMoney(totalRight) }}</div>
           <div class="cs-meta">折扣 {{ rightDetail.discount_rate || 0 }}% · 税 {{ rightDetail.tax_rate || 0 }}%</div>

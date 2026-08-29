@@ -20,7 +20,7 @@
             v-for="c in productCategories"
             :key="c.id"
             :label="c.name"
-            :value="c.id"
+            :value="c.id ?? ''"
           />
         </el-select>
       </el-form-item>

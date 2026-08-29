@@ -123,7 +123,7 @@ const buildHtml = (): string => {
     <div class="meta">
       <div>单号：<b>${esc(props.quote?.quote_no || '—')}</b></div>
       <div>版本：<b>V${esc(props.quote?.version ?? 1)}</b></div>
-      <div>状态：<b>${esc(quoteStatusLabel(props.quote?.status))}</b></div>
+      <div>状态：<b>${esc(quoteStatusLabel(props.quote?.status ?? undefined))}</b></div>
       <div>日期：${esc(formatDate(props.quote?.created_at) || formatDate(new Date().toISOString()))}</div>
       <div>有效期至：${esc(formatDate(props.quote?.valid_until) || '—')}</div>
     </div>
@@ -274,7 +274,7 @@ const handleCopyEmailLink = async () => {
         <div class="export-preview">
           <div>共 <b>{{ summary.itemCount }}</b> 个产品</div>
           <div>含税总计：<b style="color:#BA7517">¥ {{ formatMoney(summary.total) }}</b></div>
-          <div>状态：<b>{{ quoteStatusLabel(quote?.status) }}</b></div>
+          <div>状态：<b>{{ quoteStatusLabel(quote?.status ?? undefined) }}</b></div>
         </div>
       </el-form-item>
     </el-form>
