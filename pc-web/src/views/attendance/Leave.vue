@@ -129,16 +129,16 @@ const leaveTypeMap: Record<string, { label: string; type: 'success' | 'warning' 
   compassionate: { label: '丧假', type: 'info' },
   other: { label: '其他', type: 'info' },
 }
-const leaveTypeLabel = (s: string) => leaveTypeMap[s]?.label || s
-const leaveTypeTag = (s: string): 'success' | 'warning' | 'danger' | 'info' | '' => leaveTypeMap[s]?.type || 'info'
+const leaveTypeLabel = (s?: string) => leaveTypeMap[s || '']?.label || s || '-'
+const leaveTypeTag = (s?: string): 'success' | 'warning' | 'danger' | 'info' => leaveTypeMap[s || '']?.type || 'info'
 
 const statusMap: Record<string, { label: string; type: 'warning' | 'success' | 'danger' | 'info' }> = {
   pending: { label: '待审批', type: 'warning' },
   approved: { label: '已通过', type: 'success' },
   rejected: { label: '已拒绝', type: 'danger' },
 }
-const statusLabel = (s: string) => statusMap[s]?.label || s
-const statusTag = (s: string): 'warning' | 'success' | 'danger' | 'info' => statusMap[s]?.type || 'info'
+const statusLabel = (s?: string) => statusMap[s || '']?.label || s || '-'
+const statusTag = (s?: string): 'warning' | 'success' | 'danger' | 'info' => statusMap[s || '']?.type || 'info'
 
 const loadList = async () => {
   loading.value = true

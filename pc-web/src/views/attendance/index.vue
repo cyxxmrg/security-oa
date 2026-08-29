@@ -55,20 +55,20 @@
             <div class="calendar-day" :class="{ 'is-today': data.isSelected, 'is-future': isFuture(data.day) }" @click="handleDateClick(data.day)">
               <div class="calendar-day__date">{{ data.day.split('-')[2] }}</div>
               <div v-if="getDayStat(data.day)" class="calendar-day__stats">
-                <span v-if="getDayStat(data.day).present > 0" class="stat-chip stat-chip--primary" :title="`出勤 ${getDayStat(data.day).present} 人`">
-                  出勤 {{ getDayStat(data.day).present }}
+                <span v-if="(getDayStat(data.day)?.present ?? 0) > 0" class="stat-chip stat-chip--primary" :title="`出勤 ${getDayStat(data.day)?.present ?? 0} 人`">
+                  出勤 {{ getDayStat(data.day)?.present ?? 0 }}
                 </span>
-                <span v-if="getDayStat(data.day).late > 0" class="stat-chip stat-chip--warning" :title="`迟到 ${getDayStat(data.day).late} 人`">
-                  迟到 {{ getDayStat(data.day).late }}
+                <span v-if="(getDayStat(data.day)?.late ?? 0) > 0" class="stat-chip stat-chip--warning" :title="`迟到 ${getDayStat(data.day)?.late ?? 0} 人`">
+                  迟到 {{ getDayStat(data.day)?.late ?? 0 }}
                 </span>
-                <span v-if="getDayStat(data.day).absent > 0" class="stat-chip stat-chip--danger" :title="`缺勤 ${getDayStat(data.day).absent} 人`">
-                  缺勤 {{ getDayStat(data.day).absent }}
+                <span v-if="(getDayStat(data.day)?.absent ?? 0) > 0" class="stat-chip stat-chip--danger" :title="`缺勤 ${getDayStat(data.day)?.absent ?? 0} 人`">
+                  缺勤 {{ getDayStat(data.day)?.absent ?? 0 }}
                 </span>
-                <span v-if="getDayStat(data.day).fieldWork > 0" class="stat-chip stat-chip--purple" :title="`外勤 ${getDayStat(data.day).fieldWork} 人`">
-                  外勤 {{ getDayStat(data.day).fieldWork }}
+                <span v-if="(getDayStat(data.day)?.fieldWork ?? 0) > 0" class="stat-chip stat-chip--purple" :title="`外勤 ${getDayStat(data.day)?.fieldWork ?? 0} 人`">
+                  外勤 {{ getDayStat(data.day)?.fieldWork ?? 0 }}
                 </span>
-                <span v-if="getDayStat(data.day).leave > 0" class="stat-chip stat-chip--info" :title="`请假 ${getDayStat(data.day).leave} 人`">
-                  请假 {{ getDayStat(data.day).leave }}
+                <span v-if="(getDayStat(data.day)?.leave ?? 0) > 0" class="stat-chip stat-chip--info" :title="`请假 ${getDayStat(data.day)?.leave ?? 0} 人`">
+                  请假 {{ getDayStat(data.day)?.leave ?? 0 }}
                 </span>
                 <span v-if="getDayStatTotal(data.day) === 0" class="stat-chip stat-chip--empty">无数据</span>
               </div>
