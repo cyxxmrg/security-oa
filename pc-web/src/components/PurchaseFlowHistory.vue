@@ -143,7 +143,9 @@ async function load() {
   if (!props.entityId) return
   loading.value = true
   try {
-    const r = await purchaseFlow.trace(props.entityType, props.entityId)
+    const entityId = Number(props.entityId)
+    if (!Number.isFinite(entityId)) return
+    const r = await purchaseFlow.trace(props.entityType, entityId)
     const data = r?.data || r
     logs.value = data?.logs || []
     entities.value = {

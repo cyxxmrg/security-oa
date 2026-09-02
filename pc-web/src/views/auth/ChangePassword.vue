@@ -71,7 +71,7 @@ const hasOldPassword = computed(() => {
   return true
 })
 
-const superAdminUsername = computed(() => superAdminInfo.value?.username || 'system')
+const superAdminUsername = computed(() => String(superAdminInfo.value?.username || 'system'))
 
 const form = reactive({
   oldPassword: '',
@@ -160,7 +160,8 @@ async function handleSubmit() {
       router.push('/dashboard')
     }
   } catch (e: unknown) {
-    const msg = e?.response?.data?.message || e?.serverMessage || e?.message || '修改失败'
+    const error = e as { response?: { data?: { message?: string } }; serverMessage?: string; message?: string }
+    const msg = error.response?.data?.message || error.serverMessage || error.message || '修改失败'
     ElMessage.error(msg)
   } finally {
     loading.value = false

@@ -195,7 +195,7 @@ const activeTab = ref('pending')
 const list = ref<ApprovalItem[]>([])
 const currentItem = ref<ApprovalItem | null>(null)
 const approvalComment = ref('')
-const filter = reactive({ keyword: '', subType: '', priority: '', dateRange: [] as (string | Date)[] })
+const filter = reactive({ keyword: '', subType: '', priority: '', dateRange: [] as string[] })
 
 // 运营审批子类
 const subTypeOptions = [
