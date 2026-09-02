@@ -174,7 +174,7 @@ const handleExport = () => {
     u.miss_count || u.absent_count || 0,
     u.expected_days ? ((Number(u.actual_days || u.total_days || 0) / Number(u.expected_days)) * 100).toFixed(1) + '%' : '-',
   ])
-  exportExcelLike(headers, rows, '考勤月报', { title: `考勤月报 - ${filters.month}` })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '考勤月报', { title: `考勤月报 - ${filters.month}` })
 }
 const handlePrint = () => {
   if (!tableData.value?.length) {
@@ -188,7 +188,7 @@ const handlePrint = () => {
     u.overtime_hours || 0, u.miss_count || u.absent_count || 0,
     u.expected_days ? ((Number(u.actual_days || u.total_days || 0) / Number(u.expected_days)) * 100).toFixed(1) + '%' : '-',
   ])
-  printTable(`考勤月报 - ${filters.month}`, headers, rows, { subtitle: '全员考勤汇总' })
+  printTable(`考勤月报 - ${filters.month}`, headers, rows as unknown as Record<string, unknown>[][], { subtitle: '全员考勤汇总' })
 }
 
 const getSummaries = (param: { columns: { property?: string }[]; data: AttendanceReportRow[] }) => {

@@ -61,8 +61,8 @@
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" :disabled="row.is_default" @click="handleDelete(row)">
+            <el-button type="primary" link size="small" @click="openEdit(row as unknown as Shift)">编辑</el-button>
+            <el-button type="danger" link size="small" :disabled="row.is_default" @click="handleDelete(row as unknown as Shift)">
               {{ row.is_default ? '不可删' : '删除' }}
             </el-button>
           </template>
@@ -192,6 +192,7 @@ const confirmSave = async () => {
 const handleDelete = async (row: Shift) => {
   try {
     await ElMessageBox.confirm(`确认删除班次「${row.name}」?`, '提示', { type: 'warning' })
+    if (!row.id) return
     const r = await schedule.deleteShift(row.id)
     ElMessage.success(r?.message || '已删除')
     load()

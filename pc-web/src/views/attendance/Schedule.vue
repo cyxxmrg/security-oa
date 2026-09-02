@@ -411,7 +411,7 @@ const saveSchedules = async () => {
   }
   saving.value = true
   try {
-    const r = await schedule.batchSave(assignments) // 动态响应结构
+    const r = await schedule.batchSave(assignments as unknown as Record<string, unknown>[]) // 动态响应结构
     ElMessage.success(r?.message || '保存成功')
     await loadWeek()
   } catch (e: unknown) {
