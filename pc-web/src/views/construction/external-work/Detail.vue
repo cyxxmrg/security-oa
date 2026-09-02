@@ -82,7 +82,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Promotion } from '@element-plus/icons-vue'
+import { ArrowLeft, Promotion } from '@element-plus/icons-vue'
 import { externalWorkApi } from '@/api/construction'
 import { unwrapList, unwrapItem } from '@/utils/response'
 import type { ExternalWork, Bid } from '../types'
@@ -103,9 +103,9 @@ const statusOptions = [
   { value: 'closed',    label: '已关闭' },
 ]
 const statusLabel = (s: string) => statusOptions.find(x => x.value === s)?.label || s || '-'
-const statusTagType = (s: string): string => ({
+const statusTagType = (s?: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => ({
   draft: 'info', open: 'warning', bidding: 'warning', awarded: 'success', closed: 'danger',
-} as Record<string, string>)[s] || 'info'
+} as Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'>)[s || ''] || 'info'
 
 const formatMoney = (n: number | string | null | undefined) => Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 

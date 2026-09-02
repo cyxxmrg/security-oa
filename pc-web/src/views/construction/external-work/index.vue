@@ -58,7 +58,7 @@
       >
         <el-table-column prop="code" label="发包编号" width="160" fixed show-overflow-tooltip>
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.code || '-' }}</el-link>
+            <el-link type="primary" :underline="false" @click="goDetail(row as unknown as ExternalWork)">{{ row.code || '-' }}</el-link>
           </template>
         </el-table-column>
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
@@ -89,20 +89,20 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" :icon="View" @click="goDetail(row)">详情</el-button>
+            <el-button link type="primary" :icon="View" @click="goDetail(row as unknown as ExternalWork)">详情</el-button>
             <el-button
               v-if="row.status === 'open'"
               link
               type="success"
               :icon="Trophy"
-              @click="handleAward(row)"
+              @click="handleAward(row as unknown as ExternalWork)"
             >定标</el-button>
             <el-button
               v-if="['open', 'bidding'].includes(row.status)"
               link
               type="warning"
               :icon="CircleClose"
-              @click="handleClose(row)"
+              @click="handleClose(row as unknown as ExternalWork)"
             >关闭</el-button>
           </template>
         </el-table-column>
@@ -381,6 +381,8 @@ const handleFileChange = (e: Event) => {
 }
 
 const handleClose = async (row: ExternalWork) => {
+  const workId = Number(row.id)
+  if (!Number.isFinite(workId)) return
   try {
     await ElMessageBox.confirm(
       `确认关闭发包「${row.code}」？关闭后将不再接受投标。`,
@@ -389,17 +391,19 @@ const handleClose = async (row: ExternalWork) => {
     )
   } catch { return }
   try {
-    await externalWorkApi.close(row.id)
+    await externalWorkApi.close(workId)
     ElMessage.success('已关闭')
     await loadList()
   } catch { /* 拦截器已提示 */ }
 }
 
 const handleAward = async (row: ExternalWork) => {
+  const workId = Number(row.id)
+  if (!Number.isFinite(workId)) return
   let bidId: number | null = null
   let bids: Bid[] = []
   try {
-    const res = await externalWorkApi.listBids(row.id)
+    const res = await externalWorkApi.listBids(workId)
     bids = unwrapList(res)
   } catch { bids = [] }
   if (!bids.length) {
@@ -412,7 +416,7 @@ const handleAward = async (row: ExternalWork) => {
       '定标',
       {
         inputType: 'number',
-        inputValue: bids[0].id,
+        inputValue: String(bids[0].id ?? ''),
         inputValidator: (val: string) => {
           if (!bids.find(b => String(b.id) === String(val))) return '投标 ID 不在列表中'
           return true
@@ -422,7 +426,8 @@ const handleAward = async (row: ExternalWork) => {
     bidId = Number(value)
   } catch { return }
   try {
-    await externalWorkApi.award(row.id, { bid_id: bidId })
+    if (bidId === null) return
+    await externalWorkApi.award(workId, { bid_id: bidId })
     ElMessage.success('已定标')
     await loadList()
   } catch { /* 拦截器已提示 */ }
