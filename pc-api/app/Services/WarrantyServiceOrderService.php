@@ -108,7 +108,7 @@ class WarrantyServiceOrderService
     public function assignTechnician(int $id, int $technicianId, int $userId): WarrantyServiceOrder
     {
         return DB::transaction(function () use ($id, $technicianId, $userId) {
-            $order = WarrantyServiceOrder::whereNull('deleted_at')->findOrFail($id);
+            $order = WarrantyServiceOrder::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if ($order->status !== WarrantyServiceOrder::STATUS_PENDING && $order->status !== WarrantyServiceOrder::STATUS_ASSIGNED) {
                 throw new \RuntimeException("只有 pending/assigned 状态可重派, 当前: {$order->status}");
@@ -130,7 +130,7 @@ class WarrantyServiceOrderService
     public function startOrder(int $id, int $userId): WarrantyServiceOrder
     {
         return DB::transaction(function () use ($id, $userId) {
-            $order = WarrantyServiceOrder::whereNull('deleted_at')->findOrFail($id);
+            $order = WarrantyServiceOrder::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if ($order->status !== WarrantyServiceOrder::STATUS_ASSIGNED) {
                 throw new \RuntimeException("只有 assigned 状态可开始, 当前: {$order->status}");
@@ -151,7 +151,7 @@ class WarrantyServiceOrderService
     public function completeOrder(int $id, array $data, int $userId): WarrantyServiceOrder
     {
         return DB::transaction(function () use ($id, $data, $userId) {
-            $order = WarrantyServiceOrder::whereNull('deleted_at')->findOrFail($id);
+            $order = WarrantyServiceOrder::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if ($order->status !== WarrantyServiceOrder::STATUS_IN_PROGRESS) {
                 throw new \RuntimeException("只有 in_progress 状态可完工, 当前: {$order->status}");
@@ -160,17 +160,26 @@ class WarrantyServiceOrderService
                 throw new \RuntimeException('完工必须填写 result_notes (处理结果)');
             }
 
-            $order->update([
+            $updates = [
                 'status' => WarrantyServiceOrder::STATUS_COMPLETED,
                 'result_notes' => $data['result_notes'],
-                'customer_signature' => $data['customer_signature'] ?? null,
-                'fee' => isset($data['fee']) ? (float) $data['fee'] : 0,
-                'parts_cost' => isset($data['parts_cost']) ? (float) $data['parts_cost'] : 0,
-                'charge_type' => $data['charge_type'] ?? null,
-                'project_id' => isset($data['project_id']) ? (int) $data['project_id'] : null,
                 'completed_date' => !empty($data['completed_date']) ? Carbon::parse($data['completed_date']) : now()->toDateString(),
                 'updated_by' => $userId,
-            ]);
+            ];
+            foreach (['customer_signature', 'charge_type'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $updates[$field] = $data[$field];
+                }
+            }
+            foreach (['fee', 'parts_cost'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $updates[$field] = (float) $data[$field];
+                }
+            }
+            if (array_key_exists('project_id', $data)) {
+                $updates['project_id'] = $data['project_id'] !== null ? (int) $data['project_id'] : null;
+            }
+            $order->update($updates);
 
             return $order->fresh([
                 'technician:id,name,phone',
@@ -183,7 +192,7 @@ class WarrantyServiceOrderService
     public function cancelOrder(int $id, string $reason, int $userId): WarrantyServiceOrder
     {
         return DB::transaction(function () use ($id, $reason, $userId) {
-            $order = WarrantyServiceOrder::whereNull('deleted_at')->findOrFail($id);
+            $order = WarrantyServiceOrder::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if (!in_array($order->status, [
                 WarrantyServiceOrder::STATUS_PENDING,
@@ -292,6 +301,10 @@ class WarrantyServiceOrderService
         $today = now()->format('Ymd');
         $prefix = "WS-{$today}-";
         $maxAttempts = 10;
+
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['warranty-service-order-number:' . $today]);
+        }
 
         for ($i = 0; $i < $maxAttempts; $i++) {
             $count = (int) WarrantyServiceOrder::withTrashed()

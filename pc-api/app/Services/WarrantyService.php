@@ -138,7 +138,7 @@ class WarrantyService
     public function updateWarranty(int $id, array $data, int $userId): Warranty
     {
         return DB::transaction(function () use ($id, $data, $userId) {
-            $warranty = Warranty::whereNull('deleted_at')->findOrFail($id);
+            $warranty = Warranty::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if ($warranty->status === Warranty::STATUS_RENEWED
                 || $warranty->status === Warranty::STATUS_TERMINATED
@@ -194,7 +194,7 @@ class WarrantyService
     public function renewWarranty(int $id, int $extendMonths, int $userId): Warranty
     {
         return DB::transaction(function () use ($id, $extendMonths, $userId) {
-            $old = Warranty::whereNull('deleted_at')->findOrFail($id);
+            $old = Warranty::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if ($old->status !== Warranty::STATUS_ACTIVE) {
                 throw new \RuntimeException(
@@ -250,7 +250,7 @@ class WarrantyService
     public function terminateWarranty(int $id, string $reason, int $userId): Warranty
     {
         return DB::transaction(function () use ($id, $reason, $userId) {
-            $warranty = Warranty::whereNull('deleted_at')->findOrFail($id);
+            $warranty = Warranty::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if (!in_array($warranty->status, [
                 Warranty::STATUS_ACTIVE,
@@ -383,6 +383,10 @@ class WarrantyService
         $today  = now()->format('Ymd');
         $prefix = "WY-{$today}-";
         $maxAttempts = 10;
+
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['warranty-number:' . $today]);
+        }
 
         for ($i = 0; $i < $maxAttempts; $i++) {
             $count = (int) Warranty::withTrashed()
