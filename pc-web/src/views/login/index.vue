@@ -209,13 +209,14 @@ async function handleLogin() {
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch (error: unknown) {
+    const requestError = error as { status?: number; serverMessage?: string; message?: string }
     failCount.value += 1
     if (failCount.value >= 5) {
       lockedUntil.value = Date.now() + 60_000
       loginError.value = '登录失败次数过多，已临时锁定 60 秒'
       loginErrorHint.value = '为防止暴力破解，请稍后再试或联系管理员重置密码'
     } else {
-      const { msg, hint } = describeError(error.status, error.serverMessage || error.message)
+      const { msg, hint } = describeError(requestError.status, requestError.serverMessage || requestError.message || '')
       loginError.value = msg
       loginErrorHint.value = `${hint}（已失败 ${failCount.value}/5 次）`
     }

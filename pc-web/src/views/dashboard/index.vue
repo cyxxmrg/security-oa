@@ -204,14 +204,14 @@ function normalizeTodo(data: Record<string, unknown>[]): TodoItem[] {
   return data
     .filter((item) => (item.link || item.path) && (item.content || item.title))
     .map((item, index) => {
-      const label = item.label || item.type || item.title || '待办'
+      const label = String(item.label ?? item.type ?? item.title ?? '待办')
       return {
-        id: item.id ?? `${label}-${index}`,
+        id: (item.id as string | number | undefined) ?? `${label}-${index}`,
         type: label,
-        content: item.content || item.title,
-        time: item.time || item.deadline || '请及时处理',
+        content: String(item.content ?? item.title ?? ''),
+        time: String(item.time ?? item.deadline ?? '请及时处理'),
         tagType: index % 4 === 0 ? 'warning' : index % 4 === 1 ? 'danger' : index % 4 === 2 ? 'info' : 'success',
-        link: item.link || item.path,
+        link: String(item.link ?? item.path ?? ''),
       }
     })
 }

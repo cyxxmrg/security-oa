@@ -108,7 +108,7 @@ async function loadMessages() {
 
 async function loadUnreadCount() {
   try {
-    const res = await get<Record<string, unknown>>('/notifications/unread-count')
+    const res = await get<{ code?: number; data?: { count?: number } }>('/notifications/unread-count')
     if (res.code === 0) unreadCount.value = res.data?.count ?? 0
   } catch {}
 }
@@ -120,7 +120,7 @@ async function handleMarkRead(row: Record<string, unknown>) {
     ElMessage.success('已标为已读')
     loadUnreadCount()
   } catch (e: unknown) {
-    ElMessage.error(e.message || '操作失败')
+    ElMessage.error(e instanceof Error ? e.message : '操作失败')
   }
 }
 
@@ -132,7 +132,7 @@ async function handleMarkAllRead() {
     unreadCount.value = 0
     ElMessage.success('已全部标为已读')
   } catch (e: unknown) {
-    ElMessage.error(e.message || '操作失败')
+    ElMessage.error(e instanceof Error ? e.message : '操作失败')
   } finally {
     markingAll.value = false
   }
