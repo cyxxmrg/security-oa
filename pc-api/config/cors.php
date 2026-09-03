@@ -19,12 +19,10 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://192.168.1.20',
-        'http://localhost:3000',
-        // 生产域名占位 — 上线 HTTPS 时取消注释
-        // 'https://oa.example.com',
-    ],
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('CORS_ALLOWED_ORIGINS', 'http://192.168.1.20,http://localhost:3000,http://localhost:5173'))
+    ))),
 
     'allowed_origins_patterns' => [],
 

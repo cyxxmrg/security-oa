@@ -46,7 +46,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => env('SANCTUM_EXPIRATION', 60 * 24),
 
     /*
     |--------------------------------------------------------------------------
@@ -90,7 +90,7 @@ return [
 
     'personal_access_tokens' => [
         'table' => 'personal_access_tokens',
-        'expires_in' => null,
+        'expires_in' => env('SANCTUM_EXPIRATION', 60 * 24),
     ],
 
 ];

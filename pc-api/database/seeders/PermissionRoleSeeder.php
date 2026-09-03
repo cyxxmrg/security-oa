@@ -178,12 +178,12 @@ class PermissionRoleSeeder extends Seeder
             'user' => [
                 'description' => '普通员工：考勤+个人',
                 'color' => '#909399',
-                // user 是基础角色 - 给自己独有的 attendance.* + approval.mine
+                // user 是基础角色 - 仅可查看自己的考勤与提交个人申请
                 // manager/finance/admin 通过继承链自动获得 user 权限
                 // V1.0: 加 disk.view (所有员工能看网盘)
                 // V1.0.2: 加 inventory.view (所有员工能查看库存)
                 'perms' => array_values(array_filter($allPerms, fn($n) =>
-                    str_starts_with($n, 'attendance.') ||
+                    in_array($n, ['attendance.view', 'attendance.record'], true) ||
                     str_starts_with($n, 'approval.mine') ||
                     $n === 'disk.view' ||
                     $n === 'inventory.view'
@@ -212,7 +212,8 @@ class PermissionRoleSeeder extends Seeder
                      str_starts_with($n, 'knowledge.') ||
                      str_starts_with($n, 'repair.') ||
                      str_starts_with($n, 'purchase') ||
-                     str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||
+                    str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||
+                    in_array($n, ['attendance.leave', 'attendance.overtime', 'attendance.report'], true) ||
                      $n === 'sales.external_quote' ||
                     $n === 'approval.template' ||
                     in_array($n, ['disk.create', 'disk.edit', 'disk.upload'], true) ||

@@ -6,25 +6,25 @@ use Illuminate\Support\Facades\Route;
 
 // ========== 考勤管理 ==========
 Route::prefix('attendance')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
-    Route::get('overview', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business');
-    Route::get('calendar', [AttendanceController::class, 'calendar'])->withoutMiddleware('ensure_business');
+    Route::get('overview', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
+    Route::get('calendar', [AttendanceController::class, 'calendar'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
     Route::post('clock-in', [AttendanceController::class, 'clockIn']);
     Route::post('clock-out', [AttendanceController::class, 'clockOut']);
     Route::post('field-clock', [AttendanceController::class, 'fieldClock']);
     Route::get('today', [AttendanceController::class, 'today'])->withoutMiddleware('ensure_business');
     Route::post('supplement', [AttendanceController::class, 'supplement']);
-    Route::get('records', [AttendanceController::class, 'records'])->withoutMiddleware('ensure_business');
-    Route::get('report', [AttendanceController::class, 'report'])->withoutMiddleware('ensure_business');
+    Route::get('records', [AttendanceController::class, 'records'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.record');
+    Route::get('report', [AttendanceController::class, 'report'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.report');
     Route::get('leave', [AttendanceController::class, 'leaveRequests'])->withoutMiddleware('ensure_business');
     Route::post('leave', [AttendanceController::class, 'storeLeaveRequest']);
-    Route::post('leave/{leave}/approve', [AttendanceController::class, 'approveLeave']);
+    Route::post('leave/{leave}/approve', [AttendanceController::class, 'approveLeave'])->middleware('permission:attendance.leave');
     Route::delete('leave/{leave}', [AttendanceController::class, 'destroyLeaveRequest']);
     Route::get('overtime', [AttendanceController::class, 'overtimeRequests'])->withoutMiddleware('ensure_business');
     Route::post('overtime', [AttendanceController::class, 'storeOvertimeRequest']);
-    Route::post('overtime/{overtime}/approve', [AttendanceController::class, 'approveOvertime']);
+    Route::post('overtime/{overtime}/approve', [AttendanceController::class, 'approveOvertime'])->middleware('permission:attendance.overtime');
     Route::delete('overtime/{overtime}', [AttendanceController::class, 'destroyOvertimeRequest']);
     Route::get('/', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business');
-    Route::get('stats', [AttendanceController::class, 'stats'])->withoutMiddleware('ensure_business');
+    Route::get('stats', [AttendanceController::class, 'stats'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
 });
 
 // ========== 排班管理 ==========
