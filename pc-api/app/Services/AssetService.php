@@ -132,26 +132,28 @@ class AssetService
     public function store(Request $request): FixedAsset
     {
         $data = $this->validateAsset($request);
-        $asset = FixedAsset::create([
-            'asset_no'              => $this->inventory->nextAssetNumber(),
-            'category_id'           => $data['category_id'] ?? null,
-            'name'                  => $data['name'],
-            'specification'         => $data['specification'] ?? null,
-            'unit'                  => $data['unit'] ?? null,
-            'quantity'              => $data['quantity'] ?? 1,
-            'source'                => 'manual',
-            'original_value'        => $data['original_value'] ?? 0,
-            'net_residual_value'    => $data['net_residual_value'] ?? 0,
-            'useful_life_months'    => $data['useful_life_months'] ?? 60,
-            'acquisition_date'      => $data['acquisition_date'] ?? null,
-            'net_book_value'        => $data['original_value'] ?? 0,
-            'status'                => $data['status'] ?? 'in_use',
-            'location'              => $data['location'] ?? null,
-            'keeper_id'             => $data['keeper_id'] ?? null,
-            'remark'                => $data['remark'] ?? null,
-            'created_by'            => $request->user()->id,
-        ]);
-        return $asset->fresh(['category:id,name', 'keeper:id,name']);
+        return DB::transaction(function () use ($data, $request) {
+            $asset = FixedAsset::create([
+                'asset_no'              => $this->inventory->nextAssetNumber(),
+                'category_id'           => $data['category_id'] ?? null,
+                'name'                  => $data['name'],
+                'specification'         => $data['specification'] ?? null,
+                'unit'                  => $data['unit'] ?? null,
+                'quantity'              => $data['quantity'] ?? 1,
+                'source'                => 'manual',
+                'original_value'        => $data['original_value'] ?? 0,
+                'net_residual_value'    => $data['net_residual_value'] ?? 0,
+                'useful_life_months'    => $data['useful_life_months'] ?? 60,
+                'acquisition_date'      => $data['acquisition_date'] ?? null,
+                'net_book_value'        => $data['original_value'] ?? 0,
+                'status'                => $data['status'] ?? 'in_use',
+                'location'              => $data['location'] ?? null,
+                'keeper_id'             => $data['keeper_id'] ?? null,
+                'remark'                => $data['remark'] ?? null,
+                'created_by'            => $request->user()->id,
+            ]);
+            return $asset->fresh(['category:id,name', 'keeper:id,name']);
+        });
     }
 
     public function show(FixedAsset $asset): FixedAsset

@@ -104,8 +104,12 @@ class InventoryController extends Controller
 
     public function stockIn(Request $request): JsonResponse
     {
-        $result = $this->svc->stockIn($request);
-        return response()->json(['code' => 0, 'data' => $result]);
+        try {
+            $result = $this->svc->stockIn($request);
+            return response()->json(['code' => 0, 'data' => $result]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     public function stockOut(Request $request): JsonResponse

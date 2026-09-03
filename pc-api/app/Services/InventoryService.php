@@ -86,14 +86,14 @@ class InventoryService
             'name'         => 'required|string|max:200',
             'code'         => 'required|string|max:64|unique:inventory_items,code',
             'category'     => 'nullable|string|max:50',
-            'category_id'  => 'nullable|integer',
+            'category_id'  => 'nullable|integer|exists:inventory_categories,id',
             'specification'=> 'nullable|string|max:255',
             'unit'         => 'required|string|max:20',
-            'safety_stock' => 'nullable|integer',
-            'current_stock'=> 'nullable|integer',
+            'safety_stock' => 'nullable|integer|min:0',
+            'current_stock'=> 'nullable|integer|min:0',
             'cost_price'   => 'nullable|numeric',
             'sell_price'   => 'nullable|numeric',
-            'warehouse_id' => 'nullable|integer',
+            'warehouse_id' => 'nullable|integer|exists:warehouses,id',
             'location'     => 'nullable|string|max:100',
             'has_serial'   => 'nullable|boolean',
             'status'       => 'nullable|string',
@@ -116,35 +116,64 @@ class InventoryService
         $data = $request->validate([
             'name'         => 'sometimes|string|max:200',
             'category'     => 'nullable|string|max:50',
-            'category_id'  => 'nullable|integer',
+            'category_id'  => 'nullable|integer|exists:inventory_categories,id',
             'specification'=> 'nullable|string|max:255',
             'unit'         => 'sometimes|string|max:20',
-            'safety_stock' => 'nullable|integer',
-            'current_stock'=> 'nullable|integer',
+            'safety_stock' => 'nullable|integer|min:0',
+            'current_stock'=> 'prohibited',
             'cost_price'   => 'nullable|numeric',
             'sell_price'   => 'nullable|numeric',
-            'warehouse_id' => 'nullable|integer',
+            'warehouse_id' => 'nullable|integer|exists:warehouses,id',
             'location'     => 'nullable|string|max:100',
             'has_serial'   => 'nullable|boolean',
             'status'       => 'nullable|string',
         ]);
-        if (!empty($data['category_id']) && empty($data['category'])) {
-            $cat = InventoryCategory::find($data['category_id']);
-            if ($cat) $data['category'] = $cat->name;
-        }
-        $item->update($data);
-        return $item->fresh();
+        return DB::transaction(function () use ($data, $item) {
+            $item = InventoryItem::lockForUpdate()->findOrFail($item->id);
+            if (array_key_exists('warehouse_id', $data)
+                && (int) $data['warehouse_id'] !== (int) $item->warehouse_id
+                && (int) $item->current_stock > 0
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'warehouse_id' => '有库存的物料必须通过仓库调拨变更仓库，不能直接编辑',
+                ]);
+            }
+            if (!empty($data['category_id']) && empty($data['category'])) {
+                $cat = InventoryCategory::find($data['category_id']);
+                if ($cat) $data['category'] = $cat->name;
+            }
+            $item->update($data);
+            return $item->fresh();
+        });
     }
 
     public function destroyItem(Request $request, InventoryItem $item): void
     {
-        $item->delete();
+        DB::transaction(function () use ($item) {
+            $item = InventoryItem::lockForUpdate()->findOrFail($item->id);
+            if ((int) $item->current_stock > 0) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'item' => '仍有库存的物料不能删除，请先完成出库或调拨',
+                ]);
+            }
+            if ($item->stockRecords()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'item' => '已有库存流水的物料不能删除，请改为停用',
+                ]);
+            }
+            $item->delete();
+        });
     }
 
     public function batchDelete(Request $request): int
     {
         $data = $request->validate(['ids' => 'required|array|min:1', 'ids.*' => 'integer']);
-        return InventoryItem::whereIn('id', $data['ids'])->delete();
+        return DB::transaction(function () use ($data) {
+            $items = InventoryItem::whereIn('id', $data['ids'])->lockForUpdate()->get();
+            $deletable = $items->filter(fn (InventoryItem $item) => (int) $item->current_stock === 0
+                && !$item->stockRecords()->exists())->pluck('id');
+            return InventoryItem::whereIn('id', $deletable)->delete();
+        });
     }
 
     public function batchUpdate(Request $request): int
@@ -152,9 +181,53 @@ class InventoryService
         $data = $request->validate([
             'ids'     => 'required|array|min:1',
             'ids.*'   => 'integer',
-            'updates' => 'required|array',
+            'updates' => 'sometimes|array',
+            'fields'  => 'sometimes|array',
         ]);
-        return InventoryItem::whereIn('id', $data['ids'])->update($data['updates']);
+        $updates = $data['updates'] ?? $data['fields'] ?? null;
+        if (!is_array($updates) || $updates === []) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'fields' => '至少提供一个可修改字段',
+            ]);
+        }
+
+        $allowed = ['category', 'category_id', 'unit', 'min_stock', 'safety_stock', 'location', 'status', 'warehouse_id'];
+        $unknown = array_diff(array_keys($updates), $allowed);
+        if ($unknown) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'fields' => '包含不允许修改的字段: ' . implode(', ', $unknown),
+            ]);
+        }
+        $updates = $request->get('updates', $request->get('fields'));
+        $updates = validator($updates, [
+            'category'     => 'nullable|string|max:50',
+            'category_id'  => 'nullable|integer|exists:inventory_categories,id',
+            'unit'         => 'sometimes|string|max:20',
+            'min_stock'    => 'nullable|integer|min:0',
+            'safety_stock' => 'nullable|integer|min:0',
+            'location'     => 'nullable|string|max:100',
+            'status'       => 'nullable|in:active,inactive',
+            'warehouse_id' => 'nullable|integer|exists:warehouses,id',
+        ])->validate();
+
+        if (array_key_exists('category_id', $updates) && !array_key_exists('category', $updates)) {
+            $updates['category'] = $updates['category_id']
+                ? InventoryCategory::findOrFail($updates['category_id'])->name
+                : 'general';
+        }
+
+        return DB::transaction(function () use ($data, $updates) {
+            $items = InventoryItem::whereIn('id', $data['ids'])->lockForUpdate()->get();
+            if (array_key_exists('warehouse_id', $updates)
+                && $items->contains(fn (InventoryItem $item) => (int) $item->current_stock > 0
+                    && (int) $item->warehouse_id !== (int) $updates['warehouse_id'])
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'warehouse_id' => '选中的有库存物料必须通过仓库调拨变更仓库，不能批量直接修改',
+                ]);
+            }
+            return InventoryItem::whereIn('id', $items->pluck('id'))->update($updates);
+        });
     }
 
     public function lowStock(Request $request)
@@ -293,16 +366,25 @@ class InventoryService
             $lastItem = null;
             foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                $warehouseId = !empty($data['warehouse_id'])
+                    ? (int) $data['warehouse_id']
+                    : ($item->warehouse_id ? (int) $item->warehouse_id : null);
+                if ($item->warehouse_id !== null && $warehouseId !== (int) $item->warehouse_id) {
+                    throw new RuntimeException("物料「{$item->name}」属于其他仓库，不能入库到指定仓库");
+                }
+                if (!$warehouseId) {
+                    throw new RuntimeException("物料「{$item->name}」未指定仓库，无法入库");
+                }
                 $item->increment('current_stock', $it['quantity']);
                 // V1.2.14p: 入库时同步更新物料的仓库
-                if ($item->warehouse_id === null && !empty($data['warehouse_id'])) {
-                    $item->warehouse_id = (int) $data['warehouse_id'];
+                if ($item->warehouse_id === null) {
+                    $item->warehouse_id = $warehouseId;
                     $item->save();
                 }
                 $records[] = StockRecord::create([
                     'record_no'         => $recordNo,
                     'inventory_item_id' => $item->id,
-                    'warehouse_id'      => $data['warehouse_id'] ?? null,
+                    'warehouse_id'      => $warehouseId,
                     'type'              => $data['type'] ?? 'in',
                     'quantity'          => $it['quantity'],
                     'unit_cost'         => $it['unit_cost']    ?? null,
@@ -444,12 +526,15 @@ class InventoryService
             $lastItem = null;
             foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                if ($item->warehouse_id !== null && (int) $item->warehouse_id !== (int) $data['warehouse_id']) {
+                    throw new RuntimeException("物料「{$item->name}」不属于出库仓库");
+                }
                 if ($item->current_stock < $it['quantity']) {
                     throw new RuntimeException("库存不足: 「{$item->name}」当前 {$item->current_stock}, 需要 {$it['quantity']}");
                 }
                 $item->decrement('current_stock', $it['quantity']);
                 // V1.2.14p: 出库时同步更新物料仓库
-                if ($item->warehouse_id === null && !empty($data['warehouse_id'])) {
+                if ($item->warehouse_id === null) {
                     $item->warehouse_id = (int) $data['warehouse_id'];
                     $item->save();
                 }
@@ -873,20 +958,38 @@ class InventoryService
         $sourceName = Warehouse::find($sourceId)?->name ?? "源仓#{$sourceId}";
         $targetName = Warehouse::find($targetId)?->name ?? "目标仓#{$targetId}";
 
-        $recordNo = $this->nextRecordNo('TR');
+        $normalizedItems = [];
+        foreach ($items as $item) {
+            $itemId = (int) $item['item_id'];
+            $normalizedItems[$itemId] = ($normalizedItems[$itemId] ?? 0) + (int) $item['quantity'];
+        }
+        $items = array_map(
+            fn (int $itemId, int $quantity) => ['item_id' => $itemId, 'quantity' => $quantity],
+            array_keys($normalizedItems),
+            array_values($normalizedItems)
+        );
+
+        $recordNo = null;
         $created = [];
 
-        DB::transaction(function () use ($sourceId, $targetId, $items, $remark, $operatorId, $recordNo, $sourceName, $targetName, &$created) {
+        DB::transaction(function () use ($sourceId, $targetId, $items, $remark, $operatorId, &$recordNo, $sourceName, $targetName, &$created) {
+            $recordNo = $this->nextRecordNo('TR');
             foreach ($items as $item) {
                 $itemId = (int) $item['item_id'];
                 $qty = (int) $item['quantity'];
 
                 // 锁定库存并扣减源仓
                 $inv = InventoryItem::where('id', $itemId)->lockForUpdate()->firstOrFail();
+                if ((int) $inv->warehouse_id !== $sourceId) {
+                    throw new RuntimeException("物料「{$inv->name}」不在调出仓库「{$sourceName}」");
+                }
                 if ($inv->current_stock < $qty) {
                     throw new RuntimeException("物料「{$inv->name}」库存不足（当前: {$inv->current_stock}, 需: {$qty}）");
                 }
-                $inv->decrement('current_stock', $qty);
+                if ((int) $inv->current_stock !== $qty) {
+                    throw new RuntimeException("物料「{$inv->name}」只能整项调拨；当前库存 {$inv->current_stock}，调拨数量 {$qty}");
+                }
+                $sourceRemaining = 0;
 
                 // V1.2.16: 调拨单统一 type='transfer', 用 is_transfer + source/target 仓库区分方向
                 // 创建源仓出库记录
@@ -898,7 +1001,7 @@ class InventoryService
                     'is_transfer'        => true,
                     'type'               => 'transfer',
                     'quantity'           => $qty,
-                    'remaining_stock'    => max(0, $inv->current_stock - $qty),
+                    'remaining_stock'    => $sourceRemaining,
                     'operator_id'        => $operatorId,
                     'remark'             => "调拨至「{$targetName}」" . ($remark ? " - {$remark}" : ''),
                     'record_no'          => $recordNo,
@@ -913,10 +1016,15 @@ class InventoryService
                     'is_transfer'        => true,
                     'type'               => 'transfer',
                     'quantity'           => $qty,
-                    'remaining_stock'    => $inv->current_stock,
+                    'remaining_stock'    => $qty,
                     'operator_id'        => $operatorId,
                     'remark'             => "从「{$sourceName}」调拨" . ($remark ? " - {$remark}" : ''),
                     'record_no'          => $recordNo,
+                ]);
+
+                $inv->update([
+                    'warehouse_id'  => $targetId,
+                    'current_stock' => $qty,
                 ]);
 
                 $created[] = ['item_id' => $itemId, 'quantity' => $qty, 'name' => $inv->name];
@@ -938,8 +1046,14 @@ class InventoryService
     {
         $today = date('Ymd');
         $fullPrefix = "{$prefix}-{$today}-";
-        $cnt = StockRecord::where('record_no', 'like', $fullPrefix . '%')->count();
-        return $fullPrefix . str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
+        $this->lockNumberGenerator("stock-record:{$prefix}:{$today}");
+        $lastNo = StockRecord::where('record_no', 'like', $fullPrefix . '%')
+            ->orderByDesc('id')
+            ->value('record_no');
+        $lastSequence = $lastNo && str_starts_with($lastNo, $fullPrefix)
+            ? (int) substr($lastNo, strlen($fullPrefix))
+            : 0;
+        return $fullPrefix . str_pad((string) ($lastSequence + 1), 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -964,19 +1078,21 @@ class InventoryService
             foreach ($data['items'] as $it) {
                 $itemId = (int) $it['inventory_item_id'];
                 $qty    = (int) $it['quantity'];
-                if (Tool::where('inventory_item_id', $itemId)->exists()) {
-                    $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
-                    continue;
-                }
-                $item = InventoryItem::find($itemId);
+                $item = InventoryItem::lockForUpdate()->find($itemId);
                 if (!$item) {
                     $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '商品不存在'];
+                    continue;
+                }
+                if (Tool::where('inventory_item_id', $itemId)->exists()) {
+                    $skipped[] = ['inventory_item_id' => $itemId, 'reason' => '该商品已是工具'];
                     continue;
                 }
                 if ($qty > (int) $item->current_stock) {
                     $skipped[] = ['inventory_item_id' => $itemId, 'reason' => "转换数量超过当前库存({$item->current_stock})"];
                     continue;
                 }
+                $item->decrement('current_stock', $qty);
+                $item->refresh();
                 $tool = Tool::create([
                     'inventory_item_id' => $itemId,
                     'fixed_asset_no'    => $this->nextFixedAssetNo(),
@@ -1031,7 +1147,7 @@ class InventoryService
             $recordNo = $this->nextRecordNo('TU');
             $records  = [];
             foreach ($data['items'] as $it) {
-                $tool = Tool::with('inventoryItem')->findOrFail($it['tool_id']);
+                $tool = Tool::lockForUpdate()->findOrFail($it['tool_id']);
                 if (!$tool->inventoryItem) {
                     throw new RuntimeException("工具「{$tool->name}」未关联库存商品, 无法操作");
                 }
@@ -1196,6 +1312,7 @@ class InventoryService
     public function nextAssetNumber(): string
     {
         $prefix = 'GD-' . date('Ymd') . '-';
+        $this->lockNumberGenerator('fixed-asset:' . date('Ymd'));
         $toolMax  = Tool::where('fixed_asset_no', 'like', $prefix . '%')->max('fixed_asset_no');
         $assetMax = FixedAsset::where('asset_no', 'like', $prefix . '%')->max('asset_no');
         $extract = function (?string $no) use ($prefix): int {
@@ -1204,6 +1321,13 @@ class InventoryService
         };
         $next = max($extract($toolMax), $extract($assetMax)) + 1;
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function lockNumberGenerator(string $key): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [$key]);
+        }
     }
 
 

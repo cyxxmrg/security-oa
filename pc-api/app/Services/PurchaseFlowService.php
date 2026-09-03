@@ -135,7 +135,7 @@ class PurchaseFlowService
     public function approveRequirement(int $reqId, ?User $user = null, string $remark = ''): PurchaseRequirement
     {
         return DB::transaction(function () use ($reqId, $user, $remark) {
-            $req = PurchaseRequirement::findOrFail($reqId);
+            $req = PurchaseRequirement::lockForUpdate()->findOrFail($reqId);
             if ($req->status !== self::STATUS_REQ_PENDING) {
                 throw new \RuntimeException("需求当前状态 {$req->status} 不可审批");
             }
@@ -172,7 +172,11 @@ class PurchaseFlowService
             // 关联多个需求 (用 merge_plan_id)
             if (!empty($requirementIds)) {
                 foreach ($requirementIds as $rid) {
-                    PurchaseRequirement::where('id', $rid)->update([
+                    $requirement = PurchaseRequirement::lockForUpdate()->findOrFail($rid);
+                    if ($requirement->status !== self::STATUS_REQ_APPROVED) {
+                        throw new \RuntimeException("需求 {$requirement->id} 当前状态 {$requirement->status} 不可加入采购计划");
+                    }
+                    $requirement->update([
                         'status'        => self::STATUS_REQ_MERGED,
                         'merged_plan_id'=> $plan->id,
                         'merged_at'     => now(),
@@ -187,7 +191,10 @@ class PurchaseFlowService
     public function submitPlan(int $planId, ?User $user = null): PurchasePlan
     {
         return DB::transaction(function () use ($planId, $user) {
-            $plan = PurchasePlan::findOrFail($planId);
+            $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            if ($plan->status !== self::STATUS_PLAN_DRAFT) {
+                throw new \RuntimeException("计划当前状态 {$plan->status} 不可提交");
+            }
             $plan->update([
                 'status'       => self::STATUS_PLAN_SUBMITTED,
                 'submitter_id' => $user?->id ?? $plan->submitter_id,
@@ -201,7 +208,10 @@ class PurchaseFlowService
     public function approvePlan(int $planId, ?User $user = null, string $remark = ''): PurchasePlan
     {
         return DB::transaction(function () use ($planId, $user, $remark) {
-            $plan = PurchasePlan::findOrFail($planId);
+            $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            if ($plan->status !== self::STATUS_PLAN_SUBMITTED) {
+                throw new \RuntimeException("计划当前状态 {$plan->status} 不可审批");
+            }
             $plan->update([
                 'status'         => self::STATUS_PLAN_APPROVED,
                 'approver_id'    => $user?->id,
@@ -223,7 +233,10 @@ class PurchaseFlowService
     public function planToOrder(int $planId, array $data, string $path = 'manual', ?User $user = null): PurchaseOrder
     {
         return DB::transaction(function () use ($planId, $data, $path, $user) {
-            $plan = PurchasePlan::findOrFail($planId);
+            $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            if ($plan->status !== self::STATUS_PLAN_APPROVED) {
+                throw new \RuntimeException("计划当前状态 {$plan->status} 不可生成采购单");
+            }
             $po = PurchaseOrder::create([
                 'plan_id'              => $plan->id,
                 'source_requirement_id'=> $plan->requirement_id,
@@ -251,7 +264,10 @@ class PurchaseFlowService
     public function submitOrder(int $orderId, ?User $user = null): PurchaseOrder
     {
         return DB::transaction(function () use ($orderId, $user) {
-            $po = PurchaseOrder::findOrFail($orderId);
+            $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
+            if ($po->status !== self::STATUS_ORDER_DRAFT) {
+                throw new \RuntimeException("采购单当前状态 {$po->status} 不可提交");
+            }
             $po->update(['status' => self::STATUS_ORDER_PENDING]);
             $this->log(self::ENTITY_ORDER, $po->id, self::STATUS_ORDER_DRAFT, self::STATUS_ORDER_PENDING, 'submit', $user);
 
@@ -299,7 +315,10 @@ class PurchaseFlowService
     public function approveOrder(int $orderId, ?User $user = null, string $remark = ''): PurchaseOrder
     {
         return DB::transaction(function () use ($orderId, $user, $remark) {
-            $po = PurchaseOrder::findOrFail($orderId);
+            $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
+            if ($po->status !== self::STATUS_ORDER_PENDING) {
+                throw new \RuntimeException("采购单当前状态 {$po->status} 不可审批");
+            }
             $po->update([
                 'status'      => self::STATUS_ORDER_APPROVED,
                 'approved_by' => $user?->id,
@@ -334,7 +353,10 @@ class PurchaseFlowService
     public function createContract(int $orderId, array $data, ?User $user = null): PurchaseContract
     {
         return DB::transaction(function () use ($orderId, $data, $user) {
-            $po = PurchaseOrder::findOrFail($orderId);
+            $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
+            if ($po->status !== self::STATUS_ORDER_APPROVED) {
+                throw new \RuntimeException("采购单当前状态 {$po->status} 不可生成合同");
+            }
             $c = PurchaseContract::create([
                 'plan_id'           => $po->plan_id,
                 'purchase_order_id' => $po->id,
@@ -365,14 +387,18 @@ class PurchaseFlowService
     public function signContract(int $contractId, ?User $user = null): PurchaseContract
     {
         return DB::transaction(function () use ($contractId, $user) {
-            $c = PurchaseContract::findOrFail($contractId);
+            $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            if (!in_array($c->status, [self::STATUS_CONTRACT_DRAFT, self::STATUS_CONTRACT_SIGNING], true)) {
+                throw new \RuntimeException("合同当前状态 {$c->status} 不可签署");
+            }
+            $fromStatus = $c->status;
             $c->update([
                 'status'   => self::STATUS_CONTRACT_SIGNED,
                 'signer'   => $user?->name ?? $c->signer,
                 'signer_id'=> $user?->id ?? $c->signer_id,
                 'signed_at'=> $c->signed_at ?? today(),
             ]);
-            $this->log(self::ENTITY_CONTRACT, $c->id, self::STATUS_CONTRACT_DRAFT, self::STATUS_CONTRACT_SIGNED, 'sign', $user);
+            $this->log(self::ENTITY_CONTRACT, $c->id, $fromStatus, self::STATUS_CONTRACT_SIGNED, 'sign', $user);
             return $c->fresh();
         });
     }
@@ -384,7 +410,10 @@ class PurchaseFlowService
     public function createPaymentRequest(int $contractId, array $data, ?User $user = null): PurchasePaymentRequest
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
-            $c = PurchaseContract::findOrFail($contractId);
+            $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            if (!in_array($c->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
+                throw new \RuntimeException("合同当前状态 {$c->status} 不可申请付款");
+            }
             $amount = (float) $data['amount'];
             $existingAmount = (float) PurchasePaymentRequest::where('contract_id', $c->id)
                 ->whereIn('status', [
@@ -417,7 +446,7 @@ class PurchaseFlowService
     public function approvePaymentRequest(int $reqId, ?User $user = null, string $remark = ''): PurchasePaymentRequest
     {
         return DB::transaction(function () use ($reqId, $user, $remark) {
-            $req = PurchasePaymentRequest::findOrFail($reqId);
+            $req = PurchasePaymentRequest::lockForUpdate()->findOrFail($reqId);
             if ($req->status !== self::STATUS_PAYREQ_PENDING) {
                 throw new \RuntimeException('只有待审批的付款申请可以审批');
             }
@@ -465,11 +494,6 @@ class PurchaseFlowService
                             'supplier_id'        => $req->supplier_id,
                         ],
                         'flow'                => $flowData['flow'],
-                        'flow'         => [[
-                            'operator' => $user?->name ?? '—',
-                            'action'   => 'submit',
-                            'time'     => now()->toDateTimeString(),
-                        ]],
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -531,11 +555,14 @@ class PurchaseFlowService
                 'remark'             => $data['remark'] ?? null,
             ]);
 
+            $requestWasPaid = $req->status === self::STATUS_PAYREQ_PAID;
             if ($amount >= $remainingRequestAmount - 0.0001) {
                 $req->update(['status' => self::STATUS_PAYREQ_PAID]);
             }
             $this->log(self::ENTITY_PAYMENT, $pay->id, null, self::STATUS_PAY_COMPLETED, 'execute', $user, "实付 ¥{$pay->amount}");
-            $this->log(self::ENTITY_PAYMENT_REQ, $req->id, self::STATUS_PAYREQ_APPROVED, self::STATUS_PAYREQ_PAID, 'paid', $user);
+            if (!$requestWasPaid && $req->status === self::STATUS_PAYREQ_PAID) {
+                $this->log(self::ENTITY_PAYMENT_REQ, $req->id, self::STATUS_PAYREQ_APPROVED, self::STATUS_PAYREQ_PAID, 'paid', $user);
+            }
 
             if ($payable) {
                 $newPaid = (float) $payable->paid_amount + (float) $pay->amount;
@@ -567,7 +594,10 @@ class PurchaseFlowService
     public function createShipment(int $contractId, array $data, ?User $user = null): PurchaseShipment
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
-            $c = PurchaseContract::findOrFail($contractId);
+            $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            if (!in_array($c->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
+                throw new \RuntimeException("合同当前状态 {$c->status} 不可创建收货单");
+            }
             $sh = PurchaseShipment::create([
                 'contract_id'        => $c->id,
                 'supplier_id'        => $c->supplier_id,
@@ -587,8 +617,23 @@ class PurchaseFlowService
     public function updateShipmentStatus(int $shipId, string $newStatus, ?User $user = null, string $remark = ''): PurchaseShipment
     {
         return DB::transaction(function () use ($shipId, $newStatus, $user, $remark) {
-            $sh = PurchaseShipment::findOrFail($shipId);
+            $sh = PurchaseShipment::lockForUpdate()->findOrFail($shipId);
             $old = $sh->status;
+            if ($old === $newStatus) {
+                return $sh->fresh();
+            }
+            $allowed = [
+                self::STATUS_SHIP_PENDING    => [self::STATUS_SHIP_SHIPPED],
+                self::STATUS_SHIP_SHIPPED    => [self::STATUS_SHIP_IN_TRANSIT, self::STATUS_SHIP_ARRIVED],
+                self::STATUS_SHIP_IN_TRANSIT => [self::STATUS_SHIP_ARRIVED],
+                self::STATUS_SHIP_ARRIVED    => [self::STATUS_SHIP_RECEIVED],
+                self::STATUS_SHIP_RECEIVED   => [self::STATUS_SHIP_INSPECTED],
+                self::STATUS_SHIP_INSPECTED  => [self::STATUS_SHIP_INBOUNDED],
+                self::STATUS_SHIP_INBOUNDED  => [],
+            ];
+            if (!in_array($newStatus, $allowed[$old] ?? [], true)) {
+                throw new \RuntimeException("收货单状态 {$old} 不可变更为 {$newStatus}");
+            }
             $update = ['status' => $newStatus];
             if ($newStatus === self::STATUS_SHIP_ARRIVED) {
                 $update['arrived_at'] = today();
@@ -607,6 +652,9 @@ class PurchaseFlowService
     {
         return DB::transaction(function () use ($shipId, $user) {
             $sh = PurchaseShipment::with('contract.itemsList')->lockForUpdate()->findOrFail($shipId);
+            if (!in_array($sh->status, [self::STATUS_SHIP_ARRIVED, self::STATUS_SHIP_RECEIVED], true)) {
+                throw new \RuntimeException("收货单当前状态 {$sh->status} 不可生成入库流水");
+            }
             if ($sh->stock_record_id) {
                 return StockRecord::findOrFail($sh->stock_record_id);
             }
@@ -656,7 +704,7 @@ class PurchaseFlowService
                 $firstRecord ??= $lastRecord;
             }
             $sh->update(['stock_record_id' => $firstRecord->id, 'status' => self::STATUS_SHIP_INSPECTED]);
-            $this->log(self::ENTITY_SHIPMENT, $sh->id, self::STATUS_SHIP_ARRIVED, self::STATUS_SHIP_INSPECTED, 'auto_inbound', $user, "自动生成入库流水 {$firstRecord->record_no}");
+            $this->log(self::ENTITY_SHIPMENT, $sh->id, $sh->getOriginal('status'), self::STATUS_SHIP_INSPECTED, 'auto_inbound', $user, "自动生成入库流水 {$firstRecord->record_no}");
             return $firstRecord;
         });
     }
@@ -683,12 +731,12 @@ class PurchaseFlowService
             ]);
             $this->log(self::ENTITY_SHIPMENT, $sh->id, self::STATUS_SHIP_INSPECTED, self::STATUS_SHIP_INBOUNDED, 'confirm_inbound', $user, '采购员确认入库');
 
-            $contract = $sh->contract;
+            $contract = $sh->contract ? PurchaseContract::lockForUpdate()->find($sh->contract->id) : null;
             if ($contract && $contract->plan_id) {
                 $reqIds = \DB::table('purchase_requirements')->where('merged_plan_id', $contract->plan_id)->pluck('id');
-                PurchaseRequirement::whereIn('id', $reqIds)->update(['status' => self::STATUS_REQ_FULFILLED]);
-                PurchasePlan::where('id', $contract->plan_id)->update(['status' => self::STATUS_PLAN_FULFILLED]);
-                PurchaseOrder::where('id', $contract->purchase_order_id)->update(['status' => self::STATUS_ORDER_FULFILLED]);
+                PurchaseRequirement::whereIn('id', $reqIds)->lockForUpdate()->get()->each->update(['status' => self::STATUS_REQ_FULFILLED]);
+                PurchasePlan::lockForUpdate()->where('id', $contract->plan_id)->update(['status' => self::STATUS_PLAN_FULFILLED]);
+                PurchaseOrder::lockForUpdate()->where('id', $contract->purchase_order_id)->update(['status' => self::STATUS_ORDER_FULFILLED]);
             }
             return $sh->fresh();
         });
@@ -705,12 +753,12 @@ class PurchaseFlowService
     {
         return DB::transaction(function () use ($entityType, $entityId, $user, $remark) {
             $model = match ($entityType) {
-                self::ENTITY_REQUIREMENT => PurchaseRequirement::findOrFail($entityId),
-                self::ENTITY_PLAN         => PurchasePlan::findOrFail($entityId),
-                self::ENTITY_ORDER        => PurchaseOrder::findOrFail($entityId),
-                self::ENTITY_CONTRACT     => PurchaseContract::findOrFail($entityId),
-                self::ENTITY_PAYMENT_REQ  => PurchasePaymentRequest::findOrFail($entityId),
-                self::ENTITY_SHIPMENT     => PurchaseShipment::findOrFail($entityId),
+                self::ENTITY_REQUIREMENT => PurchaseRequirement::lockForUpdate()->findOrFail($entityId),
+                self::ENTITY_PLAN         => PurchasePlan::lockForUpdate()->findOrFail($entityId),
+                self::ENTITY_ORDER        => PurchaseOrder::lockForUpdate()->findOrFail($entityId),
+                self::ENTITY_CONTRACT     => PurchaseContract::lockForUpdate()->findOrFail($entityId),
+                self::ENTITY_PAYMENT_REQ  => PurchasePaymentRequest::lockForUpdate()->findOrFail($entityId),
+                self::ENTITY_SHIPMENT     => PurchaseShipment::lockForUpdate()->findOrFail($entityId),
                 default => throw new \InvalidArgumentException("不支持的 entity_type: $entityType"),
             };
 
@@ -754,7 +802,8 @@ class PurchaseFlowService
     public function syncContractItems(int $contractId, ?User $user = null): array
     {
         return DB::transaction(function () use ($contractId, $user) {
-            $contract = PurchaseContract::with('purchaseOrder.items')->findOrFail($contractId);
+            $contract = PurchaseContract::with('purchaseOrder.items')->lockForUpdate()->findOrFail($contractId);
+            $this->assertContractEditable($contract);
             $existing = PurchaseContractItem::where('contract_id', $contractId)->count();
             if ($existing > 0) {
                 return ['skipped' => true, 'reason' => '清单已存在, 未同步', 'count' => $existing];
@@ -786,7 +835,8 @@ class PurchaseFlowService
     public function addContractItem(int $contractId, array $data, ?User $user = null): PurchaseContractItem
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
-            $contract = PurchaseContract::findOrFail($contractId);
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertContractEditable($contract);
             $qty = (float)($data['qty'] ?? 0);
             $unitPrice = (float)($data['unit_price'] ?? 0);
             $item = PurchaseContractItem::create([
@@ -808,7 +858,9 @@ class PurchaseFlowService
     public function updateContractItem(int $contractId, int $itemId, array $data, ?User $user = null): PurchaseContractItem
     {
         return DB::transaction(function () use ($contractId, $itemId, $data, $user) {
-            $item = PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->firstOrFail();
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertContractEditable($contract);
+            $item = PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->lockForUpdate()->firstOrFail();
             $qty = isset($data['qty']) ? (float)$data['qty'] : (float)$item->qty;
             $unitPrice = isset($data['unit_price']) ? (float)$data['unit_price'] : (float)$item->unit_price;
             $item->update([
@@ -829,7 +881,9 @@ class PurchaseFlowService
     public function removeContractItem(int $contractId, int $itemId, ?User $user = null): void
     {
         DB::transaction(function () use ($contractId, $itemId, $user) {
-            $item = PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->firstOrFail();
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertContractEditable($contract);
+            $item = PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->lockForUpdate()->firstOrFail();
             $label = $item->material;
             $item->delete();
             $this->log(self::ENTITY_CONTRACT, $contractId, null, 'remove_item', 'remove_item', $user, "删除清单: {$label}");
@@ -1225,5 +1279,12 @@ class PurchaseFlowService
     private function nextCode(string $prefix): string
     {
         return self::uniqueCode($prefix);
+    }
+
+    private function assertContractEditable(PurchaseContract $contract): void
+    {
+        if (!in_array($contract->status, [self::STATUS_CONTRACT_DRAFT, self::STATUS_CONTRACT_SIGNING], true)) {
+            throw new \RuntimeException("合同当前状态 {$contract->status} 不可修改清单");
+        }
     }
 }
