@@ -19,17 +19,14 @@ class ProjectBudgetService
      */
     public function generateCode(): string
     {
-        $year = date('Y');
+        $year = now()->format('Y');
         $prefix = "BUD-{$year}-";
-
-        $latest = ProjectBudget::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')
-            ->value('code');
-
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "project-budget:{$year}",
+            fn () => (int) ProjectBudget::where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'BUD-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
 
         return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
@@ -70,11 +67,11 @@ class ProjectBudgetService
      */
     public function updateBudgetItems(ProjectBudget $budget, array $items): void
     {
-        if ($budget->status !== 'draft') {
-            throw new \RuntimeException('只有草稿状态的预算可编辑明细');
-        }
-
         DB::transaction(function () use ($budget, $items) {
+            $budget = ProjectBudget::lockForUpdate()->findOrFail($budget->id);
+            if ($budget->status !== 'draft') {
+                throw new \RuntimeException('只有草稿状态的预算可编辑明细');
+            }
             $budget->items()->delete();
 
             $sort = 0;
@@ -118,6 +115,7 @@ class ProjectBudgetService
     public function approveBudget(ProjectBudget $budget, int $userId): ProjectBudget
     {
         return DB::transaction(function () use ($budget, $userId) {
+            $budget = ProjectBudget::lockForUpdate()->findOrFail($budget->id);
             if ($budget->status !== 'draft') {
                 throw new \RuntimeException('只有草稿状态的预算可审批');
             }
@@ -142,7 +140,11 @@ class ProjectBudgetService
     public function reviseBudget(ProjectBudget $oldBudget, array $newItems, int $userId): ProjectBudget
     {
         return DB::transaction(function () use ($oldBudget, $newItems, $userId) {
-            $newVersion = ((int) $oldBudget->version) + 1;
+            $oldBudget = ProjectBudget::lockForUpdate()->findOrFail($oldBudget->id);
+            if ($oldBudget->status !== 'approved') {
+                throw new \RuntimeException('只有已审批预算可修订');
+            }
+            $newVersion = ((int) ProjectBudget::where('project_id', $oldBudget->project_id)->max('version')) + 1;
 
             $newBudget = ProjectBudget::create([
                 'project_id'       => $oldBudget->project_id,
@@ -176,23 +178,40 @@ class ProjectBudgetService
         string $description = '',
         array $metadata = []
     ): void {
-        ProjectActualCost::updateOrCreate(
-            [
-                'source_type' => $sourceType,
-                'source_id'   => $sourceId,
-                'category'    => $category,
-            ],
-            [
-                'project_id'  => $projectId,
-                'amount'      => $amount,
-                'cost_date'   => $costDate,
-                'description' => $description,
-                'metadata'    => $metadata,
-            ]
-        );
+        DB::transaction(function () use (
+            $projectId,
+            $sourceType,
+            $sourceId,
+            $category,
+            $amount,
+            $costDate,
+            $description,
+            $metadata
+        ): void {
+            ProjectBudget::where('project_id', $projectId)
+                ->where('status', 'approved')
+                ->latest('version')
+                ->lockForUpdate()
+                ->first();
 
-        $this->refreshActualCosts($projectId);
-        $this->checkBudgetAlert($projectId);
+            ProjectActualCost::updateOrCreate(
+                [
+                    'source_type' => $sourceType,
+                    'source_id'   => $sourceId,
+                    'category'    => $category,
+                ],
+                [
+                    'project_id'  => $projectId,
+                    'amount'      => $amount,
+                    'cost_date'   => $costDate,
+                    'description' => $description,
+                    'metadata'    => $metadata,
+                ]
+            );
+
+            $this->refreshActualCosts($projectId);
+            $this->checkBudgetAlert($projectId);
+        });
     }
 
     /**
