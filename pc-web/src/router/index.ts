@@ -275,7 +275,7 @@ const routes: RouteRecordRaw[] = [
         path: 'process',
         name: 'ProcessManagement',
         redirect: '/process/work-process',
-        meta: { title: '工序管理', icon: 'List' },
+        meta: { title: '工序管理', icon: 'List', permission: 'process.view' },
         children: [
           { path: 'work-process', name: 'ProcessWorkProcess', component: () => import('@/views/construction/work-process/index.vue'), meta: { title: '工序字典' } },
           { path: 'templates',    name: 'ProcessTemplates',    component: () => import('@/views/process/TemplateList.vue'),       meta: { title: '工序模板' } },
@@ -291,7 +291,7 @@ const routes: RouteRecordRaw[] = [
         name: 'Maintenance',
         redirect: '/maintenance/work-orders',
         alias: '/maintenance',
-        meta: { title: '维修中心', icon: 'SetUp', hidden: true },
+        meta: { title: '维修中心', icon: 'SetUp', hidden: true, permission: 'service.view' },
         children: [
           { path: 'work-orders', name: 'MaintenanceWorkOrders', component: () => import('@/views/maintenance/WorkOrderList.vue'), meta: { title: '维修工单' } },
           { path: 'work-orders/:id', name: 'MaintenanceWorkOrderDetail', component: () => import('@/views/maintenance/WorkOrderDetail.vue'), meta: { title: '工单详情', hidden: true }, props: true },
@@ -337,7 +337,7 @@ const routes: RouteRecordRaw[] = [
         path: 'inspection',
         name: 'Inspection',
         redirect: '/inspection/plans',
-        meta: { title: '巡检计划', icon: 'CircleCheck', hidden: true },
+        meta: { title: '巡检计划', icon: 'CircleCheck', hidden: true, permission: 'service.view' },
         children: [
           { path: 'overview', name: 'InspectionOverview', component: () => import('@/views/inspection/Overview.vue'), meta: { title: '巡检总览' } },
           { path: 'plans', name: 'InspectionPlans', component: () => import('@/views/inspection/PlanList.vue'), meta: { title: '巡检计划' } },

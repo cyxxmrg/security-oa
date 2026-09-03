@@ -1,7 +1,7 @@
 <?php
 
-use IlluminateDatabaseMigrationsMigration;
-use IlluminateSupportFacadesDB;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -51,19 +51,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        $permissionIds = DB::table('permissions')
-            ->where('guard_name', 'web')
-            ->whereIn('name', [
-                'service.view', 'service.create', 'service.edit',
-                'service.delete', 'service.dispatch', 'service.repair',
-            ])
-            ->pluck('id');
-
-        if ($permissionIds->isEmpty()) {
-            return;
-        }
-
-        DB::table('role_has_permissions')->whereIn('permission_id', $permissionIds)->delete();
-        DB::table('permissions')->whereIn('id', $permissionIds)->delete();
+        // 权限可能在迁移前已存在，无法安全区分后续新增数据，因此不自动删除。
     }
 };

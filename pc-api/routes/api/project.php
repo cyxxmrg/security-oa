@@ -43,7 +43,7 @@ Route::prefix('projects')->middleware(['auth:sanctum', 'ensure_business', 'permi
 });
 
 // ========== 深化施工 工序验收 ==========
-Route::prefix('process')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('process')->middleware(['auth:sanctum', 'ensure_business', 'permission:process.view|process.create|process.edit|process.approve'])->group(function () {
     // 工序模板
     Route::get('industries', [ProcessController::class, 'industries']);
     Route::get('templates', [ProcessController::class, 'templates']);

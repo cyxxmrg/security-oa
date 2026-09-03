@@ -123,6 +123,7 @@ class PermissionRoleSeeder extends Seeder
         ],
         // V1.2.12: 深化施工权限
         '深化施工' => [
+            ['name' => 'process.view',    'label' => '工序/验收查看'],
             ['name' => 'process.create',  'label' => '工序/验收创建'],
             ['name' => 'process.edit',    'label' => '工序/验收编辑'],
             ['name' => 'process.approve', 'label' => '工序验收审核'],
