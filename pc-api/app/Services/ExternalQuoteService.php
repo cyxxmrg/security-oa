@@ -28,6 +28,7 @@ class ExternalQuoteService
     {
         $year   = date('Y');
         $prefix = "EQR-{$year}-";
+        $this->lockNumberGenerator('external-quote-request:' . $year);
         $latest = ExternalQuoteRequest::where('code', 'like', $prefix . '%')
             ->orderByDesc('id')->value('code');
         $next = 1;
@@ -44,6 +45,7 @@ class ExternalQuoteService
     {
         $year   = date('Y');
         $prefix = "EQ-{$year}-";
+        $this->lockNumberGenerator('external-quote:' . $year);
         $latest = ExternalQuote::where('code', 'like', $prefix . '%')
             ->orderByDesc('id')->value('code');
         $next = 1;
@@ -64,7 +66,7 @@ class ExternalQuoteService
                 'code'           => $this->generateRequestCode(),
                 'title'          => $data['title'] ?? '',
                 'required_items' => $data['required_items'] ?? [],
-                'required_files' => $data['required_files'] ?? [],
+                'required_files' => $this->normalizeDraftFiles($data['required_files'] ?? []),
                 'deadline'       => $data['deadline'] ?? null,
                 'status'         => ExternalQuoteRequest::STATUS_OPEN,
                 'public_token'   => (string) Str::uuid(),
@@ -82,7 +84,7 @@ class ExternalQuoteService
     public function submitQuote(int $requestId, int $supplierId, array $data, int $userId): ExternalQuote
     {
         return DB::transaction(function () use ($requestId, $supplierId, $data, $userId) {
-            $req = ExternalQuoteRequest::findOrFail($requestId);
+            $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
             if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
                 throw new \RuntimeException('该报价请求已截止/取消，不可再提交');
             }
@@ -119,7 +121,7 @@ class ExternalQuoteService
     public function shortlistQuote(int $quoteId, int $userId): ExternalQuote
     {
         return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::findOrFail($quoteId);
+            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
             if (!in_array($quote->status, [ExternalQuote::STATUS_SUBMITTED, ExternalQuote::STATUS_SHORTLISTED], true)) {
                 throw new \RuntimeException('当前状态不可入围');
             }
@@ -138,7 +140,10 @@ class ExternalQuoteService
     public function rejectQuote(int $quoteId, int $userId, ?string $reason = null): ExternalQuote
     {
         return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::findOrFail($quoteId);
+            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
+            if (in_array($quote->status, [ExternalQuote::STATUS_AWARDED, ExternalQuote::STATUS_REJECTED], true)) {
+                throw new \RuntimeException('当前报价状态不可驳回');
+            }
             $quote->update([
                 'status'      => ExternalQuote::STATUS_REJECTED,
                 'reviewed_by' => $userId,
@@ -160,11 +165,14 @@ class ExternalQuoteService
     public function awardQuote(int $quoteId, int $userId): array
     {
         return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::with('request')->findOrFail($quoteId);
+            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
             if ($quote->status === ExternalQuote::STATUS_AWARDED) {
                 throw new \RuntimeException('该报价已中标');
             }
-            $request = $quote->request;
+            if (!in_array($quote->status, [ExternalQuote::STATUS_SUBMITTED, ExternalQuote::STATUS_SHORTLISTED], true)) {
+                throw new \RuntimeException('当前报价状态不可定标');
+            }
+            $request = ExternalQuoteRequest::lockForUpdate()->find($quote->request_id);
             if (!$request) {
                 throw new \RuntimeException('报价请求不存在');
             }
@@ -225,7 +233,7 @@ class ExternalQuoteService
     public function closeRequest(int $requestId): ExternalQuoteRequest
     {
         return DB::transaction(function () use ($requestId) {
-            $req = ExternalQuoteRequest::findOrFail($requestId);
+            $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
             if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
                 throw new \RuntimeException('只有征集中状态可关闭');
             }
@@ -240,7 +248,7 @@ class ExternalQuoteService
     public function cancelRequest(int $requestId): ExternalQuoteRequest
     {
         return DB::transaction(function () use ($requestId) {
-            $req = ExternalQuoteRequest::findOrFail($requestId);
+            $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
             if (in_array($req->status, [ExternalQuoteRequest::STATUS_AWARDED, ExternalQuoteRequest::STATUS_CANCELLED], true)) {
                 throw new \RuntimeException('已定标/已取消不可再操作');
             }
@@ -256,8 +264,39 @@ class ExternalQuoteService
     {
         $today = date('Ymd');
         $prefix = "PO-{$today}-";
+        $this->lockNumberGenerator('purchase-order:' . $today);
         $count = PurchaseOrder::where('po_no', 'like', $prefix . '%')->count();
         return $prefix . str_pad((string) ($count + 1), 3, '0', STR_PAD_LEFT);
+    }
+
+    private function lockNumberGenerator(string $key): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [$key]);
+        }
+    }
+
+    private function normalizeDraftFiles(mixed $files): array
+    {
+        if (!is_array($files)) {
+            return [];
+        }
+
+        return collect($files)
+            ->filter(fn ($file) => is_array($file)
+                && !empty($file['path'])
+                && is_string($file['path'])
+                && str_starts_with($file['path'], 'external-quotes/_draft/'))
+            ->map(fn (array $file) => [
+                'id' => (string) ($file['id'] ?? Str::uuid()),
+                'name' => (string) ($file['name'] ?? basename($file['path'])),
+                'path' => $file['path'],
+                'size' => isset($file['size']) ? (int) $file['size'] : null,
+                'mime' => isset($file['mime']) ? (string) $file['mime'] : null,
+                'uploaded_at' => $file['uploaded_at'] ?? now()->toIso8601String(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
