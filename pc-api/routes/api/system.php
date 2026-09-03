@@ -276,76 +276,76 @@ Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business
 });
 
 // ========== 施工预算 ==========
-Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [BudgetController::class, 'index']);
     Route::get('/summary/{projectId}', [BudgetController::class, 'summary']);
-    Route::post('/', [BudgetController::class, 'store']);
+    Route::post('/', [BudgetController::class, 'store'])->middleware('permission:project.edit');
     Route::get('/{id}', [BudgetController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [BudgetController::class, 'update'])->where('id', '[0-9]+');
-    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->where('id', '[0-9]+');
-    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->where('id', '[0-9]+');
-    Route::delete('/{id}', [BudgetController::class, 'destroy'])->where('id', '[0-9]+');
+    Route::put('/{id}', [BudgetController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::delete('/{id}', [BudgetController::class, 'destroy'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // ========== 施工团队 ==========
-Route::prefix('construction/teams')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/teams')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [TeamController::class, 'index']);
-    Route::post('/', [TeamController::class, 'store']);
+    Route::post('/', [TeamController::class, 'store'])->middleware('permission:project.edit');
     Route::get('/{id}', [TeamController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [TeamController::class, 'update'])->where('id', '[0-9]+');
-    Route::delete('/{id}', [TeamController::class, 'destroy'])->where('id', '[0-9]+');
-    Route::post('/{id}/members', [TeamController::class, 'addMembers'])->where('id', '[0-9]+');
-    Route::delete('/{id}/members/{memberId}', [TeamController::class, 'removeMember'])->where('id', '[0-9]+')->where('memberId', '[0-9]+');
+    Route::put('/{id}', [TeamController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::delete('/{id}', [TeamController::class, 'destroy'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/members', [TeamController::class, 'addMembers'])->where('id', '[0-9]+')->middleware('permission:project.assign');
+    Route::delete('/{id}/members/{memberId}', [TeamController::class, 'removeMember'])->where('id', '[0-9]+')->where('memberId', '[0-9]+')->middleware('permission:project.assign');
 });
 
 // ========== 开工单 ==========
-Route::prefix('construction/commencement-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/commencement-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [CommencementOrderController::class, 'index']);
-    Route::post('/', [CommencementOrderController::class, 'store']);
-    Route::post('/{id}/approve', [CommencementOrderController::class, 'approve'])->where('id', '[0-9]+');
-    Route::post('/{id}/start', [CommencementOrderController::class, 'startWork'])->where('id', '[0-9]+');
-    Route::post('/{id}/complete', [CommencementOrderController::class, 'complete'])->where('id', '[0-9]+');
+    Route::post('/', [CommencementOrderController::class, 'store'])->middleware('permission:project.edit');
+    Route::post('/{id}/approve', [CommencementOrderController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/start', [CommencementOrderController::class, 'startWork'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/complete', [CommencementOrderController::class, 'complete'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::get('/{id}', [CommencementOrderController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [CommencementOrderController::class, 'update'])->where('id', '[0-9]+');
+    Route::put('/{id}', [CommencementOrderController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // ========== 施工日志 ==========
-Route::prefix('construction/logs')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/logs')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [ConstructionLogController::class, 'index']);
-    Route::post('/', [ConstructionLogController::class, 'store']);
+    Route::post('/', [ConstructionLogController::class, 'store'])->middleware('permission:project.edit');
     Route::get('/overdue', [ConstructionLogController::class, 'overdue']);
-    Route::post('/{id}/submit', [ConstructionLogController::class, 'submit'])->where('id', '[0-9]+');
-    Route::post('/{id}/progress', [ConstructionLogController::class, 'updateProgress'])->where('id', '[0-9]+');
+    Route::post('/{id}/submit', [ConstructionLogController::class, 'submit'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/progress', [ConstructionLogController::class, 'updateProgress'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::get('/{id}', [ConstructionLogController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [ConstructionLogController::class, 'update'])->where('id', '[0-9]+');
+    Route::put('/{id}', [ConstructionLogController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // ========== 整改工单 ==========
-Route::prefix('construction/rectifications')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/rectifications')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [RectificationController::class, 'index']);
-    Route::post('/', [RectificationController::class, 'store']);
-    Route::post('/{id}/complete', [RectificationController::class, 'complete'])->where('id', '[0-9]+');
+    Route::post('/', [RectificationController::class, 'store'])->middleware('permission:project.edit');
+    Route::post('/{id}/complete', [RectificationController::class, 'complete'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::get('/{id}', [RectificationController::class, 'show'])->where('id', '[0-9]+');
 });
 
 // ========== 工序字典 ==========
-Route::prefix('construction/work-processes')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/work-processes')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [WorkProcessController::class, 'index']);
-    Route::post('/', [WorkProcessController::class, 'store']);
-    Route::put('/{id}', [WorkProcessController::class, 'update'])->where('id', '[0-9]+');
-    Route::delete('/{id}', [WorkProcessController::class, 'destroy'])->where('id', '[0-9]+');
+    Route::post('/', [WorkProcessController::class, 'store'])->middleware('permission:project.edit');
+    Route::put('/{id}', [WorkProcessController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::delete('/{id}', [WorkProcessController::class, 'destroy'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // ========== 施工发包 ==========
-Route::prefix('construction/external-works')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('construction/external-works')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [ExternalConstructionController::class, 'index']);
-    Route::post('/', [ExternalConstructionController::class, 'store']);
+    Route::post('/', [ExternalConstructionController::class, 'store'])->middleware('permission:project.edit');
     Route::get('/{id}/bids', [ExternalConstructionController::class, 'listBids'])->where('id', '[0-9]+');
-    Route::post('/{id}/close', [ExternalConstructionController::class, 'close'])->where('id', '[0-9]+');
-    Route::post('/{id}/bids', [ExternalConstructionController::class, 'submitBid'])->where('id', '[0-9]+');
-    Route::post('/{id}/award', [ExternalConstructionController::class, 'award'])->where('id', '[0-9]+');
+    Route::post('/{id}/close', [ExternalConstructionController::class, 'close'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/bids', [ExternalConstructionController::class, 'submitBid'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/award', [ExternalConstructionController::class, 'award'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::get('/{id}', [ExternalConstructionController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [ExternalConstructionController::class, 'update'])->where('id', '[0-9]+');
+    Route::put('/{id}', [ExternalConstructionController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // ========== System only 危险操作 ==========
