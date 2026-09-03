@@ -9,9 +9,11 @@ use App\Models\Tool;
 use App\Models\FixedAsset;
 use App\Models\Warehouse;
 use App\Models\User;
+use App\Models\FinanceAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
@@ -434,9 +436,8 @@ class InventoryService
 
             // 2) 现金付款 → 创建 FinancePayment + 扣减账户余额
             if ($paymentMethod === 'cash' && $accountId && $totalAmount > 0) {
-                $account = \App\Models\FinanceAccount::lockForUpdate()->find($accountId);
-                if ($account) {
-                    $fp = \App\Models\FinancePayment::create([
+                $account = $this->lockAccountForDebit((int) $accountId, $totalAmount);
+                $fp = \App\Models\FinancePayment::create([
                         'account_id'   => $accountId,
                         'payable_id'   => $payableId,
                         'amount'       => $totalAmount,
@@ -444,15 +445,13 @@ class InventoryService
                         'method'       => '现金',
                         'operator'     => $request->user()->name ?? '',
                         'remark'       => '入库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
-                    ]);
-                    $financePaymentId = $fp->id;
-                    $account->decrement('balance', $totalAmount);
-                }
+                ]);
+                $financePaymentId = $fp->id;
+                $account->decrement('balance', $totalAmount);
             } elseif ($paymentMethod === 'credit' && $payableId && $accountId && $totalAmount > 0) {
                 // 应付款也支持立即部分付款 (用同一账户), 记录 FinancePayment
-                $account = \App\Models\FinanceAccount::lockForUpdate()->find($accountId);
-                if ($account) {
-                    \App\Models\FinancePayment::create([
+                $account = $this->lockAccountForDebit((int) $accountId, $totalAmount);
+                \App\Models\FinancePayment::create([
                         'account_id'   => $accountId,
                         'payable_id'   => $payableId,
                         'amount'       => $totalAmount,
@@ -460,9 +459,8 @@ class InventoryService
                         'method'       => '现金',
                         'operator'     => $request->user()->name ?? '',
                         'remark'       => '入库单: ' . $recordNo . ' 即时付款',
-                    ]);
-                    $account->decrement('balance', $totalAmount);
-                }
+                ]);
+                $account->decrement('balance', $totalAmount);
             }
 
             return [
@@ -591,9 +589,8 @@ class InventoryService
 
             // 2) 现金收款 → 账户余额 + 增加 + FinancePayment
             if ($paymentMethod === 'cash' && $accountId && $totalAmount > 0) {
-                $account = \App\Models\FinanceAccount::lockForUpdate()->find($accountId);
-                if ($account) {
-                    $fp = \App\Models\FinancePayment::create([
+                $account = $this->lockActiveAccount((int) $accountId);
+                $fp = \App\Models\FinancePayment::create([
                         'account_id'    => $accountId,
                         'receivable_id' => $receivableId,
                         'amount'        => $totalAmount,
@@ -601,15 +598,13 @@ class InventoryService
                         'method'        => '现金',
                         'operator'      => $request->user()->name ?? '',
                         'remark'        => '出库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
-                    ]);
-                    $financePaymentId = $fp->id;
-                    $account->increment('balance', $totalAmount);
-                }
+                ]);
+                $financePaymentId = $fp->id;
+                $account->increment('balance', $totalAmount);
             } elseif ($paymentMethod === 'receivable' && $receivableId && $accountId && $totalAmount > 0) {
                 // 应收款 + 立即收款 (用同一账户), 记录 FinancePayment
-                $account = \App\Models\FinanceAccount::lockForUpdate()->find($accountId);
-                if ($account) {
-                    \App\Models\FinancePayment::create([
+                $account = $this->lockActiveAccount((int) $accountId);
+                \App\Models\FinancePayment::create([
                         'account_id'    => $accountId,
                         'receivable_id' => $receivableId,
                         'amount'        => $totalAmount,
@@ -617,9 +612,8 @@ class InventoryService
                         'method'        => '现金',
                         'operator'      => $request->user()->name ?? '',
                         'remark'        => '出库单: ' . $recordNo . ' 即时收款',
-                    ]);
-                    $account->increment('balance', $totalAmount);
-                }
+                ]);
+                $account->increment('balance', $totalAmount);
             }
 
             return [
@@ -1568,5 +1562,25 @@ class InventoryService
                 ['示例物料', 'DEMO-001', '安防设备', '4K 红外', '台', 5, 10, 20, 800, 1200, '主仓', 'A-01'],
             ],
         ];
+    }
+
+    private function lockActiveAccount(int $accountId): FinanceAccount
+    {
+        return FinanceAccount::where('status', 'active')
+            ->lockForUpdate()
+            ->findOrFail($accountId);
+    }
+
+    private function lockAccountForDebit(int $accountId, float $amount): FinanceAccount
+    {
+        $account = $this->lockActiveAccount($accountId);
+
+        if ((float) $account->balance + 0.0001 < $amount) {
+            throw ValidationException::withMessages([
+                'account_id' => "资金账户余额不足，当前余额为 {$account->balance}",
+            ]);
+        }
+
+        return $account;
     }
 }
