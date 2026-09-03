@@ -10,12 +10,16 @@ use App\Models\PurchaseContract;
 use App\Models\PurchasePaymentRequest;
 use App\Models\PurchasePayment;
 use App\Models\PurchaseShipment;
+use App\Models\PurchaseContractFile;
+use App\Models\PurchasePaymentVoucher;
 use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
 use App\Services\PurchaseFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * V0.6.2 采购协同 — 8 步自动流转 API
@@ -316,9 +320,17 @@ class PurchaseFlowController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'   => $record->id,
             'name' => $record->file_name,
-            'url'  => '/storage/' . $record->file_path,
+            'url'  => "/api/purchase-flow/contracts/{$id}/files/{$record->id}/download",
             'size' => $record->size,
         ], 'message' => '合同附件已上传']);
+    }
+
+    /** 下载合同附件 */
+    public function downloadContractFile(int $id, int $fid): StreamedResponse|JsonResponse
+    {
+        PurchaseContract::findOrFail($id);
+        $file = PurchaseContractFile::where('contract_id', $id)->findOrFail($fid);
+        return $this->downloadPurchaseFile($file->file_path, $file->file_name, $file->mime);
     }
 
     /** 删除合同附件 */
@@ -393,9 +405,18 @@ class PurchaseFlowController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'   => $record->id,
             'name' => $record->file_name,
-            'url'  => '/storage/' . $record->file_path,
+            'url'  => "/api/purchase-flow/payment-requests/{$id}/vouchers/{$record->id}/download",
             'size' => $record->size,
         ], 'message' => '付款凭证已上传']);
+    }
+
+    /** 下载付款凭证 */
+    public function downloadPaymentVoucher(int $id, int $vid): StreamedResponse|JsonResponse
+    {
+        $paymentRequest = PurchasePaymentRequest::findOrFail($id);
+        PurchaseContract::findOrFail($paymentRequest->contract_id);
+        $file = PurchasePaymentVoucher::where('payment_request_id', $id)->findOrFail($vid);
+        return $this->downloadPurchaseFile($file->file_path, $file->file_name, $file->mime);
     }
 
     /** 列出付款凭证 */
@@ -403,6 +424,21 @@ class PurchaseFlowController extends Controller
     {
         $rows = $this->flow->listPaymentVouchers($id);
         return response()->json(['code' => 0, 'data' => $rows]);
+    }
+
+    private function downloadPurchaseFile(string $path, string $name, ?string $mime): StreamedResponse|JsonResponse
+    {
+        $privateDisk = Storage::disk('attachments');
+        if ($privateDisk->exists($path)) {
+            return $privateDisk->download($path, $name, ['Content-Type' => $mime ?: 'application/octet-stream']);
+        }
+
+        $legacyDisk = Storage::disk('public');
+        if ($legacyDisk->exists($path)) {
+            return $legacyDisk->download($path, $name, ['Content-Type' => $mime ?: 'application/octet-stream']);
+        }
+
+        return response()->json(['code' => 404, 'message' => '文件不存在'], 404);
     }
 
     /** 设置发货预期 (按合同清单行拆分) */

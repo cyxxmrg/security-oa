@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { purchase } from '@/api/modules'
 import { unwrapList } from '@/utils/response'
 import { purchaseFlow } from '@/api/purchase-flow'
+import { get } from '@/utils/request'
 import type { UploadRequestOptions } from 'element-plus'
 
 // 采购订单
@@ -303,17 +304,29 @@ export function usePurchaseDetail() {
     } catch { /* 拦截器已提示 */ }
   }
   const handlePreviewFile = (row: ContractFile) => {
-    window.open(row.url, '_blank')
+    void openPurchaseFile(row, false)
   }
   const handleDownloadFile = async (row: ContractFile) => {
+    await openPurchaseFile(row, true)
+  }
+  const openPurchaseFile = async (row: ContractFile | PaymentVoucher, download: boolean) => {
     try {
-      const a = document.createElement('a')
-      a.href = row.url
-      a.download = row.name
-      a.target = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const responseData = await get(row.url, undefined, { responseType: 'blob' })
+      const blob = responseData instanceof Blob ? responseData : new Blob([responseData as BlobPart])
+      const objectUrl = URL.createObjectURL(blob)
+      if (download) {
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = row.name
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        URL.revokeObjectURL(objectUrl)
+      } else {
+        const previewWindow = window.open(objectUrl, '_blank')
+        if (!previewWindow) ElMessage.warning('浏览器拦截了预览窗口，请允许弹窗后重试')
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
+      }
     } catch { ElMessage.error('下载失败') }
   }
   const handleDeleteContractFile = async (row: ContractFile) => {
@@ -377,8 +390,8 @@ export function usePurchaseDetail() {
       await loadPayments()
     } catch { /* 拦截器已提示 */ }
   }
-  const handlePreviewVoucher = (row: PaymentVoucher) => { window.open(row.url, '_blank') }
-  const handleDownloadVoucher = (row: PaymentVoucher) => handleDownloadFile(row)
+  const handlePreviewVoucher = (row: PaymentVoucher) => { void openPurchaseFile(row, false) }
+  const handleDownloadVoucher = (row: PaymentVoucher) => { void openPurchaseFile(row, true) }
 
   // ========== Tab 4: 发货 ==========
   const loadingShipping = ref(false)

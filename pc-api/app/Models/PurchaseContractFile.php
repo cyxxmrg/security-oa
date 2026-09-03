@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * V0.6.2.2 合同附件 (PDF 等)
- * 存到 storage/app/public/purchase/contracts/{contract_id}/xxx.pdf
+ * 存到 storage/app/attachments/purchase/contracts/{contract_id}/xxx.pdf
  */
 class PurchaseContractFile extends Model
 {

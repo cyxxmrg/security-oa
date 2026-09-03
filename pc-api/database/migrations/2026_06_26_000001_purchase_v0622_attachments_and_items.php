@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Schema;
  * V0.6.2.2 采购协同 — 合同/清单/附件/付款凭证/发货计划
  *
  * 新增 4 张表:
- * 1. purchase_contract_files      合同附件 (PDF, 存 storage/app/public/purchase/contracts/{id}/)
+ * 1. purchase_contract_files      合同附件 (PDF, 存 storage/app/attachments/purchase/contracts/{id}/)
  * 2. purchase_contract_items      合同清单 (从 PO.line_items 自动同步, 单价允许编辑)
- * 3. purchase_payment_vouchers    付款凭证 (PNG/JPEG/PDF, 存 storage/app/public/purchase/vouchers/{id}/)
+ * 3. purchase_payment_vouchers    付款凭证 (PNG/JPEG/PDF, 存 storage/app/attachments/purchase/vouchers/{id}/)
  * 4. purchase_shipping_plans      发货预期 (按 contract_item_id 拆分, 可空 = 整单)
  */
 return new class extends Migration

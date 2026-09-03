@@ -24,6 +24,7 @@ use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
 use App\Models\Project;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -890,49 +891,53 @@ class PurchaseFlowService
         });
     }
 
-    /**
-     * 上传合同文件 (PDF)
-     * 落盘到 storage/app/public/purchase/contracts/{contract_id}/
-     * 前端访问路径: http://host:8081/storage/purchase/contracts/{id}/xxx.pdf
-     */
+    /** 上传合同文件 */
     public function uploadContractFile(int $contractId, \Illuminate\Http\UploadedFile $file, ?User $user = null): PurchaseContractFile
     {
-        // 合规 (audit-2026-06-28 C3): 合同文件存 public disk，必须强制 MIME 白名单 (P1 重构: 走 FileUploadService)
-        $uploader = app(FileUploadService::class);
-        $fakeReq = \Illuminate\Http\Request::create('/', 'POST', [], [], ['file' => $file]);
-        $result = $uploader->store($fakeReq, 'file', [
-            'disk'         => 'public',
-            'subdir'       => "purchase/contracts/{$contractId}",
-            'allowed_ext'  => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-            'allowed_mime' => ['application/pdf', 'image/jpeg', 'image/png',
-                'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-            'max_size'     => 20480,
-        ]);
-        return DB::transaction(function () use ($contractId, $result, $user) {
-            $contract = PurchaseContract::findOrFail($contractId);
-            $record = PurchaseContractFile::create([
-                'contract_id' => $contractId,
-                'file_path'   => $result['path'],
-                'file_name'   => $result['original_name'],
-                'mime'        => $result['mime'],
-                'size'        => $result['size'],
-                'uploaded_by' => $user?->id,
-                'uploaded_at' => now(),
-            ]);
-            $this->log(self::ENTITY_CONTRACT, $contractId, null, 'upload_file', 'upload_file', $user, "上传附件: {$record->file_name} (" . round($record->size / 1024, 1) . " KB)");
-            return $record;
-        });
+        $storedPath = null;
+        try {
+            return DB::transaction(function () use ($contractId, $file, $user, &$storedPath) {
+                $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+                $this->assertContractEditable($contract);
+
+                $result = $this->storePurchaseFile($file, "purchase/contracts/{$contractId}", [
+                    'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png',
+                ], [
+                    'application/pdf', 'image/jpeg', 'image/png',
+                    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                ], 20480);
+                $storedPath = $result['path'];
+
+                $record = PurchaseContractFile::create([
+                    'contract_id' => $contractId,
+                    'file_path'   => $result['path'],
+                    'file_name'   => $result['original_name'],
+                    'mime'        => $result['mime'],
+                    'size'        => $result['size'],
+                    'uploaded_by' => $user?->id,
+                    'uploaded_at' => now(),
+                ]);
+                $this->log(self::ENTITY_CONTRACT, $contractId, null, 'upload_file', 'upload_file', $user, "上传附件: {$record->file_name} (" . round($record->size / 1024, 1) . " KB)");
+                return $record;
+            });
+        } catch (\Throwable $e) {
+            if ($storedPath) {
+                Storage::disk('attachments')->delete($storedPath);
+            }
+            throw $e;
+        }
     }
 
     public function listContractFiles(int $contractId): array
     {
+        PurchaseContract::findOrFail($contractId);
         $rows = PurchaseContractFile::where('contract_id', $contractId)
             ->orderBy('uploaded_at', 'desc')->get();
         return $rows->map(function ($f) {
             return [
                 'id'        => $f->id,
                 'name'      => $f->file_name,
-                'url'       => '/storage/' . $f->file_path,
+                'url'       => "/api/purchase-flow/contracts/{$f->contract_id}/files/{$f->id}/download",
                 'size'      => $f->size,
                 'size_human'=> $f->size >= 1048576 ? round($f->size / 1048576, 2) . ' MB' : round($f->size / 1024, 1) . ' KB',
                 'mime'      => $f->mime,
@@ -944,58 +949,66 @@ class PurchaseFlowService
     public function deleteContractFile(int $contractId, int $fileId, ?User $user = null): void
     {
         DB::transaction(function () use ($contractId, $fileId, $user) {
-            $f = PurchaseContractFile::where('contract_id', $contractId)->where('id', $fileId)->firstOrFail();
-            // 删除物理文件
-            $abs = storage_path('app/public/' . $f->file_path);
-            if (is_file($abs)) @unlink($abs);
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertContractEditable($contract);
+            $f = PurchaseContractFile::where('contract_id', $contractId)->where('id', $fileId)->lockForUpdate()->firstOrFail();
             $label = $f->file_name;
             $f->delete();
+            Storage::disk('attachments')->delete($f->file_path);
+            Storage::disk('public')->delete($f->file_path);
             $this->log(self::ENTITY_CONTRACT, $contractId, null, 'delete_file', 'delete_file', $user, "删除附件: {$label}");
         });
     }
 
-    /**
-     * 上传付款凭证 (PNG/JPEG/PDF)
-     * 落盘到 storage/app/public/purchase/vouchers/{payment_request_id}/
-     */
+    /** 上传付款凭证 */
     public function uploadPaymentVoucher(int $paymentRequestId, \Illuminate\Http\UploadedFile $file, ?User $user = null, ?string $remark = null): PurchasePaymentVoucher
     {
-        // 合规 (audit-2026-06-28 C4): 付款凭证存 public disk (资金凭证)，必须强制 MIME 白名单 (P1 重构: 走 FileUploadService)
-        $uploader = app(FileUploadService::class);
-        $fakeReq = \Illuminate\Http\Request::create('/', 'POST', [], [], ['file' => $file]);
-        $result = $uploader->store($fakeReq, 'file', [
-            'disk'         => 'public',
-            'subdir'       => "purchase/vouchers/{$paymentRequestId}",
-            'allowed_ext'  => ['pdf', 'jpg', 'jpeg', 'png'],
-            'allowed_mime' => ['application/pdf', 'image/jpeg', 'image/png'],
-            'max_size'     => 10240,
-        ]);
-        return DB::transaction(function () use ($paymentRequestId, $result, $user, $remark) {
-            $pr = PurchasePaymentRequest::findOrFail($paymentRequestId);
-            $record = PurchasePaymentVoucher::create([
-                'payment_request_id' => $paymentRequestId,
-                'file_path'   => $result['path'],
-                'file_name'   => $result['original_name'],
-                'mime'        => $result['mime'],
-                'size'        => $result['size'],
-                'uploaded_by' => $user?->id,
-                'uploaded_at' => now(),
-                'remark'      => $remark,
-            ]);
-            $this->log(self::ENTITY_PAYMENT_REQ, $paymentRequestId, null, 'upload_voucher', 'upload_voucher', $user, "上传凭证: {$record->file_name}");
-            return $record;
-        });
+        $storedPath = null;
+        try {
+            return DB::transaction(function () use ($paymentRequestId, $file, $user, $remark, &$storedPath) {
+                $pr = PurchasePaymentRequest::lockForUpdate()->findOrFail($paymentRequestId);
+                if (!in_array($pr->status, [self::STATUS_PAYREQ_APPROVED, self::STATUS_PAYREQ_PAID], true)) {
+                    throw new \RuntimeException('只有已审批或已付款的申请可以上传付款凭证');
+                }
+                PurchaseContract::findOrFail($pr->contract_id);
+
+                $result = $this->storePurchaseFile($file, "purchase/vouchers/{$paymentRequestId}", [
+                    'pdf', 'jpg', 'jpeg', 'png',
+                ], ['application/pdf', 'image/jpeg', 'image/png'], 20480);
+                $storedPath = $result['path'];
+
+                $record = PurchasePaymentVoucher::create([
+                    'payment_request_id' => $paymentRequestId,
+                    'file_path'   => $result['path'],
+                    'file_name'   => $result['original_name'],
+                    'mime'        => $result['mime'],
+                    'size'        => $result['size'],
+                    'uploaded_by' => $user?->id,
+                    'uploaded_at' => now(),
+                    'remark'      => $remark,
+                ]);
+                $this->log(self::ENTITY_PAYMENT_REQ, $paymentRequestId, null, 'upload_voucher', 'upload_voucher', $user, "上传凭证: {$record->file_name}");
+                return $record;
+            });
+        } catch (\Throwable $e) {
+            if ($storedPath) {
+                Storage::disk('attachments')->delete($storedPath);
+            }
+            throw $e;
+        }
     }
 
     public function listPaymentVouchers(int $paymentRequestId): array
     {
+        $paymentRequest = PurchasePaymentRequest::findOrFail($paymentRequestId);
+        PurchaseContract::findOrFail($paymentRequest->contract_id);
         $rows = PurchasePaymentVoucher::where('payment_request_id', $paymentRequestId)
             ->orderBy('uploaded_at', 'desc')->get();
         return $rows->map(function ($f) {
             return [
                 'id'        => $f->id,
                 'name'      => $f->file_name,
-                'url'       => '/storage/' . $f->file_path,
+                'url'       => "/api/purchase-flow/payment-requests/{$f->payment_request_id}/vouchers/{$f->id}/download",
                 'size'      => $f->size,
                 'size_human'=> $f->size >= 1048576 ? round($f->size / 1048576, 2) . ' MB' : round($f->size / 1024, 1) . ' KB',
                 'mime'      => $f->mime,
@@ -1279,6 +1292,18 @@ class PurchaseFlowService
     private function nextCode(string $prefix): string
     {
         return self::uniqueCode($prefix);
+    }
+
+    private function storePurchaseFile(\Illuminate\Http\UploadedFile $file, string $subdir, array $allowedExt, array $allowedMime, int $maxSize): array
+    {
+        $fakeReq = \Illuminate\Http\Request::create('/', 'POST', [], [], ['file' => $file]);
+        return app(FileUploadService::class)->store($fakeReq, 'file', [
+            'disk'         => 'attachments',
+            'subdir'       => $subdir,
+            'allowed_ext'  => $allowedExt,
+            'allowed_mime' => $allowedMime,
+            'max_size'     => $maxSize,
+        ]);
     }
 
     private function assertContractEditable(PurchaseContract $contract): void

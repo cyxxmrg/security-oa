@@ -66,6 +66,8 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', '
     Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id');
     Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id');
     Route::post('contracts/{id}/files', [PurchaseFlowController::class, 'uploadContractFile'])->whereNumber('id');
+    Route::get('contracts/{id}/files/{fid}/download', [PurchaseFlowController::class, 'downloadContractFile'])
+        ->whereNumber('id')->whereNumber('fid')->name('purchase-flow.contract-files.download');
     Route::delete('contracts/{id}/files/{fid}', [PurchaseFlowController::class, 'deleteContractFile'])->whereNumber('id')->whereNumber('fid');
     Route::get('contracts/{id}/items', [PurchaseFlowController::class, 'listContractItems'])->whereNumber('id');
     Route::post('contracts/{id}/items', [PurchaseFlowController::class, 'addContractItem'])->whereNumber('id');
@@ -77,6 +79,8 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', '
     Route::get('contracts/{id}/shipping', [PurchaseFlowController::class, 'listShipping'])->whereNumber('id');
     Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id');
     Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id');
+    Route::get('payment-requests/{id}/vouchers/{vid}/download', [PurchaseFlowController::class, 'downloadPaymentVoucher'])
+        ->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download');
     Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest']);
     Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])
         ->whereNumber('id')->middleware('permission:finance.pay');

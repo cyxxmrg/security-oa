@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * V0.6.2.2 付款凭证 (财务付款后上传的回单/发票照片/PDF)
- * 存到 storage/app/public/purchase/vouchers/{payment_request_id}/xxx.png
+ * 存到 storage/app/attachments/purchase/vouchers/{payment_request_id}/xxx.png
  */
 class PurchasePaymentVoucher extends Model
 {
