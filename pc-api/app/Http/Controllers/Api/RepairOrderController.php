@@ -187,9 +187,9 @@ class RepairOrderController extends Controller
     public function cancel(Request $request, int $id): JsonResponse
     {
         $data = $request->validate(['reason' => 'required|string|max:500']);
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::CANCELLED);
-        return DB::transaction(function () use ($ro, $data, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::CANCELLED);
             $ro->status = RepairOrderStatus::CANCELLED;
             $ro->remarks = ($ro->remarks ?? '') . "\n[取消] " . $data['reason'];
             $ro->save();
@@ -221,14 +221,12 @@ class RepairOrderController extends Controller
             'remarks'            => 'nullable|string|max:500',
         ]);
 
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::SENT_FOR_REPAIR);
-        // 同一返修单不能有 2 条 outbound
-        if (RepairShipment::where('repair_order_id', $ro->id)->where('direction', 'outbound')->exists()) {
-            return response()->json(['code' => 422, 'message' => '已有去程物流, 请勿重复创建'], 422);
-        }
-
-        return DB::transaction(function () use ($ro, $data, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::SENT_FOR_REPAIR);
+            if (RepairShipment::where('repair_order_id', $ro->id)->where('direction', 'outbound')->exists()) {
+                throw new \LogicException('已有去程物流, 请勿重复创建');
+            }
             $ship = RepairShipment::create([
                 'repair_order_id'  => $ro->id,
                 'direction'        => 'outbound',
@@ -288,13 +286,12 @@ class RepairOrderController extends Controller
             'remarks'            => 'nullable|string|max:500',
         ]);
 
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::SENT_BACK);
-        if (RepairShipment::where('repair_order_id', $ro->id)->where('direction', 'inbound')->exists()) {
-            return response()->json(['code' => 422, 'message' => '已有回程物流'], 422);
-        }
-
-        return DB::transaction(function () use ($ro, $data, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::SENT_BACK);
+            if (RepairShipment::where('repair_order_id', $ro->id)->where('direction', 'inbound')->exists()) {
+                throw new \LogicException('已有回程物流');
+            }
             $ship = RepairShipment::create([
                 'repair_order_id'  => $ro->id,
                 'direction'        => 'inbound',
@@ -339,12 +336,14 @@ class RepairOrderController extends Controller
      */
     public function markInRepair(Request $request, int $id): JsonResponse
     {
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::IN_REPAIR);
-        $ro->status = RepairOrderStatus::IN_REPAIR;
-        $ro->save();
-        Audit::write('repair_in_repair', "返修 {$ro->code} 进入维修中", ['repair_id' => $ro->id]);
-        return response()->json(['code' => 0, 'data' => $this->present($ro->fresh()), 'message' => '已进入维修']);
+        return DB::transaction(function () use ($id) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::IN_REPAIR);
+            $ro->status = RepairOrderStatus::IN_REPAIR;
+            $ro->save();
+            Audit::write('repair_in_repair', "返修 {$ro->code} 进入维修中", ['repair_id' => $ro->id]);
+            return response()->json(['code' => 0, 'data' => $this->present($ro->fresh()), 'message' => '已进入维修']);
+        });
     }
 
     /**
@@ -353,16 +352,17 @@ class RepairOrderController extends Controller
      */
     public function markRepaired(Request $request, int $id): JsonResponse
     {
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::REPAIRED);
-        $hasMethod = RepairMethod::where('repair_order_id', $ro->id)->exists();
-        if (!$hasMethod) {
-            return response()->json(['code' => 422, 'message' => '标记修好前必须先创建至少 1 条维修方式记录'], 422);
-        }
-        $ro->status = RepairOrderStatus::REPAIRED;
-        $ro->save();
-        Audit::write('repair_repaired', "返修 {$ro->code} 已修好", ['repair_id' => $ro->id]);
-        return response()->json(['code' => 0, 'data' => $this->present($ro->fresh()), 'message' => '已修好']);
+        return DB::transaction(function () use ($id) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::REPAIRED);
+            if (!RepairMethod::where('repair_order_id', $ro->id)->exists()) {
+                throw new \LogicException('标记修好前必须先创建至少 1 条维修方式记录');
+            }
+            $ro->status = RepairOrderStatus::REPAIRED;
+            $ro->save();
+            Audit::write('repair_repaired', "返修 {$ro->code} 已修好", ['repair_id' => $ro->id]);
+            return response()->json(['code' => 0, 'data' => $this->present($ro->fresh()), 'message' => '已修好']);
+        });
     }
 
     /**
@@ -378,10 +378,9 @@ class RepairOrderController extends Controller
             'customer_signature' => 'nullable|string|max:1048576',
         ]);
 
-        $ro = RepairOrder::findOrFail($id);
-        $this->ensureTransition($ro, RepairOrderStatus::CLOSED);
-
-        return DB::transaction(function () use ($ro, $data, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $ro = RepairOrder::lockForUpdate()->findOrFail($id);
+            $this->ensureTransition($ro, RepairOrderStatus::CLOSED);
             $ro->status = RepairOrderStatus::CLOSED;
             $ro->remarks = $data['note'] ?? '已交付客户';
             $ro->save();
@@ -405,7 +404,7 @@ class RepairOrderController extends Controller
                     'receiver_name' => $ro->contact_name,
                     'receiver_address' => $ro->address ?? '',
                     'shipped_at' => now(),
-                    'status' => 'shipped',
+                    'delivery_status' => 'shipped',
                 ]);
             }
 
@@ -596,11 +595,13 @@ class RepairOrderController extends Controller
     private function nextCode(): string
     {
         $year = now()->format('Y');
-        // V0.5.5 修: 用 MAX(code) + 1 避免 race condition
-        $lastSeq = (int) RepairOrder::where('code', 'like', "RN{$year}-%")
-            ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RN[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
-            ->value('seq');
-        return sprintf('RN%s-%03d', $year, $lastSeq + 1);
+        $next = \App\Services\NumberSequenceService::next(
+            "repair-order:{$year}",
+            fn () => (int) RepairOrder::where('code', 'like', "RN{$year}-%")
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RN[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+        return sprintf('RN%s-%03d', $year, $next);
     }
 
     // ============ V0.5.5.2 A6 — 附件上传 (物流凭证图/过程照片) ============
