@@ -161,8 +161,17 @@ class EmployeeOnboardingController extends Controller
                 ]);
 
                 // 2) 建 EmployeeProfile (employee_no 必填, 自动生成 EMP-yyyymmdd-NNN)
-                $seq = EmployeeProfile::whereDate('created_at', today())->count() + 1;
-                $employeeNo = 'EMP-' . date('Ymd') . '-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
+                $today = date('Ymd');
+                $seq = \App\Services\NumberSequenceService::next("employee:{$today}", static function () use ($today): int {
+                    return EmployeeProfile::where('employee_no', 'like', "EMP-{$today}-%")
+                        ->pluck('employee_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
+                $employeeNo = 'EMP-' . $today . '-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
                 EmployeeProfile::create([
                     'user_id'     => $user->id,
                     'employee_no' => $employeeNo,

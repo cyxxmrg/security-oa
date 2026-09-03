@@ -311,10 +311,9 @@ class ProcessController extends Controller
                 ->whereRaw("payload->>'process_id' = ?", [(string) $process->id])
                 ->first();
             if (!$approval) {
-                $year = now()->format('Y');
-                $seq = ApprovalRecord::where('code', 'like', "PRJ-{$year}-%")->count() + 1;
+                $code = \App\Services\ApprovalNumberService::next('PRJ');
                 ApprovalRecord::create([
-                    'code'                => "PRJ-{$year}-" . str_pad($seq, 4, '0', STR_PAD_LEFT),
+                    'code'                => $code,
                     'type'                => 'project',
                     'sub_type'            => 'process_acceptance',
                     'title'               => "工序验收通过 - {$process->name} ({$projectName})",
@@ -353,10 +352,9 @@ class ProcessController extends Controller
                 ->whereRaw("payload->>'process_id' = ?", [(string) $process->id])
                 ->first();
             if (!$approval) {
-                $year = now()->format('Y');
-                $seq = ApprovalRecord::where('code', 'like', "PRJ-{$year}-%")->count() + 1;
+                $code = \App\Services\ApprovalNumberService::next('PRJ');
                 ApprovalRecord::create([
-                    'code'                => "PRJ-{$year}-" . str_pad($seq, 4, '0', STR_PAD_LEFT),
+                    'code'                => $code,
                     'type'                => 'project',
                     'sub_type'            => 'process_acceptance',
                     'title'               => "工序验收驳回 - {$process->name} ({$projectName})",

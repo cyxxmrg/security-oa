@@ -100,9 +100,7 @@ class ExpenseController extends Controller
 
         // V1.2.5: 同步创建审批中心记录 (finance/expense), 按审批流程模板设定审批节点
         try {
-            $year = now()->format('Y');
-            $seq = ApprovalRecord::where('code', 'like', "FIN-{$year}-%")->count() + 1;
-            $code = sprintf('FIN-%s-%04d', $year, $seq);
+            $code = \App\Services\ApprovalNumberService::next('FIN');
             $applicant = User::find($request->user()->id);
 
             // 按模板初始化审批流程

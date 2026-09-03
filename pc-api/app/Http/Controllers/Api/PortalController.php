@@ -129,7 +129,7 @@ class PortalController extends Controller
                 'remark'         => $data['remark'] ?? null,
                 'status'         => 'submitted',
                 'submitted_at'   => now(),
-                'code'           => 'BID-' . date('Ymd') . '-' . str_pad((string)(TenderBid::whereDate('created_at', today())->count() + 1), 3, '0', STR_PAD_LEFT),
+                'code'           => $this->nextBidCode(),
             ]);
         } else {
             $bid->fill([
@@ -355,5 +355,21 @@ class PortalController extends Controller
         $len = strlen($digits);
         if ($len < 7) return $digits; // 太短不处理
         return substr($digits, 0, 3) . '****' . substr($digits, -4);
+    }
+
+    private function nextBidCode(): string
+    {
+        $today = date('Ymd');
+        $sequence = \App\Services\NumberSequenceService::next("tender-bid:{$today}", static function () use ($today): int {
+            return TenderBid::where('code', 'like', "BID-{$today}-%")
+                ->pluck('code')
+                ->map(static function (string $code): int {
+                    $parts = explode('-', $code);
+                    return (int) end($parts);
+                })
+                ->max() ?? 0;
+        });
+
+        return 'BID-' . $today . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
     }
 }

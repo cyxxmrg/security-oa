@@ -225,9 +225,7 @@ class PurchaseRequirementController extends Controller
 
     private function nextApprovalCode(): string
     {
-        $year = now()->format('Y');
-        $count = ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
-        return sprintf('OPS-%s-%04d', $year, $count);
+        return \App\Services\ApprovalNumberService::next('OPS');
     }
 
     private function approvalPriority(?string $priority): string

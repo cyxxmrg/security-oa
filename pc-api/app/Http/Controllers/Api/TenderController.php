@@ -86,7 +86,17 @@ class TenderController extends Controller
             'budget'      => 'nullable|numeric|min:0',  // 可选预算
         ]);
         unset($data['title']);
-        $data['code'] = 'T-' . date('Ymd') . '-' . str_pad((string)(TenderProject::whereDate('created_at', today())->count() + 1), 3, '0', STR_PAD_LEFT);
+        $today = date('Ymd');
+        $sequence = \App\Services\NumberSequenceService::next("tender:{$today}", static function () use ($today): int {
+            return TenderProject::where('code', 'like', "T-{$today}-%")
+                ->pluck('code')
+                ->map(static function (string $code): int {
+                    $parts = explode('-', $code);
+                    return (int) end($parts);
+                })
+                ->max() ?? 0;
+        });
+        $data['code'] = 'T-' . $today . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
         $data['status']      = 'draft';
         $data['public_token'] = (string) Str::uuid();
         $data['created_by']  = $request->user()->id;
@@ -463,7 +473,7 @@ class TenderController extends Controller
             'remark'         => $data['remark'] ?? null,
             'status'         => !empty($data['auto_submit']) ? 'submitted' : 'draft',
             'submitted_at'   => !empty($data['auto_submit']) ? now() : null,
-            'code'           => 'BID-' . date('Ymd') . '-' . str_pad((string)(TenderBid::whereDate('created_at', today())->count() + 1), 3, '0', STR_PAD_LEFT),
+            'code'           => $this->nextBidCode(),
         ]);
         if (!empty($data['items'])) {
             foreach ($data['items'] as $it) {
@@ -733,5 +743,21 @@ class TenderController extends Controller
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
             return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
         }
+    }
+
+    private function nextBidCode(): string
+    {
+        $today = date('Ymd');
+        $sequence = \App\Services\NumberSequenceService::next("tender-bid:{$today}", static function () use ($today): int {
+            return TenderBid::where('code', 'like', "BID-{$today}-%")
+                ->pluck('code')
+                ->map(static function (string $code): int {
+                    $parts = explode('-', $code);
+                    return (int) end($parts);
+                })
+                ->max() ?? 0;
+        });
+
+        return 'BID-' . $today . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
     }
 }

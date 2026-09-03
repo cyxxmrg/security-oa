@@ -112,9 +112,7 @@ class PurchasePlanController extends Controller
 
         // V1.2.5: 同步创建审批中心记录 (operation/purchase_plan) - 按模板
         try {
-            $year = now()->format('Y');
-            $seq = ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
-            $code = sprintf('OPS-%s-%04d', $year, $seq);
+            $code = \App\Services\ApprovalNumberService::next('OPS');
             $applicant = User::find($request->user()->id);
             $exists = ApprovalRecord::where('type', 'operation')
                 ->where('sub_type', 'purchase_plan')

@@ -56,7 +56,15 @@ class InspectionTask extends Model
         static::creating(function ($task) {
             if (empty($task->task_no)) {
                 $today = date('Ymd');
-                $count = self::whereDate('created_at', today())->count() + 1;
+                $count = \App\Services\NumberSequenceService::next("inspection-task:{$today}", static function () use ($today): int {
+                    return self::where('task_no', 'like', "IT-{$today}-%")
+                        ->pluck('task_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
                 $task->task_no = 'IT-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
             if ($task->scheduled_date && $task->scheduled_hour !== null) {

@@ -402,9 +402,7 @@ class AttendanceController extends Controller
                 'compassionate' => '丧假', 'other' => '其他',
             ][$data['type']] ?? $data['type'];
 
-            $year = now()->format('Y');
-            $seq = \App\Models\ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
-            $code = sprintf('OPS-%s-%04d', $year, $seq);
+            $code = \App\Services\ApprovalNumberService::next('OPS');
 
             $applicant = \App\Models\User::find(Auth::id());
 
@@ -530,9 +528,7 @@ class AttendanceController extends Controller
         // V1.2.5: 同步创建审批中心记录 (operation/overtime)
         try {
             $compLabel = ['pay' => '加班费', 'leave' => '调休', 'default_pay' => '默认加班费'][$data['compensation_type']] ?? $data['compensation_type'];
-            $year = now()->format('Y');
-            $seq = \App\Models\ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
-            $code = sprintf('OPS-%s-%04d', $year, $seq);
+            $code = \App\Services\ApprovalNumberService::next('OPS');
             $applicant = \App\Models\User::find(Auth::id());
 
             // 按模板初始化审批流程

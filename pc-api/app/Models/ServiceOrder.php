@@ -30,8 +30,17 @@ class ServiceOrder extends Model
     {
         static::creating(function ($order) {
             if (empty($order->order_no)) {
-                $count = ServiceOrder::whereDate('created_at', today())->count() + 1;
-                $order->order_no = 'SO-' . date('Ymd') . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+                $today = date('Ymd');
+                $count = \App\Services\NumberSequenceService::next("service-order:{$today}", static function () use ($today): int {
+                    return ServiceOrder::where('order_no', 'like', "SO-{$today}-%")
+                        ->pluck('order_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
+                $order->order_no = 'SO-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
         });
     }

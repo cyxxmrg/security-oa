@@ -42,7 +42,15 @@ class InspectionRecord extends Model
         static::creating(function ($record) {
             if (empty($record->record_no)) {
                 $today = date('Ymd');
-                $count = self::whereDate('created_at', today())->count() + 1;
+                $count = \App\Services\NumberSequenceService::next("inspection-record:{$today}", static function () use ($today): int {
+                    return self::where('record_no', 'like', "IR-{$today}-%")
+                        ->pluck('record_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
                 $record->record_no = 'IR-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
         });

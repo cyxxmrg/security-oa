@@ -34,8 +34,17 @@ class Project extends Model
     {
         static::creating(function ($project) {
             if (empty($project->project_no)) {
-                $count = Project::whereDate('created_at', today())->count() + 1;
-                $project->project_no = 'PRJ-' . date('Ymd') . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+                $today = date('Ymd');
+                $count = \App\Services\NumberSequenceService::next("project:{$today}", static function () use ($today): int {
+                    return Project::where('project_no', 'like', "PRJ-{$today}-%")
+                        ->pluck('project_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
+                $project->project_no = 'PRJ-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
         });
     }

@@ -338,7 +338,15 @@ class InspectionService
             };
 
             $today = date('Ymd');
-            $count = WorkOrder::whereDate('created_at', today())->count() + 1;
+            $count = \App\Services\NumberSequenceService::next("work-order:{$today}", static function () use ($today): int {
+                return WorkOrder::where('code', 'like', "WO-{$today}-%")
+                    ->pluck('code')
+                    ->map(static function (string $code): int {
+                        $parts = explode('-', $code);
+                        return (int) end($parts);
+                    })
+                    ->max() ?? 0;
+            });
             $code = 'WO-' . $today . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
 
             $wo = WorkOrder::create([

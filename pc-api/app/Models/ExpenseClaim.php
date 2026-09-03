@@ -26,8 +26,17 @@ class ExpenseClaim extends Model
     {
         static::creating(function ($claim) {
             if (empty($claim->claim_no)) {
-                $count = ExpenseClaim::whereDate('created_at', today())->count() + 1;
-                $claim->claim_no = 'EXP-' . date('Ymd') . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+                $today = date('Ymd');
+                $count = \App\Services\NumberSequenceService::next("expense:{$today}", static function () use ($today): int {
+                    return ExpenseClaim::where('claim_no', 'like', "EXP-{$today}-%")
+                        ->pluck('claim_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
+                $claim->claim_no = 'EXP-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
         });
     }

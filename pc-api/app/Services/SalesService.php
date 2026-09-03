@@ -793,10 +793,9 @@ class SalesService
 
             if (!$approval) {
                 // 之前没同步，自动创建一条已通过的记录
-                $year = now()->format('Y');
-                $seq = ApprovalRecord::where('code', 'like', "FIN-{$year}-%")->count() + 1;
+                $code = \App\Services\ApprovalNumberService::next('FIN');
                 ApprovalRecord::create([
-                    'code'                => "FIN-{$year}-" . str_pad($seq, 4, '0', STR_PAD_LEFT),
+                    'code'                => $code,
                     'type'                => 'finance',
                     'sub_type'            => 'referral_settlement',
                     'title'               => "销售提成审批 - {$settlement->id}",

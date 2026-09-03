@@ -63,7 +63,15 @@ class InspectionIssue extends Model
         static::creating(function ($issue) {
             if (empty($issue->issue_no)) {
                 $today = date('Ymd');
-                $count = self::whereDate('created_at', today())->count() + 1;
+                $count = \App\Services\NumberSequenceService::next("inspection-issue:{$today}", static function () use ($today): int {
+                    return self::where('issue_no', 'like', "II-{$today}-%")
+                        ->pluck('issue_no')
+                        ->map(static function (string $number): int {
+                            $parts = explode('-', $number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
+                });
                 $issue->issue_no = 'II-' . $today . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
             }
         });

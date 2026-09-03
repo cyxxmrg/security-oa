@@ -253,9 +253,7 @@ class EmployeeResignationController extends Controller
             ][$resignation->resign_type] ?? $resignation->resign_type;
 
             if ($action === 'submit') {
-                $year = now()->format('Y');
-                $seq = ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
-                $code = sprintf('OPS-%s-%04d', $year, $seq);
+                $code = \App\Services\ApprovalNumberService::next('OPS');
                 $applicant = User::find(Auth::id());
                 $targetUser = User::find($resignation->user_id);
 

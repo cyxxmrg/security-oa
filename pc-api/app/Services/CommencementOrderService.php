@@ -295,9 +295,7 @@ class CommencementOrderService
     {
         try {
             if ($action === 'submit') {
-                $year = date('Y');
-                $seq = ApprovalRecord::where('code', 'like', "PRJ-{$year}-%")->count() + 1;
-                $code = sprintf('PRJ-%s-%04d', $year, $seq);
+                $code = \App\Services\ApprovalNumberService::next('PRJ');
                 $applicant = User::find(Auth::id());
 
                 $exists = ApprovalRecord::where('type', 'project')
