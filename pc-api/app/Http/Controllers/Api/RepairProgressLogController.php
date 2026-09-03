@@ -26,16 +26,20 @@ class RepairProgressLogController extends Controller
 
     public function store(Request $request, int $repairOrderId): JsonResponse
     {
+        $repairOrder = RepairOrder::findOrFail($repairOrderId);
         $data = $request->validate([
-            'method_id'     => 'nullable|integer',
+            'method_id'     => 'nullable|integer|exists:repair_methods,id',
             'progress'      => 'required|string|max:32',
-            'status_before' => 'nullable|string|max:32',
-            'status_after'  => 'nullable|string|max:32',
+            'status_before' => 'nullable|in:' . implode(',', \App\Enums\RepairOrderStatus::values()),
+            'status_after'  => 'nullable|in:' . implode(',', \App\Enums\RepairOrderStatus::values()),
             'description'   => 'nullable|string|max:2000',
             'cost_added'    => 'nullable|numeric|min:0',
             'is_paid'       => 'boolean',
             'action_at'     => 'nullable|date',
         ]);
+        if (!empty($data['method_id']) && !\App\Models\RepairMethod::where('repair_order_id', $repairOrder->id)->whereKey($data['method_id'])->exists()) {
+            return response()->json(['code' => 422, 'message' => '维修方式不属于当前返修单'], 422);
+        }
         $data['repair_order_id'] = $repairOrderId;
         $data['action_by'] = $request->user()?->id;
         $data['action_at'] = $data['action_at'] ?? now();

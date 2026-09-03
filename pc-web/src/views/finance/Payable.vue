@@ -202,10 +202,12 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (editingId.value) {
-      await put(`/finance/payables/${editingId.value}`, form)
+      const { paid_amount: _paidAmount, ...payload } = form
+      await put(`/finance/payables/${editingId.value}`, payload)
       ElMessage.success('已更新')
     } else {
-      await post('/finance/payables', form)
+      const { paid_amount: _paidAmount, ...payload } = form
+      await post('/finance/payables', payload)
       ElMessage.success('已创建')
     }
     createDialogVisible.value = false

@@ -161,3 +161,8 @@ export function del<T = any>(url: string, params?: any, config?: AxiosRequestCon
 export function patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
   return service.patch(url, data, config) as Promise<T>
 }
+
+export async function getFileObjectUrl(url: string): Promise<string> {
+  const blob = await service.get(url, { responseType: 'blob' }) as unknown as Blob
+  return URL.createObjectURL(blob)
+}

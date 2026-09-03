@@ -21,12 +21,12 @@ Route::prefix('projects')->middleware(['auth:sanctum', 'ensure_business', 'permi
     Route::get('payment-calendar', [ProjectController::class, 'paymentCalendar']);
     Route::get('board', [ProjectController::class, 'board']);
     Route::get('suppliers', [ProjectController::class, 'suppliers']);
-    Route::post('suppliers', [ProjectController::class, 'storeSupplier']);
-    Route::put('{project}/stage', [ProjectController::class, 'updateStage']);
+    Route::post('suppliers', [ProjectController::class, 'storeSupplier'])->middleware('permission:project.edit');
+    Route::put('{project}/stage', [ProjectController::class, 'updateStage'])->middleware('permission:project.edit');
     Route::get('{project}/stage-logs', [ProjectController::class, 'stageLogs']);
-    Route::post('{project}/stage-logs', [ProjectController::class, 'storeStageLog']);
+    Route::post('{project}/stage-logs', [ProjectController::class, 'storeStageLog'])->middleware('permission:project.edit');
     Route::get('{project}/construction-logs', [ProjectController::class, 'constructionLogs']);
-    Route::post('{project}/construction-logs', [ProjectController::class, 'storeConstructionLog']);
+    Route::post('{project}/construction-logs', [ProjectController::class, 'storeConstructionLog'])->middleware('permission:project.edit');
     Route::get('{project}/suppliers', [ProjectController::class, 'projectSuppliers']);
     Route::get('{project}/materials', [ProjectController::class, 'materials']);
     Route::get('{project}/contracts', [ProjectController::class, 'projectContracts']);
@@ -38,8 +38,8 @@ Route::prefix('projects')->middleware(['auth:sanctum', 'ensure_business', 'permi
     Route::get('{project}/tracking', [ProjectController::class, 'tracking']);
     Route::get('{project}/maintenance', [ProjectController::class, 'maintenance']);
     Route::get('{project}', [ProjectController::class, 'show']);
-    Route::put('{project}', [ProjectController::class, 'update']);
-    Route::delete('{project}', [ProjectController::class, 'destroy']);
+    Route::put('{project}', [ProjectController::class, 'update'])->middleware('permission:project.edit');
+    Route::delete('{project}', [ProjectController::class, 'destroy'])->middleware('permission:project.edit');
 });
 
 // ========== 深化施工 工序验收 ==========
@@ -129,56 +129,58 @@ Route::prefix('work-orders')->middleware(['auth:sanctum', 'ensure_business'])->g
 });
 
 // ========== 返修管理 ==========
-Route::prefix('repair-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('stats', [RepairOrderController::class, 'stats']);
     Route::get('/', [RepairOrderController::class, 'index']);
-    Route::post('/', [RepairOrderController::class, 'store']);
+    Route::post('/', [RepairOrderController::class, 'store'])->middleware('permission:repair.edit');
     Route::get('{id}', [RepairOrderController::class, 'show'])->whereNumber('id');
-    Route::put('{id}', [RepairOrderController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [RepairOrderController::class, 'destroy'])->whereNumber('id');
-    Route::post('{id}/cancel', [RepairOrderController::class, 'cancel'])->whereNumber('id');
-    Route::post('{id}/ship-out', [RepairOrderController::class, 'shipOut'])->whereNumber('id');
-    Route::post('{id}/ship-back', [RepairOrderController::class, 'shipBack'])->whereNumber('id');
-    Route::post('{id}/in-repair', [RepairOrderController::class, 'markInRepair'])->whereNumber('id');
-    Route::post('{id}/repaired', [RepairOrderController::class, 'markRepaired'])->whereNumber('id');
-    Route::post('{id}/close', [RepairOrderController::class, 'close'])->whereNumber('id');
+    Route::put('{id}', [RepairOrderController::class, 'update'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::delete('{id}', [RepairOrderController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
+    Route::post('{id}/cancel', [RepairOrderController::class, 'cancel'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::post('{id}/ship-out', [RepairOrderController::class, 'shipOut'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::post('{id}/ship-back', [RepairOrderController::class, 'shipBack'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::post('{id}/in-repair', [RepairOrderController::class, 'markInRepair'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::post('{id}/repaired', [RepairOrderController::class, 'markRepaired'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::post('{id}/close', [RepairOrderController::class, 'close'])->whereNumber('id')->middleware('permission:repair.edit');
 });
 
 // 物流子资源
-Route::prefix('repair-orders/{repairOrderId}/shipments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-orders/{repairOrderId}/shipments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairShipmentController::class, 'index']);
-    Route::post('/', [RepairShipmentController::class, 'store']);
-    Route::put('{id}', [RepairShipmentController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [RepairShipmentController::class, 'destroy'])->whereNumber('id');
+    Route::post('/', [RepairShipmentController::class, 'store'])->middleware('permission:repair.edit');
+    Route::put('{id}', [RepairShipmentController::class, 'update'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::delete('{id}', [RepairShipmentController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
 // 维修方式
-Route::prefix('repair-orders/{repairOrderId}/methods')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-orders/{repairOrderId}/methods')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairMethodController::class, 'index']);
-    Route::post('/', [RepairMethodController::class, 'store']);
-    Route::put('{id}', [RepairMethodController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [RepairMethodController::class, 'destroy'])->whereNumber('id');
+    Route::post('/', [RepairMethodController::class, 'store'])->middleware('permission:repair.edit');
+    Route::put('{id}', [RepairMethodController::class, 'update'])->whereNumber('id')->middleware('permission:repair.edit');
+    Route::delete('{id}', [RepairMethodController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
 // 维修进度日志
-Route::prefix('repair-orders/{repairOrderId}/progress-logs')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-orders/{repairOrderId}/progress-logs')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairProgressLogController::class, 'index']);
-    Route::post('/', [RepairProgressLogController::class, 'store']);
-    Route::delete('{id}', [RepairProgressLogController::class, 'destroy'])->whereNumber('id');
+    Route::post('/', [RepairProgressLogController::class, 'store'])->middleware('permission:repair.edit');
+    Route::delete('{id}', [RepairProgressLogController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
 // 维修附件
-Route::prefix('repair-orders/{repairOrderId}/attachments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-orders/{repairOrderId}/attachments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairOrderController::class, 'listAttachments']);
-    Route::post('/', [RepairOrderController::class, 'uploadAttachment']);
-    Route::delete('{id}', [RepairOrderController::class, 'deleteAttachment'])->whereNumber('id');
+    Route::post('/', [RepairOrderController::class, 'uploadAttachment'])->middleware('permission:repair.edit');
+    Route::get('{id}/download', [RepairOrderController::class, 'downloadAttachment'])->whereNumber('id')->name('repair.attachments.download');
+    Route::delete('{id}', [RepairOrderController::class, 'deleteAttachment'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
 // 维修过程照片
-Route::prefix('step-photos')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('step-photos')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairStepPhotoController::class, 'index']);
-    Route::post('/', [RepairStepPhotoController::class, 'store']);
-    Route::delete('{id}', [RepairStepPhotoController::class, 'destroy'])->whereNumber('id');
+    Route::post('/', [RepairStepPhotoController::class, 'store'])->middleware('permission:repair.edit');
+    Route::get('{id}/download', [RepairStepPhotoController::class, 'download'])->whereNumber('id')->name('repair.step-photos.download');
+    Route::delete('{id}', [RepairStepPhotoController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
 // 维修成本归集

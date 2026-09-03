@@ -82,30 +82,31 @@ class FinanceController extends Controller
             'contract_id'  => 'nullable|integer|exists:purchase_contracts,id',
         ]);
 
-        $payment = \App\Models\FinancePayment::create([
-            'payable_id'    => null,
-            'account_id'    => $data['account_id'] ?? null,
-            'project_id'    => $data['project_id'] ?? null,
-            'supplier_id'   => $data['supplier_id'] ?? null,
-            'amount'        => $data['amount'],
-            'payment_date'  => $data['payment_date'],
-            'method'        => $data['method'] ?? null,
-            'voucher_no'    => $data['payment_no'] ?? null,
-            'payee'         => $data['payee'] ?? null,
-            'operator'      => $data['handler'] ?? ($request->user()->name ?? ''),
-            'remark'        => $data['notes'] ?? null,
-            'type'          => 'standalone',
-        ]);
+        $payment = DB::transaction(function () use ($data, $request) {
+            $payment = \App\Models\FinancePayment::create([
+                'payable_id'    => null,
+                'account_id'    => $data['account_id'] ?? null,
+                'project_id'    => $data['project_id'] ?? null,
+                'supplier_id'   => $data['supplier_id'] ?? null,
+                'amount'        => $data['amount'],
+                'payment_date'  => $data['payment_date'],
+                'method'        => $data['method'] ?? null,
+                'voucher_no'    => $data['payment_no'] ?? null,
+                'payee'         => $data['payee'] ?? null,
+                'operator'      => $data['handler'] ?? ($request->user()->name ?? ''),
+                'remark'        => $data['notes'] ?? null,
+                'type'          => 'standalone',
+            ]);
 
         // V1.2.12o: 自动扣减资金账户余额
-        if (!empty($data['account_id'])) {
-            $account = \App\Models\FinanceAccount::lockForUpdate()->find($data['account_id']);
-            if ($account) $account->decrement('balance', $data['amount']);
-        }
+            if (!empty($data['account_id'])) {
+                $account = \App\Models\FinanceAccount::lockForUpdate()->find($data['account_id']);
+                if ($account) $account->decrement('balance', $data['amount']);
+            }
 
         // V1.2.16: 更新供应商应付账款 (两表同步: payables + supplier_payables)
-        if (!empty($data['supplier_id']) && $data['amount'] > 0) {
-            $remaining = (float) $data['amount'];
+            if (!empty($data['supplier_id']) && $data['amount'] > 0) {
+                $remaining = (float) $data['amount'];
 
             // 同步 payables 表 (应付账款页在用)
             $oldPayables = \App\Models\Payable::where('supplier_id', $data['supplier_id'])
@@ -161,21 +162,23 @@ class FinanceController extends Controller
                 ]);
                 $remaining = round($remaining - $apply, 2);
             }
-            if ($remaining > 0) {
-                \App\Models\SupplierPayable::create([
-                    'supplier_id' => $data['supplier_id'],
-                    'project_id'  => $data['project_id'] ?? null,
-                    'amount'      => (float) $data['amount'],
-                    'paid_amount' => (float) $data['amount'],
-                    'status'      => 'paid',
-                    'due_date'    => $data['payment_date'] ?? now(),
-                    'ref_no'      => $data['payment_no'] ?? ('FP-' . $payment->id),
-                    'note'        => '付款单: ' . ($data['payment_no'] ?? '#' . $payment->id),
-                    'created_by'  => $request->user()->id,
-                ]);
+                if ($remaining > 0) {
+                    \App\Models\SupplierPayable::create([
+                        'supplier_id' => $data['supplier_id'],
+                        'project_id'  => $data['project_id'] ?? null,
+                        'amount'      => (float) $data['amount'],
+                        'paid_amount' => (float) $data['amount'],
+                        'status'      => 'paid',
+                        'due_date'    => $data['payment_date'] ?? now(),
+                        'ref_no'      => $data['payment_no'] ?? ('FP-' . $payment->id),
+                        'note'        => '付款单: ' . ($data['payment_no'] ?? '#' . $payment->id),
+                        'created_by'  => $request->user()->id,
+                    ]);
+                }
             }
-        }
 
+            return $payment;
+        });
         return response()->json(['code' => 0, 'data' => $payment->fresh(), 'message' => '付款单已创建'], 201);
     }
 
@@ -206,11 +209,13 @@ class FinanceController extends Controller
 
     public function storeReceivable(Request $request): JsonResponse
     {
+        if ($request->has('received_amount')) {
+            return response()->json(['code' => 1001, 'message' => '累计收款金额必须通过收款流水登记'], 422);
+        }
         $data = $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'project_id' => 'nullable|exists:projects,id',
             'amount' => 'required|numeric|min:0',
-            'received_amount' => 'nullable|numeric|min:0',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
         ]);
@@ -230,25 +235,35 @@ class FinanceController extends Controller
 
     public function updateReceivable(Request $request, ReceivableModel $receivable): JsonResponse
     {
+        if ($request->has('received_amount')) {
+            return response()->json(['code' => 1001, 'message' => '累计收款金额必须通过收款流水登记'], 422);
+        }
         $data = $request->validate([
             'customer_id' => 'sometimes|required|exists:customers,id',
             'project_id' => 'nullable|exists:projects,id',
             'amount' => 'sometimes|required|numeric|min:0',
-            'received_amount' => 'nullable|numeric|min:0',
             'due_date' => 'sometimes|required|date',
             'notes' => 'nullable|string',
         ]);
-        if (isset($data['amount']) || isset($data['received_amount'])) {
-            $data['remaining_amount'] = ($data['amount'] ?? $receivable->amount) - ($data['received_amount'] ?? $receivable->received_amount);
-        }
-        $receivable->update($data);
-        // 业务规则：自动同步状态
-        if ($receivable->remaining_amount <= 0) {
-            $receivable->update(['status' => 'fully_paid', 'received_date' => $receivable->received_date ?? now()->toDateString()]);
-        } elseif ($receivable->received_amount > 0) {
-            $receivable->update(['status' => 'partial']);
-        }
-        return response()->json(['code' => 0, 'data' => $receivable, 'message' => '已更新']);
+        $updated = DB::transaction(function () use ($data, $receivable) {
+            $locked = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            $amount = (float) ($data['amount'] ?? $locked->amount);
+            if ($amount + 0.0001 < (float) $locked->received_amount) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => '应收金额不能小于已收金额',
+                ]);
+            }
+            $locked->update($data + [
+                'remaining_amount' => round($amount - (float) $locked->received_amount, 2),
+            ]);
+            $locked->update([
+                'status' => $locked->remaining_amount <= 0.0001
+                    ? 'fully_paid'
+                    : ($locked->received_amount > 0 ? 'partial' : 'pending'),
+            ]);
+            return $locked->fresh();
+        });
+        return response()->json(['code' => 0, 'data' => $updated, 'message' => '已更新']);
     }
 
     public function destroyReceivable(ReceivableModel $receivable): JsonResponse
@@ -275,11 +290,13 @@ class FinanceController extends Controller
 
     public function storePayable(Request $request): JsonResponse
     {
+        if ($request->has('paid_amount')) {
+            return response()->json(['code' => 1001, 'message' => '累计付款金额必须通过付款流水登记'], 422);
+        }
         $data = $request->validate([
             'supplier_id' => 'nullable|exists:suppliers,id',
             'project_id' => 'nullable|exists:projects,id',
             'amount' => 'required|numeric|min:0',
-            'paid_amount' => 'nullable|numeric|min:0',
             'due_date' => 'required|date',
             'payment_term' => 'nullable|string',
             'notes' => 'nullable|string',
@@ -299,25 +316,36 @@ class FinanceController extends Controller
 
     public function updatePayable(Request $request, PayableModel $payable): JsonResponse
     {
+        if ($request->has('paid_amount')) {
+            return response()->json(['code' => 1001, 'message' => '累计付款金额必须通过付款流水登记'], 422);
+        }
         $data = $request->validate([
             'supplier_id' => 'sometimes|required|exists:suppliers,id',
             'project_id' => 'nullable|exists:projects,id',
             'amount' => 'sometimes|required|numeric|min:0',
-            'paid_amount' => 'nullable|numeric|min:0',
             'due_date' => 'sometimes|required|date',
             'payment_term' => 'nullable|string',
             'notes' => 'nullable|string',
         ]);
-        if (isset($data['amount']) || isset($data['paid_amount'])) {
-            $data['remaining_amount'] = ($data['amount'] ?? $payable->amount) - ($data['paid_amount'] ?? $payable->paid_amount);
-        }
-        $payable->update($data);
-        if ($payable->remaining_amount <= 0) {
-            $payable->update(['status' => 'fully_paid', 'paid_date' => $payable->paid_date ?? now()->toDateString()]);
-        } elseif ($payable->paid_amount > 0) {
-            $payable->update(['status' => 'partial']);
-        }
-        return response()->json(['code' => 0, 'data' => $payable, 'message' => '已更新']);
+        $updated = DB::transaction(function () use ($data, $payable) {
+            $locked = PayableModel::lockForUpdate()->findOrFail($payable->id);
+            $amount = (float) ($data['amount'] ?? $locked->amount);
+            if ($amount + 0.0001 < (float) $locked->paid_amount) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => '应付金额不能小于已付金额',
+                ]);
+            }
+            $locked->update($data + [
+                'remaining_amount' => round($amount - (float) $locked->paid_amount, 2),
+            ]);
+            $locked->update([
+                'status' => $locked->remaining_amount <= 0.0001
+                    ? 'fully_paid'
+                    : ($locked->paid_amount > 0 ? 'partial' : 'pending'),
+            ]);
+            return $locked->fresh();
+        });
+        return response()->json(['code' => 0, 'data' => $updated, 'message' => '已更新']);
     }
 
     public function destroyPayable(PayableModel $payable): JsonResponse
@@ -345,11 +373,14 @@ class FinanceController extends Controller
             'remark' => 'nullable|string',
         ]);
         $amount = (float)$data['amount'];
-        $remaining = (float)$receivable->remaining_amount;
-        if ($amount - $remaining > 0.0001) {
-            return response()->json(['code' => 1002, 'message' => "本次收款({$amount})超过未收金额({$remaining})"], 422);
-        }
         $payment = DB::transaction(function () use ($data, $amount, $receivable) {
+            $receivable = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            $remaining = (float) $receivable->remaining_amount;
+            if ($amount - $remaining > 0.0001) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "本次收款({$amount})超过未收金额({$remaining})",
+                ]);
+            }
             $data['receivable_id'] = $receivable->id;
             $data['amount'] = $amount;
             $payment = FinancePayment::create($data);
@@ -400,9 +431,10 @@ class FinanceController extends Controller
             'operator' => 'nullable|string|max:50',
             'remark' => 'nullable|string',
         ]);
-        $amount = (float)$receivable->remaining_amount;
         $paymentDate = $data['payment_date'] ?? now()->toDateString();
-        DB::transaction(function () use ($data, $amount, $receivable, $paymentDate) {
+        DB::transaction(function () use ($data, $receivable, $paymentDate) {
+            $receivable = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            $amount = (float) $receivable->remaining_amount;
             if ($amount > 0) {
                 FinancePayment::create([
                     'receivable_id' => $receivable->id,
@@ -442,18 +474,20 @@ class FinanceController extends Controller
             'remark' => 'nullable|string',
         ]);
         $amount = (float)$data['amount'];
-        $remaining = (float)$payable->remaining_amount;
-        // V1.2.16 fix: 允许预付(超过应付的付款), 移除限制
-        // if ($amount - $remaining > 0.0001) { ... }
-
         $payment = DB::transaction(function () use ($data, $amount, $payable) {
+            $payable = PayableModel::lockForUpdate()->findOrFail($payable->id);
+            $remaining = (float) $payable->remaining_amount;
+            if ($amount - $remaining > 0.0001) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "本次付款({$amount})超过未付金额({$remaining})",
+                ]);
+            }
             $data['payable_id'] = $payable->id;
             $data['amount'] = $amount;
             $payment = FinancePayment::create($data);
             $newPaid = (float)$payable->paid_amount + $amount;
-            // V1.2.16 fix: 去掉 max(0,) 截断, remaining_amount 允许负数表示预付
             $newRemaining = round((float)$payable->amount - $newPaid, 2);
-            $status = $newRemaining < 0 ? 'overpaid' : ($newRemaining <= 0.0001 ? 'fully_paid' : 'partial');
+            $status = $newRemaining <= 0.0001 ? 'fully_paid' : 'partial';
             $payable->update([
                 'paid_amount' => $newPaid,
                 'remaining_amount' => $newRemaining,

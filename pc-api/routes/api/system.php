@@ -192,7 +192,7 @@ Route::middleware(['auth:sanctum', 'permission:system.config'])->group(function 
 Route::get('settings/idle-config', [SystemSettingsController::class, 'getIdleConfig'])->withoutMiddleware('ensure_business');
 
 // ========== 审批流程模板 ==========
-Route::prefix('approval-templates')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('approval-templates')->middleware(['auth:sanctum', 'permission:approval.template'])->group(function () {
     Route::get('/', [ApprovalTemplateController::class, 'index'])->withoutMiddleware('ensure_business');
     Route::post('/', [ApprovalTemplateController::class, 'store'])->withoutMiddleware('ensure_business');
     Route::get('{approvalTemplate}', [ApprovalTemplateController::class, 'show'])->withoutMiddleware('ensure_business');

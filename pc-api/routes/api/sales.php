@@ -45,7 +45,7 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
         Route::prefix('{opp}/stage-files')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\OpportunityStageFileController::class, 'index'])->middleware('owns:opp');
             Route::post('/', [\App\Http\Controllers\Api\OpportunityStageFileController::class, 'store'])->middleware(['owns:opp', 'permission:sales.create|sales.edit']);
-            Route::get('{file}/download', [\App\Http\Controllers\Api\OpportunityStageFileController::class, 'download']);
+            Route::get('{file}/download', [\App\Http\Controllers\Api\OpportunityStageFileController::class, 'download'])->middleware('owns:opp');
             Route::delete('{file}', [\App\Http\Controllers\Api\OpportunityStageFileController::class, 'destroy'])->middleware(['owns:opp', 'permission:sales.create|sales.edit']);
         });
     });

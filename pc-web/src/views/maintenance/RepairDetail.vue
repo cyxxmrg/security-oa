@@ -104,7 +104,7 @@
               <div v-if="!attachments.length" class="empty-state-sm">暂无凭证照片</div>
               <div v-else class="attachment-grid">
                 <div v-for="att in attachments" :key="att.id" class="attachment-card">
-                  <el-image :src="att.file_url" :preview-src-list="[att.file_url]" fit="cover" />
+                  <el-image :src="att.preview_url || att.file_url" :preview-src-list="[att.preview_url || att.file_url]" fit="cover" />
                   <div class="att-name">{{ att.file_name }}</div>
                   <el-button size="small" link type="danger" @click="deleteAttachment(att.id)">删除</el-button>
                 </div>
@@ -361,12 +361,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, User, Promotion, Box, CircleCheck, Plus, Loading, Upload } from '@element-plus/icons-vue'
-import { get, post, del } from '@/utils/request'
-import { unwrapItem } from '@/utils/response'
+import { get, getFileObjectUrl, post, del } from '@/utils/request'
+import { unwrapItem, unwrapList } from '@/utils/response'
 import StepPhotoUploader from './components/StepPhotoUploader.vue'
 
 const route = useRoute()
@@ -393,12 +393,25 @@ const savingMethod = ref(false)
 const methodForm = ref({ method_type: 'paid_repair', actual_cost: 0, hours_spent: 0, remarks: '' })
 
 const attachments = ref<any[]>([])
+const revokeAttachmentPreviewUrls = () => {
+  for (const attachment of attachments.value) {
+    if (attachment.preview_url) URL.revokeObjectURL(attachment.preview_url)
+  }
+}
 const loadAttachments = async () => {
   if (!ro.value?.id) return
   try {
     // 后端返回 {code:0, data: [array]}, 解包后 res 本身就是数组
     const res = await get(`/repair-orders/${ro.value.id}/attachments`)
-    attachments.value = res || []
+    const nextAttachments = unwrapList(res)
+    revokeAttachmentPreviewUrls()
+    attachments.value = await Promise.all(nextAttachments.map(async (attachment: any) => {
+      try {
+        return { ...attachment, preview_url: await getFileObjectUrl(attachment.file_url) }
+      } catch {
+        return attachment
+      }
+    }))
   } catch { attachments.value = [] }
 }
 const uploadAttachment = async (option: any) => {
@@ -551,6 +564,7 @@ const paymentLabel = (s: string) => ({ unpaid: '未付', partial: '部分付', p
 const paymentColor = (s: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' => ({ unpaid: 'danger', partial: 'warning', paid: 'success', refunded: 'info' }[s] as 'success' | 'primary' | 'info' | 'warning' | 'danger' || 'info')
 
 onMounted(() => { loadData(); loadAttachments() })
+onBeforeUnmount(revokeAttachmentPreviewUrls)
 </script>
 
 <style scoped lang="scss">

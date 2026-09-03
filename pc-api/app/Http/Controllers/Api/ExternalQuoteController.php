@@ -8,6 +8,8 @@ use App\Models\ExternalQuoteRequest;
 use App\Services\ExternalQuoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Validation\Rule;
 
 /**
@@ -93,15 +95,15 @@ class ExternalQuoteController extends Controller
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
         $dir  = "external-quotes/{$req->id}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('reqfile_') . ($ext ? ".{$ext}" : ''), 'public');
-        $url  = asset('storage/' . $path);
+        $path = $file->storeAs($dir, uniqid('reqfile_') . ($ext ? ".{$ext}" : ''), 'attachments');
 
         $files = $req->required_files ?? [];
+        $fileId = uniqid('f_');
         $files[] = [
-            'id'        => uniqid('f_'),
+            'id'        => $fileId,
             'name'      => $file->getClientOriginalName(),
             'path'      => $path,
-            'url'       => $url,
+            'url'       => route('external-quotes.files.download', [$req->id, $fileId]),
             'size'      => $file->getSize(),
             'mime'      => $file->getMimeType(),
             'uploaded_at' => now()->toIso8601String(),
@@ -130,11 +132,27 @@ class ExternalQuoteController extends Controller
             }
         }
         if ($removed && !empty($removed['path'])) {
-            \Storage::disk('public')->delete($removed['path']);
+            Storage::disk('attachments')->delete($removed['path']);
         }
         $req->required_files = $kept ?: null;
         $req->save();
         return response()->json(['code' => 0, 'message' => '已删除', 'data' => $kept]);
+    }
+
+    public function downloadRequiredFile(int $id, string $fileId): StreamedResponse|JsonResponse
+    {
+        $req = ExternalQuoteRequest::findOrFail($id);
+        $file = collect($req->required_files ?? [])->firstWhere('id', $fileId);
+        if (!$file || empty($file['path'])) {
+            return response()->json(['code' => 404, 'message' => '文件不存在'], 404);
+        }
+        $disk = Storage::disk('attachments');
+        if (!$disk->exists($file['path'])) {
+            return response()->json(['code' => 404, 'message' => '文件已被删除'], 404);
+        }
+        return $disk->download($file['path'], $file['name'] ?? basename($file['path']), [
+            'Content-Type' => $file['mime'] ?? 'application/octet-stream',
+        ]);
     }
 
     // v0.5.8.10 通用附件上传 (新建请求时用, 不依赖 disk_folder)
@@ -146,14 +164,14 @@ class ExternalQuoteController extends Controller
         $file = $request->file('file');
         $ext  = strtolower($file->getClientOriginalExtension());
         $dir  = 'external-quotes/_draft/' . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'public');
+        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'attachments');
 
         return response()->json(['code' => 0, 'message' => '已上传', 'data' => [
             'id'            => uniqid('f_'),
             'name'          => $file->getClientOriginalName(),
             'original_name' => $file->getClientOriginalName(),
             'path'          => $path,
-            'url'           => asset('storage/' . $path),
+            'url'           => null,
             'size'          => $file->getSize(),
             'mime_type'     => $file->getMimeType(),
             'uploaded_at'   => now()->toIso8601String(),

@@ -7,6 +7,7 @@ use App\Models\RepairStepPhoto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * V0.5.7 块2 — 维修过程照片 (工单+返修共用, 7 步进度)
@@ -35,7 +36,7 @@ class RepairStepPhotoController extends Controller
                 'step'         => $p->step,
                 'step_label'   => RepairStepPhoto::STEPS[$p->step] ?? $p->step,
                 'file_name'    => $p->file_name,
-                'file_url'     => asset('storage/' . $p->file_path),
+                'file_url'     => route('repair.step-photos.download', $p->id),
                 'file_size'    => $p->file_size,
                 'description'  => $p->description,
                 'uploaded_by'  => $p->uploaded_by,
@@ -88,7 +89,7 @@ class RepairStepPhotoController extends Controller
         $file = $request->file('file');
         $ext = $file->getClientOriginalExtension();
         $dir = "repair-photos/{$data['target_type']}/{$code}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('p_') . '.' . $ext, 'public');
+        $path = $file->storeAs($dir, uniqid('p_') . '.' . $ext, 'attachments');
 
         $photo = RepairStepPhoto::create([
             'target_type' => $data['target_type'],
@@ -109,7 +110,7 @@ class RepairStepPhotoController extends Controller
                 'id'        => $photo->id,
                 'step'      => $photo->step,
                 'file_name' => $photo->file_name,
-                'file_url'  => asset('storage/' . $photo->file_path),
+                'file_url'  => route('repair.step-photos.download', $photo->id),
             ],
             'message' => '照片已上传',
         ]);
@@ -123,9 +124,21 @@ class RepairStepPhotoController extends Controller
         if ($photo->uploaded_by !== $user?->id && !$this->isAdmin($user)) {
             return response()->json(['code' => 403, 'message' => '只能删除自己上传的照片'], 403);
         }
-        Storage::disk('public')->delete($photo->file_path);
+        Storage::disk('attachments')->delete($photo->file_path);
         $photo->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
+    }
+
+    public function download(int $id): StreamedResponse|JsonResponse
+    {
+        $photo = RepairStepPhoto::findOrFail($id);
+        $disk = Storage::disk('attachments');
+        if (!$disk->exists($photo->file_path)) {
+            return response()->json(['code' => 1004, 'message' => '文件已丢失'], 404);
+        }
+        return $disk->download($photo->file_path, $photo->file_name, [
+            'Content-Type' => $photo->file_type ?: 'application/octet-stream',
+        ]);
     }
 
     /**

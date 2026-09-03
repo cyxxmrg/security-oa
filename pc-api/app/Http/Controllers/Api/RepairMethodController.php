@@ -66,9 +66,9 @@ class RepairMethodController extends Controller
         });
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, int $repairOrderId, int $id): JsonResponse
     {
-        $m = RepairMethod::findOrFail($id);
+        $m = RepairMethod::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $data = $request->validate([
             'method_category'=> 'nullable|string|max:32',
             'estimated_cost' => 'nullable|numeric|min:0',
@@ -87,9 +87,9 @@ class RepairMethodController extends Controller
         return response()->json(['code' => 0, 'data' => $this->present($m), 'message' => '已更新']);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(int $repairOrderId, int $id): JsonResponse
     {
-        $m = RepairMethod::findOrFail($id);
+        $m = RepairMethod::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $m->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }

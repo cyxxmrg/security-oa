@@ -19,7 +19,7 @@
         <el-input-number v-model="form.amount" :min="0" :precision="2" style="width: 100%" />
       </el-form-item>
       <el-form-item label="已收金额">
-        <el-input-number v-model="form.received_amount" :min="0" :precision="2" style="width: 100%" />
+        <el-input-number v-model="form.received_amount" :min="0" :precision="2" style="width: 100%" disabled />
       </el-form-item>
       <el-form-item label="到期日" prop="due_date">
         <el-date-picker v-model="form.due_date" type="date" placeholder="选择到期日" style="width: 100%" value-format="YYYY-MM-DD" />

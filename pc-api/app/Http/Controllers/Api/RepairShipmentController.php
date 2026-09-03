@@ -54,9 +54,9 @@ class RepairShipmentController extends Controller
     /**
      * 更新物流 (主要用于 actual_arrival / delivery_status)
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, int $repairOrderId, int $id): JsonResponse
     {
-        $s = RepairShipment::findOrFail($id);
+        $s = RepairShipment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $data = $request->validate([
             'delivery_status'    => 'sometimes|in:pending,in_transit,delivered,exception',
             'actual_arrival'     => 'nullable|date',
@@ -69,9 +69,9 @@ class RepairShipmentController extends Controller
         return response()->json(['code' => 0, 'data' => $this->present($s), 'message' => '已更新']);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(int $repairOrderId, int $id): JsonResponse
     {
-        $s = RepairShipment::findOrFail($id);
+        $s = RepairShipment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $s->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }

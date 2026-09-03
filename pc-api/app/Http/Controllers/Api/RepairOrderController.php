@@ -13,6 +13,8 @@ use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * V0.5.5 返修单 API (主单)
@@ -612,7 +614,7 @@ class RepairOrderController extends Controller
                 'id'           => $a->id,
                 'file_name'    => $a->file_name,
                 'file_path'    => $a->file_path,
-                'file_url'     => asset('storage/' . $a->file_path),
+                'file_url'     => route('repair.attachments.download', [$repairOrderId, $a->id]),
                 'file_type'    => $a->file_type,
                 'category'     => $a->category,
                 'uploaded_by'  => $a->uploaded_by,
@@ -632,7 +634,7 @@ class RepairOrderController extends Controller
         $file = $request->file('file');
         $ext = $file->getClientOriginalExtension();
         $dir = "repairs/{$ro->code}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('att_') . '.' . $ext, 'public');
+        $path = $file->storeAs($dir, uniqid('att_') . '.' . $ext, 'attachments');
 
         $att = \App\Models\RepairAttachment::create([
             'repair_order_id' => $ro->id,
@@ -648,8 +650,20 @@ class RepairOrderController extends Controller
         return response()->json(['code' => 0, 'data' => [
             'id'        => $att->id,
             'file_name' => $att->file_name,
-            'file_url'  => asset('storage/' . $att->file_path),
+            'file_url'  => route('repair.attachments.download', [$repairOrderId, $att->id]),
         ], 'message' => '上传成功']);
+    }
+
+    public function downloadAttachment(Request $request, int $repairOrderId, int $id): StreamedResponse|JsonResponse
+    {
+        $att = RepairAttachment::where('repair_order_id', $repairOrderId)->findOrFail($id);
+        $disk = Storage::disk('attachments');
+        if (!$disk->exists($att->file_path)) {
+            return response()->json(['code' => 1004, 'message' => '文件已丢失'], 404);
+        }
+        return $disk->download($att->file_path, $att->file_name, [
+            'Content-Type' => $att->file_type ?: 'application/octet-stream',
+        ]);
     }
 
     /**
@@ -662,7 +676,7 @@ class RepairOrderController extends Controller
         if ($att->uploaded_by !== $user?->id && !$this->isAdmin($user)) {
             return response()->json(['code' => 403, 'message' => '只能删除自己上传的附件'], 403);
         }
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($att->file_path);
+        Storage::disk('attachments')->delete($att->file_path);
         $att->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }

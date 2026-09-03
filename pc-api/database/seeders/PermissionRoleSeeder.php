@@ -24,6 +24,7 @@ class PermissionRoleSeeder extends Seeder
     private array $modules = [
         '系统管理' => [
             ['name' => 'system.config',   'label' => '系统参数配置'],
+            ['name' => 'system.settings', 'label' => '系统设置管理'],
             ['name' => 'system.log',      'label' => '系统日志查看'],
             ['name' => 'system.backup',   'label' => '数据备份管理'],
             ['name' => 'system.role',     'label' => '角色权限管理'],
@@ -47,14 +48,20 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'project.view',        'label' => '项目列表查看'],
             ['name' => 'project.view.own',    'label' => '仅查看我负责的项目'],
             ['name' => 'project.create',      'label' => '项目创建编辑'],
+            ['name' => 'project.edit',        'label' => '项目资料与进度编辑'],
             ['name' => 'project.assign',      'label' => '任务分配管理'],
             ['name' => 'project.report',      'label' => '项目报表'],
             ['name' => 'project.report.own',  'label' => '仅看我负责的项目报表'],
         ],
         '客户管理' => [
             ['name' => 'customer.view',  'label' => '客户列表查看'],
+            ['name' => 'customer.create', 'label' => '客户创建'],
             ['name' => 'customer.edit',  'label' => '客户信息编辑'],
             ['name' => 'customer.map',   'label' => '客户分布地图'],
+        ],
+        '供应商管理' => [
+            ['name' => 'supplier.view',   'label' => '供应商列表查看'],
+            ['name' => 'supplier.create', 'label' => '供应商创建编辑'],
         ],
         '财务管理' => [
             ['name' => 'finance.view',     'label' => '财务概览'],
@@ -107,6 +114,12 @@ class PermissionRoleSeeder extends Seeder
         '车辆管理' => [
             ['name' => 'vehicle.create', 'label' => '车辆信息创建编辑'],
             ['name' => 'vehicle.edit',   'label' => '车辆信息编辑'],
+            ['name' => 'vehicle.view',   'label' => '车辆查看'],
+            ['name' => 'vehicle.apply',  'label' => '用车申请'],
+            ['name' => 'vehicle.dispatch', 'label' => '车辆调度'],
+            ['name' => 'vehicle.insurance', 'label' => '车辆保险'],
+            ['name' => 'vehicle.maintenance', 'label' => '车辆保养'],
+            ['name' => 'vehicle.fuel',   'label' => '油卡管理'],
         ],
         // V1.2.12: 深化施工权限
         '深化施工' => [
@@ -118,6 +131,25 @@ class PermissionRoleSeeder extends Seeder
         '知识库' => [
             ['name' => 'knowledge.create', 'label' => '知识库创建编辑'],
             ['name' => 'knowledge.edit',   'label' => '知识库编辑'],
+            ['name' => 'knowledge.view',   'label' => '知识库附件查看'],
+        ],
+        '返修管理' => [
+            ['name' => 'repair.view',   'label' => '返修记录查看'],
+            ['name' => 'repair.edit',   'label' => '返修记录编辑'],
+            ['name' => 'repair.delete', 'label' => '返修记录删除'],
+        ],
+        '质保管理' => [
+            ['name' => 'warranty.view', 'label' => '质保记录查看'],
+        ],
+        '经营分析' => [
+            ['name' => 'analytics.view', 'label' => '经营分析查看'],
+        ],
+        '采购管理' => [
+            ['name' => 'purchase',        'label' => '采购协同管理'],
+            ['name' => 'purchase.tender','label' => '采购招标管理'],
+        ],
+        '对外报价' => [
+            ['name' => 'sales.external_quote', 'label' => '对外报价管理'],
         ],
     ];
 
@@ -143,18 +175,6 @@ class PermissionRoleSeeder extends Seeder
 
         // 3) 4 核心角色 + 默认权限矩阵
         $presets = [
-            'admin' => [
-                'description' => '系统最高权限，所有模块',
-                'color' => '#A32D2D',
-                'perms' => $allPerms, // 全部
-            ],
-            'finance' => [
-                'description' => '财务模块 + 全局查看',
-                'color' => '#534AB7',
-                'perms' => array_values(array_filter($allPerms, fn($n) =>
-                    str_starts_with($n, 'finance.') || str_starts_with($n, 'approval.')
-                )),
-            ],
             'user' => [
                 'description' => '普通员工：考勤+个人',
                 'color' => '#909399',
@@ -184,11 +204,16 @@ class PermissionRoleSeeder extends Seeder
                     str_starts_with($n, 'project.') ||
                     str_starts_with($n, 'employee.') ||
                     str_starts_with($n, 'customer.') ||
+                    str_starts_with($n, 'supplier.') ||
+                    str_starts_with($n, 'analytics.') ||
                     str_starts_with($n, 'sales.') ||
                     str_starts_with($n, 'vehicle.') ||
                     str_starts_with($n, 'process.') ||
-                    str_starts_with($n, 'knowledge.') ||
-                    str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||
+                     str_starts_with($n, 'knowledge.') ||
+                     str_starts_with($n, 'repair.') ||
+                     str_starts_with($n, 'purchase') ||
+                     str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||
+                     $n === 'sales.external_quote' ||
                     $n === 'approval.template' ||
                     in_array($n, ['disk.create', 'disk.edit', 'disk.upload'], true) ||
                     $n === 'inventory.create' ||
@@ -204,7 +229,8 @@ class PermissionRoleSeeder extends Seeder
                     str_starts_with($n, 'finance.') ||
                     $n === 'deposit.manage' ||
                     $n === 'tender.approve' ||
-                    $n === 'expense.approve'
+                     $n === 'expense.approve'
+                     || str_starts_with($n, 'purchase')
                 )),
             ],
             'admin' => [

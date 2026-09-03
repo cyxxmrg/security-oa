@@ -160,6 +160,8 @@ Route::prefix('external-quotes')->middleware(['auth:sanctum', 'ensure_business',
     Route::get('requests', [ExternalQuoteController::class, 'indexRequests']);
     Route::post('requests', [ExternalQuoteController::class, 'storeRequest']);
     Route::post('requests/{id}/files', [ExternalQuoteController::class, 'uploadRequiredFile'])->whereNumber('id');
+    Route::get('requests/{id}/files/{fileId}/download', [ExternalQuoteController::class, 'downloadRequiredFile'])
+        ->whereNumber('id')->name('external-quotes.files.download');
     Route::delete('requests/{id}/files', [ExternalQuoteController::class, 'deleteRequiredFile'])->whereNumber('id');
     Route::get('requests/{id}', [ExternalQuoteController::class, 'showRequest']);
     Route::post('upload-attachment', [ExternalQuoteController::class, 'uploadAttachment']);

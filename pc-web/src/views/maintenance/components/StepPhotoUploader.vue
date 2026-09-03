@@ -32,7 +32,7 @@
     </div>
     <div v-else class="photo-grid">
       <div v-for="p in currentStepPhotos" :key="p.id" class="photo-card">
-        <el-image :src="p.file_url" :preview-src-list="[p.file_url]" fit="cover" />
+        <el-image :src="p.preview_url || p.file_url" :preview-src-list="[p.preview_url || p.file_url]" fit="cover" />
         <div class="photo-meta">
           <span class="photo-time">{{ formatTime(p.uploaded_at) }}</span>
           <el-button link type="danger" size="small" @click="deletePhoto(p.id)">删除</el-button>
@@ -44,11 +44,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadRequestOptions } from 'element-plus'
 import { Camera, Picture } from '@element-plus/icons-vue'
-import { get, post, del } from '@/utils/request'
+import { get, getFileObjectUrl, post, del } from '@/utils/request'
 import { unwrapList } from '@/utils/response'
 
 const props = defineProps<{
@@ -71,6 +71,7 @@ interface StepPhoto {
   id: number
   step: keyof typeof STEPS
   file_url: string
+  preview_url?: string
   uploaded_at: string
   description?: string
 }
@@ -79,6 +80,12 @@ const counts = ref<Record<string, number>>({})
 const currentStep = ref<keyof typeof STEPS>('diagnose')
 const uploading = ref(false)
 const description = ref('')
+
+const revokePreviewUrls = () => {
+  for (const photo of photos.value) {
+    if (photo.preview_url) URL.revokeObjectURL(photo.preview_url)
+  }
+}
 
 const currentStepPhotos = computed(() =>
   photos.value.filter(p => p.step === currentStep.value)
@@ -107,7 +114,15 @@ const loadPhotos = async () => {
       target_id: props.targetId,
     })
     // V0.6.3: res = {code, data: <photos>} 可能是 array 或 {items:[]}
-    photos.value = unwrapList(res)
+    const nextPhotos = unwrapList(res) as StepPhoto[]
+    revokePreviewUrls()
+    photos.value = await Promise.all(nextPhotos.map(async (photo) => {
+      try {
+        return { ...photo, preview_url: await getFileObjectUrl(photo.file_url) }
+      } catch {
+        return photo
+      }
+    }))
     const newCounts: Record<string, number> = {}
     for (const p of photos.value) {
       newCounts[p.step] = (newCounts[p.step] || 0) + 1
@@ -145,6 +160,7 @@ const deletePhoto = async (id: number) => {
 
 watch(() => props.targetId, () => loadPhotos())
 onMounted(() => loadPhotos())
+onBeforeUnmount(revokePreviewUrls)
 </script>
 
 <style scoped lang="scss">

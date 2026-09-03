@@ -180,10 +180,12 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (editingId.value) {
-      await put(`/finance/receivables/${editingId.value}`, form)
+      const { received_amount: _receivedAmount, ...payload } = form
+      await put(`/finance/receivables/${editingId.value}`, payload)
       ElMessage.success('已更新')
     } else {
-      await post('/finance/receivables', form)
+      const { received_amount: _receivedAmount, ...payload } = form
+      await post('/finance/receivables', payload)
       ElMessage.success('已创建')
     }
     createDialogVisible.value = false
@@ -209,8 +211,11 @@ const confirmReceive = async () => {
   if (!receiveRow.value) return
   receiving.value = true
   try {
-    const newReceived = Number(receiveRow.value.received_amount || 0) + Number(receiveForm.received_amount)
-    await put(`/finance/receivables/${receiveRow.value.id}`, { received_amount: newReceived, received_date: receiveForm.received_date })
+    await post(`/finance/receivables/${receiveRow.value.id}/payments`, {
+      amount: Number(receiveForm.received_amount),
+      payment_date: receiveForm.received_date,
+      account_id: receiveForm.account_id,
+    })
     ElMessage.success('收款已登记')
     receiveDialogVisible.value = false
     loadList()
