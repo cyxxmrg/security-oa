@@ -195,7 +195,7 @@ Route::prefix('finance')->middleware(['auth:sanctum', 'ensure_business', 'permis
 });
 
 // ========== 公司网盘 ==========
-Route::prefix('disk')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('disk')->middleware(['auth:sanctum', 'ensure_business', 'permission:disk.view'])->group(function () {
     // 初始化 & 设置
     Route::post('init', [DiskController::class, 'initDisk'])->middleware('permission:system.settings|admin');
     Route::get('settings', [DiskController::class, 'getSettings']);

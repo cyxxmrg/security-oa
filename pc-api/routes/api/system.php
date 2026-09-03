@@ -46,17 +46,17 @@ Route::prefix('dashboard')->middleware(['auth:sanctum', 'ensure_business'])->gro
 });
 
 // ========== 售后服务 ==========
-Route::prefix('service')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('service')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.view'])->group(function () {
     Route::get('stats', [ServiceController::class, 'stats']);
     Route::get('maintenance-contracts', [ServiceController::class, 'maintenanceContracts']);
     Route::get('orders', [ServiceController::class, 'index']);
-    Route::post('orders', [ServiceController::class, 'store']);
+    Route::post('orders', [ServiceController::class, 'store'])->middleware('permission:project.edit');
     Route::get('orders/stats', [ServiceController::class, 'stats']);
     Route::get('orders/{serviceOrder}', [ServiceController::class, 'show']);
-    Route::post('orders/{serviceOrder}/assign', [ServiceController::class, 'assign']);
-    Route::post('orders/{serviceOrder}/start', [ServiceController::class, 'startRepair']);
-    Route::post('orders/{serviceOrder}/complete', [ServiceController::class, 'completeRepair']);
-    Route::post('orders/{serviceOrder}/confirm', [ServiceController::class, 'confirmByCustomer']);
+    Route::post('orders/{serviceOrder}/assign', [ServiceController::class, 'assign'])->middleware('permission:project.assign');
+    Route::post('orders/{serviceOrder}/start', [ServiceController::class, 'startRepair'])->middleware('permission:project.edit');
+    Route::post('orders/{serviceOrder}/complete', [ServiceController::class, 'completeRepair'])->middleware('permission:project.edit');
+    Route::post('orders/{serviceOrder}/confirm', [ServiceController::class, 'confirmByCustomer'])->middleware('permission:project.edit');
 });
 
 // ========== 系统管理 (V1.1: 仅 system 可写) ==========
@@ -208,16 +208,16 @@ Route::prefix('approvals')->middleware(['auth:sanctum'])->withoutMiddleware(['en
     Route::get('center/stats', [ApprovalCenterController::class, 'stats']);
     Route::get('/', [ApprovalCenterController::class, 'index']);
     // 财务审批
-    Route::prefix('finance')->group(function () {
+    Route::prefix('finance')->middleware('permission:approval.mine|finance.view')->group(function () {
         Route::get('/', [FinanceApprovalController::class, 'index']);
         Route::post('/', [FinanceApprovalController::class, 'store']);
-        Route::post('{approval}/approve', [FinanceApprovalController::class, 'approve']);
-        Route::post('{approval}/reject', [FinanceApprovalController::class, 'reject']);
-        Route::post('{approval}/forward', [FinanceApprovalController::class, 'forward']);
+        Route::post('{approval}/approve', [FinanceApprovalController::class, 'approve'])->middleware('permission:finance.approve');
+        Route::post('{approval}/reject', [FinanceApprovalController::class, 'reject'])->middleware('permission:finance.approve');
+        Route::post('{approval}/forward', [FinanceApprovalController::class, 'forward'])->middleware('permission:finance.approve');
         Route::get('{approval}', [FinanceApprovalController::class, 'show']);
     });
     // 运营审批
-    Route::prefix('operation')->group(function () {
+    Route::prefix('operation')->middleware('permission:approval.mine')->group(function () {
         Route::get('/', [OperationApprovalController::class, 'index']);
         Route::post('/', [OperationApprovalController::class, 'store']);
         Route::post('{approval}/approve', [OperationApprovalController::class, 'approve']);
@@ -226,12 +226,12 @@ Route::prefix('approvals')->middleware(['auth:sanctum'])->withoutMiddleware(['en
         Route::get('{approval}', [OperationApprovalController::class, 'show']);
     });
     // 项目审批
-    Route::prefix('project')->group(function () {
+    Route::prefix('project')->middleware('permission:approval.mine|project.view')->group(function () {
         Route::get('/', [ProjectApprovalController::class, 'index']);
         Route::post('/', [ProjectApprovalController::class, 'store']);
-        Route::post('{approval}/approve', [ProjectApprovalController::class, 'approve']);
-        Route::post('{approval}/reject', [ProjectApprovalController::class, 'reject']);
-        Route::post('{approval}/forward', [ProjectApprovalController::class, 'forward']);
+        Route::post('{approval}/approve', [ProjectApprovalController::class, 'approve'])->middleware('permission:project.edit');
+        Route::post('{approval}/reject', [ProjectApprovalController::class, 'reject'])->middleware('permission:project.edit');
+        Route::post('{approval}/forward', [ProjectApprovalController::class, 'forward'])->middleware('permission:project.edit');
         Route::get('{approval}', [ProjectApprovalController::class, 'show']);
     });
 });
@@ -245,12 +245,12 @@ Route::prefix('follow-ups')->middleware(['auth:sanctum', 'ensure_business'])->gr
 Route::prefix('warranties')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.view'])->group(function () {
     Route::get('expiring', [WarrantyController::class, 'expiring']);
     Route::get('/', [WarrantyController::class, 'index']);
-    Route::post('/', [WarrantyController::class, 'store']);
-    Route::post('/{id}/renew', [WarrantyController::class, 'renew'])->where('id', '[0-9]+');
-    Route::post('/{id}/terminate', [WarrantyController::class, 'terminate'])->where('id', '[0-9]+');
+    Route::post('/', [WarrantyController::class, 'store'])->middleware('permission:project.edit');
+    Route::post('/{id}/renew', [WarrantyController::class, 'renew'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/terminate', [WarrantyController::class, 'terminate'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::get('/{id}', [WarrantyController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [WarrantyController::class, 'update'])->where('id', '[0-9]+');
-    Route::delete('/{id}', [WarrantyController::class, 'destroy'])->where('id', '[0-9]+');
+    Route::put('/{id}', [WarrantyController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::delete('/{id}', [WarrantyController::class, 'destroy'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 
 // 质保期服务工单

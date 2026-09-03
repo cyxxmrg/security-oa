@@ -184,7 +184,7 @@ Route::prefix('step-photos')->middleware(['auth:sanctum', 'ensure_business', 'pe
 });
 
 // 维修成本归集
-Route::prefix('repair-cost')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('repair-cost')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view|finance.view'])->group(function () {
     Route::get('overview', [RepairCostSummaryController::class, 'overview']);
     Route::get('by-month', [RepairCostSummaryController::class, 'byMonth']);
     Route::get('by-project', [RepairCostSummaryController::class, 'byProject']);
