@@ -46,7 +46,8 @@ import { get } from '@/utils/request'
 
 const loading = ref(false)
 const activeTab = ref('overview')
-const stats = ref<Record<string, unknown> | null>(null)
+interface ServiceStats { totalOrders?: number; completedOrders?: number; slaRate?: number; avgResponse?: number; avgRating?: number }
+const stats = ref<ServiceStats | null>(null)
 
 const avgRating = computed(() => Number(stats.value?.avgRating ?? 0))
 
@@ -64,7 +65,7 @@ async function loadStats() {
   loading.value = true
   try {
     const res = await get('/service/stats')
-    stats.value = res.data || res
+    stats.value = (res.data || res) as ServiceStats
   } catch (e) {
     console.error('[loadStats]', e)
     stats.value = null

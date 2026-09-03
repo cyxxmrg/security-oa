@@ -62,11 +62,11 @@
         </el-table-column>
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'pending'"  link type="warning" size="small" @click="handleDispatch(row)">派单</el-button>
-            <el-button v-if="row.status === 'assigned'" link type="primary" size="small" @click="handleDispatch(row)">改派</el-button>
-            <el-button v-if="row.status === 'assigned'" link type="success" size="small" @click="handleStart(row)">开始</el-button>
-            <el-button v-if="row.status === 'in_progress'" link type="primary" size="small" @click="handleComplete(row)">完成</el-button>
-            <el-button v-if="row.status === 'completed'" link type="info" size="small" @click="handleReassign(row)">重新指派</el-button>
+            <el-button v-if="row.status === 'pending'"  link type="warning" size="small" @click="handleDispatch(row as unknown as ServiceRow)">派单</el-button>
+            <el-button v-if="row.status === 'assigned'" link type="primary" size="small" @click="handleDispatch(row as unknown as ServiceRow)">改派</el-button>
+            <el-button v-if="row.status === 'assigned'" link type="success" size="small" @click="handleStart(row as unknown as ServiceRow)">开始</el-button>
+            <el-button v-if="row.status === 'in_progress'" link type="primary" size="small" @click="handleComplete(row as unknown as ServiceRow)">完成</el-button>
+            <el-button v-if="row.status === 'completed'" link type="info" size="small" @click="handleReassign(row as unknown as ServiceRow)">重新指派</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -233,7 +233,7 @@ function handleCreate() { router.push('/service/create') }
 
 // ===== 派单 =====
 const showDispatchDialog = ref(false)
-const dispatchingRow = ref<Record<string, unknown> | null>(null)
+const dispatchingRow = ref<ServiceRow | null>(null)
 const assignedUserId = ref<number | null>(null)
 const dispatchLoading = ref(false)
 
@@ -299,7 +299,7 @@ async function handleComplete(row: ServiceRow) {
 // ===== 重新指派（已完成的工单） =====
 async function handleReassign(row: ServiceRow) {
   try {
-    const { value: confirm } = await ElMessageBox.confirm(
+    const confirm = await ElMessageBox.confirm(
       `确认将工单「${row.order_no}」重新指派给其他维修人员？\n原指派人：${row.assigned_user?.name || row.assignedUser?.name || '—'}\n完成时间：${row.completed_at || '—'}`,
       '重新指派',
       { type: 'warning', confirmButtonText: '继续指派' }

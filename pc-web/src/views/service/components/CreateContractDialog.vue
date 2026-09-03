@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type UploadFile, type UploadFiles } from 'element-plus'
 import { get, post } from '@/utils/request'
 import { unwrapItem, unwrapList } from '@/utils/response'
 
@@ -117,11 +117,11 @@ const form = ref({
 const uploadRef = ref()
 const filePreviewUrl = ref('')
 
-const onFileChange = (file: { raw?: File; url?: string; name: string; size: number }) => {
+const onFileChange = (file: UploadFile, _files?: UploadFiles) => {
   const maxSize = 10 * 1024 * 1024 // 10MB
-  if (file.size > maxSize) {
+  if ((file.size ?? 0) > maxSize) {
     ElMessage.warning('文件大小不能超过 10MB')
-    return false
+    return
   }
   form.value.contract_file_name = file.name
   const reader = new FileReader()
@@ -130,7 +130,7 @@ const onFileChange = (file: { raw?: File; url?: string; name: string; size: numb
     filePreviewUrl.value = form.value.contract_file
   }
   if (file.raw) reader.readAsDataURL(file.raw)
-  return false
+  return
 }
 
 const removeFile = () => {

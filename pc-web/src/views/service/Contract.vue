@@ -36,7 +36,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleView(row)">查看</el-button>
+            <el-button link type="primary" size="small" @click="handleView(row as unknown as MaintenanceContract)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -64,7 +64,7 @@
         <el-descriptions-item label="起始日期">{{ detailRow.start_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="截止日期">{{ detailRow.end_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="合同状态" :span="2">
-          <el-tag :type="contractStatusType(detailRow.status)">{{ statusLabel(detailRow.status) }}</el-tag>
+          <el-tag :type="contractStatusType(detailRow.status || '')">{{ statusLabel(detailRow.status || '') }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item v-if="detailRow.remark" label="备注" :span="2">
           <div style="white-space: pre-wrap;">{{ detailRow.remark }}</div>
@@ -93,6 +93,17 @@ const statusOptions = [
 ]
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
+interface MaintenanceContract {
+  id: number
+  contract_no?: string
+  customer?: { name?: string } | null
+  amount?: number | string
+  inspect_freq?: string
+  start_date?: string
+  end_date?: string
+  status?: string
+  remark?: string
+}
 
 const statusLabel = (s: string) => statusOptions.find(o => o.value === s)?.label || s
 const contractStatusType = (s: string): TagType => {
@@ -105,7 +116,7 @@ const contractStatusType = (s: string): TagType => {
 }
 
 const searchForm = ref({ keyword: '', status: '' })
-const list = ref<Record<string, unknown>[]>([])
+const list = ref<MaintenanceContract[]>([])
 const loading = ref(false)
 const pagination = reactive({ page: 1, per_page: 15, total: 0 })
 const showCreate = ref(false)
@@ -119,7 +130,7 @@ async function loadList(page = 1) {
     const res = await get('/service/maintenance-contracts', params)
     // V0.6.3: res = {code, data: paginator}
     const pag = unwrapPaginate(res)
-    list.value = pag.list
+    list.value = pag.list as MaintenanceContract[]
     pagination.total = pag.total
   } catch (e) {
     console.error('[loadList]', e)
@@ -136,8 +147,8 @@ function resetSearch() {
 }
 
 const showDetailDialog = ref(false)
-const detailRow = ref<Record<string, unknown> | null>(null)
-const handleView = (row: Record<string, unknown>) => {
+const detailRow = ref<MaintenanceContract | null>(null)
+const handleView = (row: MaintenanceContract) => {
   detailRow.value = row
   showDetailDialog.value = true
 }
