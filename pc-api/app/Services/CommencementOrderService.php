@@ -28,15 +28,15 @@ class CommencementOrderService
      */
     public function generateCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "COMM-{$year}-";
-        $latest = ProjectCommencementOrder::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')
-            ->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "commencement-order:{$year}",
+            fn () => (int) ProjectCommencementOrder::where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'COMM-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -157,7 +157,7 @@ class CommencementOrderService
     public function submitForApproval(int $orderId): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId) {
-            $order = ProjectCommencementOrder::findOrFail($orderId);
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_DRAFT) {
                 throw new \RuntimeException('只有草稿状态可提交审批');
             }
@@ -176,7 +176,7 @@ class CommencementOrderService
     public function approve(int $orderId, int $approverId, ?string $comment = null): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $approverId, $comment) {
-            $order = ProjectCommencementOrder::findOrFail($orderId);
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
                 throw new \RuntimeException('只有待审批状态可审批');
             }
@@ -199,7 +199,7 @@ class CommencementOrderService
     public function reject(int $orderId, int $approverId, string $reason): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $approverId, $reason) {
-            $order = ProjectCommencementOrder::findOrFail($orderId);
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
                 throw new \RuntimeException('只有待审批状态可驳回');
             }
@@ -229,7 +229,7 @@ class CommencementOrderService
     public function startWork(int $orderId, array $data = []): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $data) {
-            $order = ProjectCommencementOrder::findOrFail($orderId);
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_APPROVED) {
                 throw new \RuntimeException('只有已批准状态可开工');
             }
@@ -250,7 +250,7 @@ class CommencementOrderService
     public function complete(int $orderId, array $data = []): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $data) {
-            $order = ProjectCommencementOrder::findOrFail($orderId);
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_IN_PROGRESS) {
                 throw new \RuntimeException('只有施工中状态可完工');
             }

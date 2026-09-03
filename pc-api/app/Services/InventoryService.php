@@ -1038,16 +1038,17 @@ class InventoryService
      */
     public function nextRecordNo(string $prefix = 'OUT'): string
     {
-        $today = date('Ymd');
+        $today = now()->format('Ymd');
         $fullPrefix = "{$prefix}-{$today}-";
-        $this->lockNumberGenerator("stock-record:{$prefix}:{$today}");
-        $lastNo = StockRecord::where('record_no', 'like', $fullPrefix . '%')
-            ->orderByDesc('id')
-            ->value('record_no');
-        $lastSequence = $lastNo && str_starts_with($lastNo, $fullPrefix)
-            ? (int) substr($lastNo, strlen($fullPrefix))
-            : 0;
-        return $fullPrefix . str_pad((string) ($lastSequence + 1), 4, '0', STR_PAD_LEFT);
+        $next = NumberSequenceService::next(
+            "stock-record:{$prefix}:{$today}",
+            fn () => (int) StockRecord::where('record_no', 'like', $fullPrefix . '%')
+                ->pluck('record_no')
+                ->map(fn (string $recordNo): int => (int) substr($recordNo, strlen($fullPrefix)))
+                ->max()
+        );
+
+        return $fullPrefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -1305,15 +1306,24 @@ class InventoryService
      */
     public function nextAssetNumber(): string
     {
-        $prefix = 'GD-' . date('Ymd') . '-';
-        $this->lockNumberGenerator('fixed-asset:' . date('Ymd'));
-        $toolMax  = Tool::where('fixed_asset_no', 'like', $prefix . '%')->max('fixed_asset_no');
-        $assetMax = FixedAsset::where('asset_no', 'like', $prefix . '%')->max('asset_no');
-        $extract = function (?string $no) use ($prefix): int {
-            if (!$no || !str_starts_with($no, $prefix)) return 0;
-            return (int) substr($no, strlen($prefix));
-        };
-        $next = max($extract($toolMax), $extract($assetMax)) + 1;
+        $today = now()->format('Ymd');
+        $prefix = "GD-{$today}-";
+        $next = NumberSequenceService::next(
+            "fixed-asset:{$today}",
+            function () use ($prefix): int {
+                $toolMax = Tool::where('fixed_asset_no', 'like', $prefix . '%')
+                    ->pluck('fixed_asset_no')
+                    ->map(fn (string $assetNo): int => (int) substr($assetNo, strlen($prefix)))
+                    ->max() ?? 0;
+                $assetMax = FixedAsset::where('asset_no', 'like', $prefix . '%')
+                    ->pluck('asset_no')
+                    ->map(fn (string $assetNo): int => (int) substr($assetNo, strlen($prefix)))
+                    ->max() ?? 0;
+
+                return max($toolMax, $assetMax);
+            }
+        );
+
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
