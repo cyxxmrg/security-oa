@@ -26,7 +26,7 @@
       node-key="id"
       highlight-current
       :expand-on-click-node="false"
-      @node-click="(d: Record<string, unknown>) => $emit('filter-category', d.id)"
+      @node-click="(d: Record<string, unknown>) => $emit('filter-category', Number(d.id))"
       empty-text="暂无分类，点击右上角新增"
     >
       <template #default="{ data }">
@@ -53,12 +53,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Plus, Files, Folder, MoreFilled } from '@element-plus/icons-vue'
+import type { Category } from '../composables/useKnowledge'
 
 const props = defineProps<{
   catLoading: boolean
-  categories: Record<string, unknown>[]
+  categories: Category[]
   currentCategoryId: number | null
-  currentCategory: Record<string, unknown>
+  currentCategory: Category | null
   totalCount: number
 }>()
 

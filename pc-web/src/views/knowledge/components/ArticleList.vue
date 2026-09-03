@@ -56,23 +56,24 @@
 
 <script setup lang="ts">
 import { Search, User, Calendar, View } from '@element-plus/icons-vue'
+import type { Article, Category } from '../composables/useKnowledge'
 
 defineProps<{
   keyword: string
-  articles: Record<string, unknown>[]
+  articles: Article[]
   loading: boolean
   total: number
   page: number
   pageSize: number
-  currentCategory: Record<string, unknown>
+  currentCategory: Category | null
 }>()
 const emit = defineEmits<{
   (e: 'update:keyword', v: string): void
   (e: 'search'): void
   (e: 'clearCategory'): void
-  (e: 'open', item: Record<string, unknown>): void
-  (e: 'edit', item: Record<string, unknown>): void
-  (e: 'delete', item: Record<string, unknown>): void
+  (e: 'open', item: Article): void
+  (e: 'edit', item: Article): void
+  (e: 'delete', item: Article): void
   (e: 'pageChange', p: number): void
   (e: 'sizeChange', s: number): void
 }>()

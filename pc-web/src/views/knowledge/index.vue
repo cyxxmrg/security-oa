@@ -17,7 +17,7 @@
           :total-count="totalCount"
           @category-action="onCategoryAction"
           @filter-category="filterByCategory"
-          @node-action="onNodeAction"
+          @node-action="(cmd: string, data: Record<string, unknown>) => onNodeAction(cmd, data as unknown as Category)"
         />
       </el-col>
       <el-col :span="19">
@@ -31,7 +31,7 @@
           :current-category="currentCategory"
           @search="() => { page = 1; loadArticles() }"
           @clear-category="filterByCategory(null)"
-          @open="openArticle"
+          @open="(item: Article) => openArticle(item)"
           @edit="openPublishDialog"
           @delete="handleDelete"
           @page-change="(p: number) => { page = p; loadArticles() }"
@@ -143,6 +143,7 @@ import CategoryFormDialog from './components/CategoryFormDialog.vue'
 import ArticleList from './components/ArticleList.vue'
 import { useKnowledge } from './composables/useKnowledge'
 import CategoryTreePanel from './components/CategoryTreePanel.vue'
+import type { Article, Category } from './composables/useKnowledge'
 
 const {
   keyword, currentCategoryId, page, pageSize, total, loading, catLoading, saving,

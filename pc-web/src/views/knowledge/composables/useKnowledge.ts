@@ -1,11 +1,11 @@
 // 知识库页 composable — 数据加载 / 文章发布 / 分类管理
 // 从 knowledge/index.vue <script setup> 抽出, 主组件 + 子组件共享
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type UploadFile, type UploadFiles, type UploadUserFile } from 'element-plus'
 import { get, post, put, del } from '@/utils/request'
 import { unwrapList } from '@/utils/response'
 
-interface Article {
+export interface Article {
   id: number
   title: string
   summary?: string
@@ -17,9 +17,12 @@ interface Article {
   published_at?: string
   created_at?: string
   view_count?: number
+  content_type?: 'text' | 'file'
+  file_name?: string
+  file_url?: string
 }
 
-interface Category {
+export interface Category {
   id: number
   name: string
   parent_id?: number | null
@@ -28,7 +31,6 @@ interface Category {
   articles_count?: number
 }
 interface RequestError { response?: { data?: { message?: string } }; message?: string }
-interface UploadFile { name: string; size: number; status?: string; raw?: Blob; [key: string]: unknown }
 
 export function useKnowledge() {
   const keyword = ref('')
@@ -58,7 +60,7 @@ export function useKnowledge() {
     catLoading.value = true
     try {
       const res = await get('/knowledge/categories')
-      categories.value = unwrapList(res)
+    categories.value = unwrapList(res) as Category[]
     } catch (e) {
       console.error('加载分类失败', e)
       categories.value = []
@@ -78,7 +80,7 @@ export function useKnowledge() {
       const list = Array.isArray(payload?.data) ? payload.data
                 : Array.isArray(payload)        ? payload
                 : []
-      articles.value = list
+      articles.value = list as Article[]
       total.value = Number(payload?.total ?? list.length)
     } catch (e) {
       ElMessage.error('加载文章失败')
@@ -93,7 +95,7 @@ export function useKnowledge() {
     loadArticles()
   }
 
-  function openArticle(item: Article & Record<string, unknown>) {
+  function openArticle(item: Article) {
     if (item.content_type === 'file') {
       const fileName = item.file_name || item.title || '(未知文件)'
       const fileUrl = item.file_url || '#'
@@ -121,7 +123,7 @@ export function useKnowledge() {
     categoryPath: null as number | null,
     status: 'published' as 'published' | 'draft',
     content_type: 'text' as 'text' | 'file',
-    fileList: [] as Record<string, unknown>[],
+    fileList: [] as UploadUserFile[],
   })
 
   const publishRules = computed(() => ({
@@ -144,30 +146,30 @@ export function useKnowledge() {
   const acceptTypes = ALLOWED_EXTS.map(e => `.${e}`).join(',')
   const MAX_SIZE = 50 * 1024 * 1024
 
-  function formatSize(bytes: number) {
+  function formatSize(bytes?: number) {
     if (!bytes && bytes !== 0) return '-'
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB'
     return (bytes/1024/1024).toFixed(1) + ' MB'
   }
 
-  function handleFileChange(file: UploadFile) {
+  function handleFileChange(file: UploadFile, _files?: UploadFiles) {
     const ext = (file.name.split('.').pop() || '').toLowerCase()
     if (!ALLOWED_EXTS.includes(ext)) {
       ElMessage.error(`不支持的文件格式：.${ext}，仅支持 PDF / Word / Excel / PPT / 图片 / TXT / MD`)
       file.status = 'fail'
-      return false
+      return
     }
-    if (file.size > MAX_SIZE) {
+    if ((file.size ?? 0) > MAX_SIZE) {
       ElMessage.error(`文件「${file.name}」超过 50MB 限制`)
       file.status = 'fail'
-      return false
+      return
     }
-    form.fileList = [file]
+    form.fileList = [{ name: file.name, size: file.size, raw: file.raw, url: file.url }]
     if (!form.title.trim() && form.content_type === 'file') {
       form.title = file.name.replace(/\.[^.]+$/, '')
     }
-    return true
+    return
   }
 
   function handleExceed() {

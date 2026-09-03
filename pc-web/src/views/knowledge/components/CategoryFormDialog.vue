@@ -20,7 +20,7 @@
       <el-form-item v-if="showIconField" label="分类图标">
         <el-radio-group
           :model-value="icon"
-          @update:model-value="(v: string) => emit('update:icon', v)"
+          @update:model-value="(v: string | number | boolean | undefined) => emit('update:icon', String(v ?? ''))"
         >
           <el-radio label="folder">📁 默认</el-radio>
           <el-radio label="📚">📚 学习</el-radio>
