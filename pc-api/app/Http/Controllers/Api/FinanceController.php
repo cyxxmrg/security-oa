@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Http\Middleware\EnforcePaginationLimit;
@@ -448,8 +449,8 @@ class FinanceController extends Controller
                     'remark' => $data['remark'] ?? '一次性收完',
                 ]);
                 if (!empty($data['account_id'])) {
-                    $account = FinanceAccount::lockForUpdate()->find($data['account_id']);
-                    if ($account) $account->increment('balance', $amount);
+                    $account = $this->lockActiveAccount((int) $data['account_id']);
+                    $account->increment('balance', $amount);
                 }
             }
             $receivable->update([
@@ -528,6 +529,13 @@ class FinanceController extends Controller
         }
 
         return $account;
+    }
+
+    private function lockActiveAccount(int $accountId): FinanceAccount
+    {
+        return FinanceAccount::where('status', 'active')
+            ->lockForUpdate()
+            ->findOrFail($accountId);
     }
 
     // ===== 资金账户 =====
@@ -748,16 +756,28 @@ class FinanceController extends Controller
         $data['payment_date'] = $data['payment_date'] ?? $data['transfer_date'] ?? now()->toDateString();
         $amount = (float)$data['amount'];
         $result = DB::transaction(function () use ($data, $amount) {
-            $from = FinanceAccount::lockForUpdate()->find($data['from_account_id']);
-            $to = FinanceAccount::lockForUpdate()->find($data['to_account_id']);
-            if ((float)$from->balance < $amount) {
+            $accountIds = [(int) $data['from_account_id'], (int) $data['to_account_id']];
+            sort($accountIds, SORT_NUMERIC);
+            $accounts = FinanceAccount::whereIn('id', $accountIds)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            if ($accounts->count() !== 2) {
+                throw ValidationException::withMessages([
+                    'from_account_id' => '转账账户必须存在且处于启用状态',
+                ]);
+            }
+            $from = $accounts->get((int) $data['from_account_id']);
+            $to = $accounts->get((int) $data['to_account_id']);
+            if ((float)$from->balance + 0.0001 < $amount) {
                 abort(response()->json(['code' => 1006, 'message' => '转出账户余额不足'], 422));
             }
             $from->decrement('balance', $amount);
             $to->increment('balance', $amount);
             $remark = $data['remark'] ?? "内部转账: {$from->name} → {$to->name}";
             // V1.2.16: 同一笔转账共享 transfer_group_id, 用于列表聚合
-            $transferGroupId = 'TRF-' . date('Ymd') . '-' . str_pad((string)random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+            $transferGroupId = 'TRF-' . Str::uuid()->toString();
             $outPayment = FinancePayment::create([
                 'account_id' => $from->id,
                 'amount' => -$amount, // 负数表示转出
@@ -883,7 +903,7 @@ class FinanceController extends Controller
                 $data['tax_amount'] = round($amount * $taxRate / 100, 2);
             }
             if (!isset($data['total_amount'])) {
-                $data['total_amount'] = round((float)$data['amount'] + (float)$data['tax_amount'], 2);
+                $data['total_amount'] = round($amount + (float) $data['tax_amount'], 2);
             }
         }
         $invoice->update($data);
@@ -1016,13 +1036,12 @@ class FinanceController extends Controller
             'remark' => 'nullable|string|max:255',
         ]);
 
-        $receivable = ReceivableModel::findOrFail($data['receivable_id']);
         $amount = (float)$data['amount'];
-        $remaining = (float)($receivable->remaining_amount ?? ($receivable->amount - ($receivable->received_amount ?? 0)));
         // V1.2.16 fix: 允许预付款(超过应收的收款), 移除超收限制
         // if ($amount - $remaining > 0.0001) { ... }
 
-        $payment = DB::transaction(function () use ($data, $amount, $receivable) {
+        $payment = DB::transaction(function () use ($data, $amount) {
+            $receivable = ReceivableModel::lockForUpdate()->findOrFail($data['receivable_id']);
             $payment = FinancePayment::create($data);
             $newReceived = (float)$receivable->received_amount + $amount;
             // V1.2.16 fix: 去掉 max(0,) 截断, remaining_amount 允许负数表示预付款
@@ -1034,8 +1053,8 @@ class FinanceController extends Controller
                 'status' => $newStatus,
             ]);
             if (!empty($data['account_id'])) {
-                $account = FinanceAccount::lockForUpdate()->find($data['account_id']);
-                if ($account) $account->increment('balance', $amount);
+                $account = $this->lockActiveAccount((int) $data['account_id']);
+                $account->increment('balance', $amount);
             }
             return $payment;
         });
