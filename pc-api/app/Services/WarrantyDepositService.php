@@ -76,6 +76,11 @@ class WarrantyDepositService
             $depositAmount = isset($data['deposit_amount']) && $data['deposit_amount'] !== null
                 ? round((float) $data['deposit_amount'], 2)
                 : round($contractAmount * $depositRate / 100, 2);
+            $expectedDepositAmount = round($contractAmount * $depositRate / 100, 2);
+
+            if (abs($depositAmount - $expectedDepositAmount) > 0.01) {
+                throw new \RuntimeException('质保金金额必须等于合同金额 × 质保金比例');
+            }
 
             $deposit = WarrantyDeposit::create([
                 'project_id'      => (int) $data['project_id'],
@@ -108,7 +113,7 @@ class WarrantyDepositService
     public function partialRelease(int $id, float $amount, string $reason, int $userId): WarrantyDeposit
     {
         return DB::transaction(function () use ($id, $amount, $reason, $userId) {
-            $deposit = WarrantyDeposit::whereNull('deleted_at')->findOrFail($id);
+            $deposit = WarrantyDeposit::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if (!in_array($deposit->status, [
                 WarrantyDeposit::STATUS_HELD,
@@ -155,7 +160,7 @@ class WarrantyDepositService
     public function fullRelease(int $id, int $userId): WarrantyDeposit
     {
         return DB::transaction(function () use ($id, $userId) {
-            $deposit = WarrantyDeposit::whereNull('deleted_at')->findOrFail($id);
+            $deposit = WarrantyDeposit::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if (!in_array($deposit->status, [
                 WarrantyDeposit::STATUS_HELD,
@@ -166,8 +171,10 @@ class WarrantyDepositService
                 );
             }
 
+            $releaseAmount = $this->calcBalance($deposit);
+
             $deposit->update([
-                'release_amount' => (float) $deposit->deposit_amount,
+                'release_amount' => round((float) $deposit->release_amount + $releaseAmount, 2),
                 'status'         => WarrantyDeposit::STATUS_FULLY_RELEASED,
                 'release_date'   => $deposit->release_date ?? now()->toDateString(),
                 'approved_by'    => $deposit->approved_by ?: $userId,
@@ -184,7 +191,7 @@ class WarrantyDepositService
     public function forfeit(int $id, float $amount, string $reason, int $userId): WarrantyDeposit
     {
         return DB::transaction(function () use ($id, $amount, $reason, $userId) {
-            $deposit = WarrantyDeposit::whereNull('deleted_at')->findOrFail($id);
+            $deposit = WarrantyDeposit::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
             if (!in_array($deposit->status, [
                 WarrantyDeposit::STATUS_HELD,

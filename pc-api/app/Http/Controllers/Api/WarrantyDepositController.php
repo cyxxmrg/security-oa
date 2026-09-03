@@ -102,38 +102,39 @@ class WarrantyDepositController extends Controller
         ]);
 
         try {
-            $before = WarrantyDeposit::findOrFail($id);
-            $beforeStatus = $before->status;
+            $deposit = DB::transaction(function () use ($id, $validated, $request) {
+                $before = WarrantyDeposit::lockForUpdate()->findOrFail($id);
+                $beforeStatus = $before->status;
+                $deposit = $this->service->partialRelease($id, (float) $validated['amount'], $validated['reason'], $request->user()->id);
 
-            $deposit = $this->service->partialRelease($id, (float) $validated['amount'], $validated['reason'], $request->user()->id);
+                WarrantyDepositLog::create([
+                    'deposit_id'      => $id,
+                    'operation_type'  => 'partial_release',
+                    'amount'          => $validated['amount'],
+                    'before_status'   => $beforeStatus,
+                    'after_status'    => $deposit->status,
+                    'bank_account_id' => $validated['bank_account_id'] ?? null,
+                    'beneficiary'     => $validated['beneficiary'] ?? null,
+                    'reason'          => $validated['reason'],
+                    'operator_id'     => $request->user()->id,
+                ]);
 
-            // 写操作记录
-            WarrantyDepositLog::create([
-                'deposit_id'      => $id,
-                'operation_type'  => 'partial_release',
-                'amount'          => $validated['amount'],
-                'before_status'   => $beforeStatus,
-                'after_status'    => $deposit->status,
-                'bank_account_id' => $validated['bank_account_id'] ?? null,
-                'beneficiary'     => $validated['beneficiary'] ?? null,
-                'reason'          => $validated['reason'],
-                'operator_id'     => $request->user()->id,
-            ]);
-
-            // 同步到资金账户：创建收款记录并增加余额
-            if (!empty($validated['bank_account_id'])) {
-                DB::transaction(function () use ($validated, $request) {
+                if (!empty($validated['bank_account_id'])) {
+                    $account = FinanceAccount::where('status', 'active')
+                        ->lockForUpdate()
+                        ->findOrFail($validated['bank_account_id']);
                     FinancePayment::create([
-                        'account_id'   => $validated['bank_account_id'],
+                        'account_id'   => $account->id,
                         'amount'       => $validated['amount'],
                         'payment_date' => now()->toDateString(),
                         'method'       => 'bank_transfer',
                         'remark'       => '质保金释放: ' . ($validated['reason'] ?? ''),
                     ]);
-                    FinanceAccount::where('id', $validated['bank_account_id'])
-                        ->increment('balance', (float) $validated['amount']);
-                });
-            }
+                    $account->increment('balance', (float) $validated['amount']);
+                }
+
+                return $deposit;
+            });
 
             return response()->json(['code' => 0, 'data' => $deposit, 'message' => '部分释放成功']);
         } catch (\Throwable $e) {
@@ -152,40 +153,39 @@ class WarrantyDepositController extends Controller
         $validated['reason'] = $request->input('reason', '全部释放');
 
         try {
-            $before = WarrantyDeposit::findOrFail($id);
-            $beforeStatus = $before->status;
+            $deposit = DB::transaction(function () use ($id, $validated, $request) {
+                $before = WarrantyDeposit::lockForUpdate()->findOrFail($id);
+                $beforeStatus = $before->status;
+                $releaseAmount = max(0, (float) $before->deposit_amount - (float) $before->release_amount - (float) $before->forfeit_amount);
+                $deposit = $this->service->fullRelease($id, $request->user()->id);
 
-            $deposit = $this->service->fullRelease($id, $request->user()->id);
+                WarrantyDepositLog::create([
+                    'deposit_id'      => $id,
+                    'operation_type'  => 'full_release',
+                    'amount'          => $releaseAmount,
+                    'before_status'   => $beforeStatus,
+                    'after_status'    => $deposit->status,
+                    'bank_account_id' => $validated['bank_account_id'] ?? null,
+                    'beneficiary'     => $validated['beneficiary'] ?? null,
+                    'operator_id'     => $request->user()->id,
+                ]);
 
-            // 写操作记录
-            $remaining = (float) $before->deposit_amount - (float) $before->release_amount - (float) $before->forfeit_amount;
-            $releaseAmount = max(0, $remaining);
-
-            WarrantyDepositLog::create([
-                'deposit_id'      => $id,
-                'operation_type'  => 'full_release',
-                'amount'          => $releaseAmount,
-                'before_status'   => $beforeStatus,
-                'after_status'    => $deposit->status,
-                'bank_account_id' => $validated['bank_account_id'] ?? null,
-                'beneficiary'     => $validated['beneficiary'] ?? null,
-                'operator_id'     => $request->user()->id,
-            ]);
-
-            // 同步到资金账户：创建收款记录并增加余额
-            if (!empty($validated['bank_account_id'])) {
-                DB::transaction(function () use ($validated, $releaseAmount, $request) {
+                if (!empty($validated['bank_account_id']) && $releaseAmount > 0) {
+                    $account = FinanceAccount::where('status', 'active')
+                        ->lockForUpdate()
+                        ->findOrFail($validated['bank_account_id']);
                     FinancePayment::create([
-                        'account_id'   => $validated['bank_account_id'],
+                        'account_id'   => $account->id,
                         'amount'       => $releaseAmount,
                         'payment_date' => now()->toDateString(),
                         'method'       => 'bank_transfer',
                         'remark'       => '质保金释放: ' . ($validated['reason'] ?? '全部释放'),
                     ]);
-                    FinanceAccount::where('id', $validated['bank_account_id'])
-                        ->increment('balance', (float) $releaseAmount);
-                });
-            }
+                    $account->increment('balance', (float) $releaseAmount);
+                }
+
+                return $deposit;
+            });
 
             return response()->json(['code' => 0, 'data' => $deposit, 'message' => '全部释放成功']);
         } catch (\Throwable $e) {
@@ -203,21 +203,23 @@ class WarrantyDepositController extends Controller
         ]);
 
         try {
-            $before = WarrantyDeposit::findOrFail($id);
-            $beforeStatus = $before->status;
+            $deposit = DB::transaction(function () use ($id, $validated, $request) {
+                $before = WarrantyDeposit::lockForUpdate()->findOrFail($id);
+                $beforeStatus = $before->status;
+                $deposit = $this->service->forfeit($id, (float) $validated['amount'], $validated['reason'], $request->user()->id);
 
-            $deposit = $this->service->forfeit($id, (float) $validated['amount'], $validated['reason'], $request->user()->id);
+                WarrantyDepositLog::create([
+                    'deposit_id'     => $id,
+                    'operation_type' => 'forfeit',
+                    'amount'         => $validated['amount'],
+                    'before_status'  => $beforeStatus,
+                    'after_status'   => $deposit->status,
+                    'reason'         => $validated['reason'],
+                    'operator_id'    => $request->user()->id,
+                ]);
 
-            // 写操作记录
-            WarrantyDepositLog::create([
-                'deposit_id'     => $id,
-                'operation_type' => 'forfeit',
-                'amount'         => $validated['amount'],
-                'before_status'  => $beforeStatus,
-                'after_status'   => $deposit->status,
-                'reason'         => $validated['reason'],
-                'operator_id'    => $request->user()->id,
-            ]);
+                return $deposit;
+            });
 
             return response()->json(['code' => 0, 'data' => $deposit, 'message' => '质保金已没收']);
         } catch (\Throwable $e) {
