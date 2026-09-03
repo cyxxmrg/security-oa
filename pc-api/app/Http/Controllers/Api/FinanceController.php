@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use App\Http\Middleware\EnforcePaginationLimit;
 
 class FinanceController extends Controller
@@ -98,10 +99,10 @@ class FinanceController extends Controller
                 'type'          => 'standalone',
             ]);
 
-        // V1.2.12o: 自动扣减资金账户余额
+            // V1.2.12o: 自动扣减资金账户余额
             if (!empty($data['account_id'])) {
-                $account = \App\Models\FinanceAccount::lockForUpdate()->find($data['account_id']);
-                if ($account) $account->decrement('balance', $data['amount']);
+                $account = $this->lockAccountForDebit((int) $data['account_id'], (float) $data['amount']);
+                $account->decrement('balance', (float) $data['amount']);
             }
 
         // V1.2.16: 更新供应商应付账款 (两表同步: payables + supplier_payables)
@@ -496,8 +497,8 @@ class FinanceController extends Controller
             ]);
             // 出账从资金账户扣减
             if (!empty($data['account_id'])) {
-                $account = FinanceAccount::lockForUpdate()->find($data['account_id']);
-                if ($account) $account->decrement('balance', $amount);
+                $account = $this->lockAccountForDebit((int) $data['account_id'], $amount);
+                $account->decrement('balance', $amount);
             }
             return $payment;
         });
@@ -512,6 +513,21 @@ class FinanceController extends Controller
             ->orderByDesc('id')
             ->get();
         return response()->json(['code' => 0, 'data' => $list]);
+    }
+
+    private function lockAccountForDebit(int $accountId, float $amount): FinanceAccount
+    {
+        $account = FinanceAccount::where('status', 'active')
+            ->lockForUpdate()
+            ->findOrFail($accountId);
+
+        if ((float) $account->balance + 0.0001 < $amount) {
+            throw ValidationException::withMessages([
+                'account_id' => "资金账户余额不足，当前余额为 {$account->balance}",
+            ]);
+        }
+
+        return $account;
     }
 
     // ===== 资金账户 =====
