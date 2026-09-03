@@ -83,47 +83,48 @@ class FinanceApprovalController extends Controller
     public function approve(Request $request, ApprovalRecord $approval): JsonResponse
     {
         abort_unless($approval->type === 'finance', 404, '资源不存在或参数错误');
-        if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-            return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-        }
-        if (!$this->canCurrentUserApprove($approval)) {
-            return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
-        }
-
-        $comment = $request->input('comment', '同意');
-        $user = $request->user();
-
-        // 按模板推进审批流程（非模板/最后节点才标记 approved）
-        $flowService = app(ApprovalFlowService::class);
-        $result = $flowService->advanceFlow($approval, $user, $comment);
-
-        $approval->flow = $result['flow'];
-        $approval->status = $result['status'];
-        $approval->current_approver_id = $result['current_approver_id'];
-        $approval->comment = $comment;
-        $approval->save();
-
-        // 只有最终 approved 时才同步业务表
-        if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
-            try {
-                $payload = $approval->payload ?? [];
-                if ($approval->sub_type === 'expense' && !empty($payload['claim_id'])) {
-                    \App\Models\ExpenseClaim::where('id', $payload['claim_id'])
-                        ->where('status', 'submitted')
-                        ->update([
-                            'status'        => 'approved',
-                            'approver_id'   => $user->id,
-                            'approved_at'   => now(),
-                            'reject_reason' => null,
-                        ]);
+        try {
+            return \DB::transaction(function () use ($request, $approval) {
+                $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+                if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                    return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
                 }
-            } catch (\Throwable $e) {
-                \Log::error('FinanceApprovalController::approve sync business status failed', ['msg' => $e->getMessage()]);
-            }
-        }
+                if (!$this->canCurrentUserApprove($approval)) {
+                    return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
+                }
 
-        $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部审批节点已完成）' : '已通过，已转交下一节点';
-        return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status]]);
+                $comment = $request->input('comment', '同意');
+                $user = $request->user();
+                $flowService = app(ApprovalFlowService::class);
+                $result = $flowService->advanceFlow($approval, $user, $comment);
+
+                $approval->flow = $result['flow'];
+                $approval->status = $result['status'];
+                $approval->current_approver_id = $result['current_approver_id'];
+                $approval->comment = $comment;
+                $approval->save();
+
+                if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
+                    $payload = $approval->payload ?? [];
+                    if ($approval->sub_type === 'expense' && !empty($payload['claim_id'])) {
+                        \App\Models\ExpenseClaim::where('id', $payload['claim_id'])
+                            ->where('status', 'submitted')
+                            ->update([
+                                'status'        => 'approved',
+                                'approver_id'   => $user->id,
+                                'approved_at'   => now(),
+                                'reject_reason' => null,
+                            ]);
+                    }
+                }
+
+                $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部审批节点已完成）' : '已通过，已转交下一节点';
+                return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status]]);
+            });
+        } catch (\Throwable $e) {
+            \Log::error(__METHOD__ . ': approve failed', ['msg' => $e->getMessage()]);
+            return response()->json(['code' => 1, 'message' => '审批失败: ' . $e->getMessage()], 422);
+        }
     }
 
     public function reject(Request $request, ApprovalRecord $approval): JsonResponse
