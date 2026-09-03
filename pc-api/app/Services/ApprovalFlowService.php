@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\ApprovalRecord;
 use App\Models\ApprovalTemplate;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
+use DomainException;
 
 /**
  * 审批流程执行器 — 连接设计器模板与实际审批执行
@@ -35,19 +35,35 @@ class ApprovalFlowService
         'referral_settlement'  => '报销',
     ];
 
+    const TYPE_MODULE_MAP = [
+        'finance'   => '财务',
+        'operation' => '运营',
+        'project'   => '项目',
+    ];
+
     /**
      * 根据 sub_type 查找启用的流程模板
      */
-    public function resolveTemplate(string $subType): ?ApprovalTemplate
+    public function resolveTemplate(string $subType, ?string $type = null): ?ApprovalTemplate
     {
-        $module = self::MODULE_MAP[$subType] ?? null;
-        if (!$module) return null;
+        $modules = array_values(array_unique(array_filter([
+            $subType,
+            self::MODULE_MAP[$subType] ?? null,
+            $type ? (self::TYPE_MODULE_MAP[$type] ?? null) : null,
+        ])));
 
-        return ApprovalTemplate::where('module', $module)
-            ->where('enabled', true)
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->first();
+        foreach ($modules as $module) {
+            $template = ApprovalTemplate::where('module', $module)
+                ->where('enabled', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->first();
+            if ($template) {
+                return $template;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -56,7 +72,7 @@ class ApprovalFlowService
     public function getApprovalSteps(ApprovalTemplate $template): array
     {
         $steps = is_array($template->steps) ? $template->steps : [];
-        return array_values(array_filter($steps, fn($s) => ($s['type'] ?? '') === 'approval'));
+        return array_values(array_filter($steps, fn($s) => in_array($s['type'] ?? '', ['approval', 'approve'], true)));
     }
 
     /**
@@ -65,12 +81,13 @@ class ApprovalFlowService
      * @param ApprovalTemplate $template  匹配的模板
      * @param User $applicant  申请人
      * @param string $comment  提交说明
-     * @return array ['current_approver_id' => int|null, 'flow' => array]
+     * @return array ['current_approver_id' => int, 'flow' => array, 'definition' => array]
      */
     public function initFlow(ApprovalTemplate $template, User $applicant, string $comment = '提交申请'): array
     {
         $approvalSteps = $this->getApprovalSteps($template);
-        $firstApprover = null;
+        $approverIds = $this->configuredApproverIds($approvalSteps, $template->name);
+        $firstApprover = $approverIds[0];
         $flow = [];
 
         // 记录提交动作
@@ -82,26 +99,24 @@ class ApprovalFlowService
         ];
 
         // 设置第一个审批节点
-        if (!empty($approvalSteps)) {
-            $firstStep = $approvalSteps[0];
-            $firstApprover = null;
-            if (!empty($firstStep['approver'])) {
-                $firstApprover = (int) $firstStep['approver'];
-            }
-            // 记录待审批节点
-            $flow[] = [
-                'operator'   => $firstStep['name'] ?? '审批节点',
-                'action'     => 'pending',
-                'time'       => now()->toDateTimeString(),
-                'comment'    => '等待审批: ' . ($firstStep['desc'] ?? ''),
-                'step_index' => 0,
-                'step_name'  => $firstStep['name'] ?? '',
-            ];
-        }
+        $firstStep = $approvalSteps[0];
+        $flow[] = [
+            'operator'   => $firstStep['name'] ?? '审批节点',
+            'action'     => 'pending',
+            'time'       => now()->toDateTimeString(),
+            'comment'    => '等待审批: ' . ($firstStep['desc'] ?? ''),
+            'step_index' => 0,
+            'step_name'  => $firstStep['name'] ?? '',
+        ];
 
         return [
             'current_approver_id' => $firstApprover,
             'flow'                => $flow,
+            'definition'          => [
+                'template_id'   => $template->id,
+                'template_name' => $template->name,
+                'steps'         => $approvalSteps,
+            ],
         ];
     }
 
@@ -129,15 +144,15 @@ class ApprovalFlowService
             }
         }
 
-        // 查找模板，确定下一节点
-        $template = $this->resolveTemplate($record->sub_type ?? '');
-        $approvalSteps = $template ? $this->getApprovalSteps($template) : [];
+        // 使用审批单创建时固化的流程，确定下一节点
+        [$approvalSteps, $templateName] = $this->recordApprovalSteps($record);
+        $approverIds = $this->configuredApproverIds($approvalSteps, $templateName);
         $nextStepIndex = $currentStepIndex + 1;
 
         if ($nextStepIndex < count($approvalSteps)) {
             // 有下一审批节点
             $nextStep = $approvalSteps[$nextStepIndex];
-            $nextApprover = !empty($nextStep['approver']) ? (int) $nextStep['approver'] : null;
+            $nextApprover = $approverIds[$nextStepIndex];
             $flow[] = [
                 'operator'   => $nextStep['name'] ?? '审批节点',
                 'action'     => 'pending',
@@ -178,6 +193,62 @@ class ApprovalFlowService
             }
         }
         return 0;
+    }
+
+    /**
+     * 校验模板每个审批节点都指向有效用户，避免生成无人可处理的待审批单。
+     *
+     * @return array<int, int>
+     */
+    private function configuredApproverIds(array $approvalSteps, string $templateName): array
+    {
+        if ($approvalSteps === []) {
+            throw new DomainException("审批模板「{$templateName}」未配置审批节点");
+        }
+
+        $approverIds = [];
+        foreach ($approvalSteps as $index => $step) {
+            $approverId = (int) ($step['approver'] ?? $step['approver_user_id'] ?? 0);
+            if ($approverId < 1) {
+                $stepName = $step['name'] ?? ('第' . ($index + 1) . '个审批节点');
+                throw new DomainException("审批模板「{$templateName}」的{$stepName}未指定审批人");
+            }
+            $approverIds[] = $approverId;
+        }
+
+        $activeApproverIds = User::query()
+            ->whereIn('id', array_values(array_unique($approverIds)))
+            ->where('status', 'active')
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+        $inactiveApproverIds = array_diff(array_unique($approverIds), $activeApproverIds);
+        if ($inactiveApproverIds !== []) {
+            throw new DomainException('审批模板包含不存在或已停用的审批人: ' . implode(', ', $inactiveApproverIds));
+        }
+
+        return $approverIds;
+    }
+
+    /**
+     * 读取审批单创建时固化的流程；历史审批单没有快照时再回退到当前模板。
+     *
+     * @return array{0: array, 1: string}
+     */
+    private function recordApprovalSteps(ApprovalRecord $record): array
+    {
+        $payload = is_array($record->payload) ? $record->payload : [];
+        $definition = $payload['_approval_flow'] ?? null;
+        if (is_array($definition) && is_array($definition['steps'] ?? null)) {
+            return [$definition['steps'], (string) ($definition['template_name'] ?? '历史审批流程')];
+        }
+
+        $template = $this->resolveTemplate($record->sub_type ?? '', $record->type ?? null);
+        if (!$template) {
+            throw new DomainException('未找到该审批单对应的流程模板');
+        }
+
+        return [$this->getApprovalSteps($template), $template->name];
     }
 
     /**

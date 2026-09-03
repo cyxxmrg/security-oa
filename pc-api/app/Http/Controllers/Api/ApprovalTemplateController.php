@@ -72,30 +72,39 @@ class ApprovalTemplateController extends Controller
     public function store(StoreApprovalTemplateRequest $request): JsonResponse
     {
         $data = $request->validated();
-        // 兼容前端传 nodes (第一步表单用 nodes 字段)
-        $data['steps'] = $data['steps'] ?? ($request->input('nodes', []));
-        $data['enabled']    = $data['enabled'] ?? true;
+        $data['steps'] = $this->normalizeSteps($data['steps'] ?? $data['nodes'] ?? []);
+        unset($data['nodes']);
+        $data['enabled']    = $data['enabled'] ?? ($request->input('status') !== '停用');
         $data['sort_order'] = $data['sort_order'] ?? 0;
         $data['created_by'] = $request->user()?->id;
 
         $t = ApprovalTemplate::create($data);
-        Cache::forget('approval-templates:all');
+        $this->forgetTemplateCache($t->module);
         return response()->json(['code' => 0, 'message' => '流程模板已创建', 'data' => ['id' => $t->id]]);
     }
 
     public function update(StoreApprovalTemplateRequest $request, ApprovalTemplate $approvalTemplate): JsonResponse
     {
         $data = $request->validated();
-        $data['steps'] = $data['steps'] ?? ($request->input('nodes', $approvalTemplate->steps));
+        if (array_key_exists('steps', $data) || array_key_exists('nodes', $data)) {
+            $data['steps'] = $this->normalizeSteps($data['steps'] ?? $data['nodes']);
+        }
+        unset($data['nodes']);
+        if ($request->has('status') && !array_key_exists('enabled', $data)) {
+            $data['enabled'] = $request->input('status') !== '停用';
+        }
+        $data['updated_by'] = $request->user()?->id;
+        $previousModule = $approvalTemplate->module;
         $approvalTemplate->fill($data)->save();
-        Cache::forget('approval-templates:all');
+        $this->forgetTemplateCache($approvalTemplate->module, $previousModule);
         return response()->json(['code' => 0, 'message' => '流程模板已更新']);
     }
 
     public function destroy(ApprovalTemplate $approvalTemplate): JsonResponse
     {
+        $module = $approvalTemplate->module;
         $approvalTemplate->delete();
-        Cache::forget('approval-templates:all');
+        $this->forgetTemplateCache($module);
         return response()->json(['code' => 0, 'message' => '流程模板已删除']);
     }
 
@@ -104,8 +113,30 @@ class ApprovalTemplateController extends Controller
         $newEnabled = ! $approvalTemplate->enabled;
         $approvalTemplate->enabled = $newEnabled;
         $approvalTemplate->save();
-        Cache::forget('approval-templates:all');
+        $this->forgetTemplateCache($approvalTemplate->module);
         $label = $newEnabled ? '启用' : '停用';
         return response()->json(['code' => 0, 'message' => "已切换为{$label}", 'data' => ['status' => $label, 'enabled' => $newEnabled]]);
+    }
+
+    private function normalizeSteps(array $steps): array
+    {
+        return array_values(array_map(static function (array $step): array {
+            return [
+                'id'       => $step['id'] ?? null,
+                'type'     => $step['type'] ?? 'approval',
+                'name'     => $step['name'] ?? '',
+                'desc'     => $step['desc'] ?? '',
+                'approver' => isset($step['approver']) ? (int) $step['approver'] : (isset($step['approver_user_id']) ? (int) $step['approver_user_id'] : null),
+                'position' => $step['position'] ?? null,
+            ];
+        }, $steps));
+    }
+
+    private function forgetTemplateCache(string ...$modules): void
+    {
+        Cache::forget('approval-templates:all');
+        foreach (array_unique(array_filter($modules)) as $module) {
+            Cache::forget('approval-templates:' . $module);
+        }
     }
 }

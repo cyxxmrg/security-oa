@@ -255,7 +255,7 @@ const filteredList = computed(() => list.value.filter(item => {
   return true
 }))
 
-const canApprove = (row: ApprovalItem) => row.status === 'pending' && Number(row.currentApproverId) === Number(myId.value)
+const canApprove = (row: ApprovalItem) => row.status === 'pending' && (isAdmin.value || (Number(row.currentApproverId) === Number(myId.value) && !isSelfSubmitted(row)))
 // V1.2.7k: 系统账号可越权审批, 否则申请人不能审批自己的单子
 const isSelfSubmitted = (row: ApprovalItem) => Number(row.applicantId) === Number(myId.value)
 // 注入当前用户 id 供 canApprove 比较 (后端返回 current_approver_id 是数字, 前端没 myId)

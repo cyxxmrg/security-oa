@@ -203,11 +203,35 @@ trait HandlesApproval
         if (($user->is_system ?? false) === true || ($user->user_type ?? null) === 'system') {
             return true;
         }
+        if ((int) $r->applicant_id === (int) $user->id) {
+            return false;
+        }
         // 当前审批人命中
         if ((int) $r->current_approver_id === (int) $user->id) {
             return true;
         }
         return false;
+    }
+
+    protected function resolveTransferTarget(ApprovalRecord $approval, string $target): User
+    {
+        $target = trim($target);
+        $targetUser = User::query()
+            ->where('status', 'active')
+            ->where(function ($query) use ($target) {
+                $query->where('username', $target)->orWhere('name', $target);
+            })
+            ->orderBy('id')
+            ->first();
+
+        if (!$targetUser) {
+            abort(422, '未找到可用的转交目标用户');
+        }
+        if ((int) $targetUser->id === (int) $approval->applicant_id) {
+            abort(422, '不能将审批转交给申请人');
+        }
+
+        return $targetUser;
     }
 
     protected function nextCode(string $prefix): string

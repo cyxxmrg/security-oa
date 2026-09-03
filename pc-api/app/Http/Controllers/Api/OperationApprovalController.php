@@ -7,7 +7,6 @@ use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
 use App\Models\OvertimeRequest;
 use App\Models\PurchaseRequirement;
-use App\Models\User;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,8 +44,18 @@ class OperationApprovalController extends Controller
             'cc'         => 'nullable|array',
         ]);
 
-        $userId = $request->user()?->id;
-        $record = \DB::transaction(function () use ($data, $userId) {
+        $applicant = $request->user();
+        abort_unless($applicant, 401, '登录状态已失效');
+
+        try {
+            $record = \DB::transaction(function () use ($data, $applicant) {
+            $flowService = app(ApprovalFlowService::class);
+            $template = $flowService->resolveTemplate($data['sub_type'], 'operation');
+            if (!$template) {
+                throw new \DomainException('未找到该审批类型的启用流程模板，请先在审批流程引擎中配置');
+            }
+            $flowData = $flowService->initFlow($template, $applicant, '提交运营审批');
+
             return ApprovalRecord::create([
             'code'         => $this->nextCode('OPS'),
             'type'         => 'operation',
@@ -56,18 +65,16 @@ class OperationApprovalController extends Controller
             'status'       => ApprovalRecord::STATUS_PENDING,
             'start_date'   => $data['start_date'] ?? null,
             'end_date'     => $data['end_date'] ?? null,
-            'applicant_id' => $userId,
-            'current_approver_id' => 1,
-            'payload'      => $data['payload'] ?? [],
-            'flow'         => [[
-                'operator' => User::find($userId)?->name ?? '—',
-                'action'   => 'submit',
-                'time'     => now()->toDateTimeString(),
-                'comment'  => '提交申请',
-            ]],
+            'applicant_id' => $applicant->id,
+            'current_approver_id' => $flowData['current_approver_id'],
+            'payload'      => array_merge($data['payload'] ?? [], ['_approval_flow' => $flowData['definition']]),
+            'flow'         => $flowData['flow'],
             'cc'           => $data['cc'] ?? [],
             ]);
-        });
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
             'code'    => 0,
@@ -214,13 +221,14 @@ class OperationApprovalController extends Controller
                 return response()->json(['code' => 1, 'message' => '当前用户无权转交该单'], 403);
             }
 
-            $this->appendFlow($approval, 'transfer', "转交给 {$target}");
-            $approval->current_approver_id = null;
-            $approval->status  = ApprovalRecord::STATUS_TRANSFERRED;
-            $approval->comment = "已转交：{$target}";
+            $targetUser = $this->resolveTransferTarget($approval, $target);
+            $this->appendFlow($approval, 'transfer', "转交给 {$targetUser->name}");
+            $approval->current_approver_id = $targetUser->id;
+            $approval->status  = ApprovalRecord::STATUS_PENDING;
+            $approval->comment = "已转交：{$targetUser->name}";
             $approval->save();
 
-            return response()->json(['code' => 0, 'message' => "已转交 {$target}"]);
+            return response()->json(['code' => 0, 'message' => "已转交 {$targetUser->name}"]);
         });
     }
 

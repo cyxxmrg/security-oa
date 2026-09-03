@@ -12,6 +12,9 @@
           <el-option label="全部" value="" />
           <el-option label="请假" value="请假" />
           <el-option label="报销" value="报销" />
+          <el-option label="财务" value="财务" />
+          <el-option label="运营" value="运营" />
+          <el-option label="项目" value="项目" />
           <el-option label="出差" value="出差" />
           <el-option label="采购" value="采购" />
           <el-option label="合同" value="合同" />
@@ -69,6 +72,9 @@
           <el-select v-model="form.module" placeholder="请选择" style="width:100%">
             <el-option label="请假" value="请假" />
             <el-option label="报销" value="报销" />
+            <el-option label="财务" value="财务" />
+            <el-option label="运营" value="运营" />
+            <el-option label="项目" value="项目" />
             <el-option label="出差" value="出差" />
             <el-option label="采购" value="采购" />
             <el-option label="合同" value="合同" />
@@ -150,7 +156,7 @@ const pagedTemplates = computed(() => {
 })
 
 function moduleTagType(module: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' {
-  const map: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { '请假': 'warning', '报销': 'danger', '出差': 'info', '采购': 'primary', '合同': 'success' }
+  const map: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { '请假': 'warning', '报销': 'danger', '财务': 'danger', '运营': 'info', '项目': 'success', '出差': 'info', '采购': 'primary', '合同': 'success' }
   return map[module] || 'info'
 }
 
@@ -234,16 +240,28 @@ async function handleSave() {
     // 从画布获取节点数据
     const editorData = flowEditorRef.value?.getNodeData()
     const nodes = (editorData?.nodes || []).map((n: any) => ({
+      id: n.id,
       name: n.label || n.name || '',
       desc: n.desc || '',
       type: n.type || 'approval',
       approver: n.approver || null,
+      position: n.position,
     }))
+    const approvalNodes = nodes.filter((node: any) => node.type === 'approval')
+    if (!approvalNodes.length) {
+      ElMessage.warning('请至少配置一个审批节点')
+      return
+    }
+    if (approvalNodes.some((node: any) => !node.approver)) {
+      ElMessage.warning('请为每个审批节点指定审批人')
+      return
+    }
     const payload = {
       name: form.name,
       module: form.module,
       description: form.description,
       nodes: nodes,
+      enabled: form.status === '启用',
     }
     if (editingId.value) {
       await put(`/approval-templates/${editingId.value}`, payload)
