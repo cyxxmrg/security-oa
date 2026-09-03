@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, type UploadAjaxError, type UploadRequestOptions } from 'element-plus'
+import { ElMessage, type UploadRequestOptions } from 'element-plus'
 import { get, post } from '@/utils/request'
 import { exportExcelLike } from '@/utils/exporter'
 import { onboardings } from '@/api/modules'
@@ -255,10 +255,10 @@ async function handleRenewUpload(opt: UploadRequestOptions) {
       opt.onSuccess?.(res)
       ElMessage.success('合同已上传')
     } else {
-      opt.onError?.(Object.assign(new Error(res?.message || '上传失败'), { status: 0 }) as UploadAjaxError)
+      opt.onError?.(Object.assign(new Error(res?.message || '上传失败'), { status: 0 }) as Parameters<NonNullable<UploadRequestOptions['onError']>>[0])
     }
   } catch (e: unknown) {
-    opt.onError?.(Object.assign(new Error((e as ApiError)?.message || '上传失败'), { status: 0 }) as UploadAjaxError)
+    opt.onError?.(Object.assign(new Error((e as ApiError)?.message || '上传失败'), { status: 0 }) as Parameters<NonNullable<UploadRequestOptions['onError']>>[0])
     const error = e as ApiError
     ElMessage.error(error.response?.data?.message || error.message || '上传失败')
   }
