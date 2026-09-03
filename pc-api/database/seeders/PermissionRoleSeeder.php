@@ -138,6 +138,14 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'repair.edit',   'label' => '返修记录编辑'],
             ['name' => 'repair.delete', 'label' => '返修记录删除'],
         ],
+        '售后服务' => [
+            ['name' => 'service.view',     'label' => '维修工单查看'],
+            ['name' => 'service.create',   'label' => '维修工单创建'],
+            ['name' => 'service.edit',     'label' => '维修工单编辑'],
+            ['name' => 'service.delete',   'label' => '维修工单删除'],
+            ['name' => 'service.dispatch', 'label' => '维修工单派单'],
+            ['name' => 'service.repair',   'label' => '维修工单转返修'],
+        ],
         '质保管理' => [
             ['name' => 'warranty.view', 'label' => '质保记录查看'],
         ],
@@ -210,7 +218,8 @@ class PermissionRoleSeeder extends Seeder
                     str_starts_with($n, 'vehicle.') ||
                     str_starts_with($n, 'process.') ||
                      str_starts_with($n, 'knowledge.') ||
-                     str_starts_with($n, 'repair.') ||
+                    str_starts_with($n, 'repair.') ||
+                    in_array($n, ['service.view', 'service.create', 'service.dispatch'], true) ||
                      $n === 'warranty.view' ||
                      str_starts_with($n, 'purchase') ||
                     str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||

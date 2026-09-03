@@ -82,36 +82,36 @@ Route::prefix('process')->middleware(['auth:sanctum', 'ensure_business'])->group
 });
 
 // ========== 巡检计划 ==========
-Route::prefix('inspections')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('inspections')->middleware(['auth:sanctum', 'ensure_business', 'permission:service.view|process.create|process.edit|process.approve'])->group(function () {
     Route::get('stats', [InspectionController::class, 'stats']);
     Route::get('overview', [InspectionController::class, 'overview']);
     Route::get('active-contracts', [InspectionController::class, 'activeContracts']);
-    Route::post('dev/create-contract', [InspectionController::class, 'createContract']);
+    Route::post('dev/create-contract', [InspectionController::class, 'createContract'])->middleware('permission:service.create|process.create');
     // 计划
     Route::get('plans', [InspectionController::class, 'index']);
-    Route::post('plans', [InspectionController::class, 'store']);
+    Route::post('plans', [InspectionController::class, 'store'])->middleware('permission:service.create|process.create');
     Route::get('plans/{id}', [InspectionController::class, 'show'])->whereNumber('id');
-    Route::put('plans/{id}', [InspectionController::class, 'update'])->whereNumber('id');
-    Route::delete('plans/{id}', [InspectionController::class, 'destroy'])->whereNumber('id');
-    Route::post('plans/{id}/toggle', [InspectionController::class, 'toggle'])->whereNumber('id');
-    Route::post('plans/{id}/cancel', [InspectionController::class, 'cancel'])->whereNumber('id');
-    Route::post('plans/{id}/generate', [InspectionController::class, 'generate'])->whereNumber('id');
+    Route::put('plans/{id}', [InspectionController::class, 'update'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::delete('plans/{id}', [InspectionController::class, 'destroy'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('plans/{id}/toggle', [InspectionController::class, 'toggle'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('plans/{id}/cancel', [InspectionController::class, 'cancel'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('plans/{id}/generate', [InspectionController::class, 'generate'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
     // 任务
     Route::get('tasks', [InspectionController::class, 'tasks']);
     Route::get('tasks/mine', [InspectionController::class, 'myTasks']);
     Route::get('tasks/{id}', [InspectionController::class, 'taskDetail'])->whereNumber('id');
-    Route::post('tasks/{id}/skip', [InspectionController::class, 'skip'])->whereNumber('id');
-    Route::post('tasks/{id}/checkin', [InspectionController::class, 'checkin'])->whereNumber('id');
+    Route::post('tasks/{id}/skip', [InspectionController::class, 'skip'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('tasks/{id}/checkin', [InspectionController::class, 'checkin'])->whereNumber('id')->middleware('permission:service.create|process.create');
     // 记录
     Route::get('records', [InspectionController::class, 'records']);
     Route::get('records/{id}', [InspectionController::class, 'recordDetail'])->whereNumber('id');
-    Route::post('records/{id}/checkout', [InspectionController::class, 'checkout'])->whereNumber('id');
+    Route::post('records/{id}/checkout', [InspectionController::class, 'checkout'])->whereNumber('id')->middleware('permission:service.create|process.create');
     // 异常
     Route::get('issues', [InspectionController::class, 'issues']);
     Route::get('issues/{id}', [InspectionController::class, 'issueDetail'])->whereNumber('id');
-    Route::post('issues/{id}/resolve', [InspectionController::class, 'resolveIssue'])->whereNumber('id');
-    Route::post('issues/{id}/ignore', [InspectionController::class, 'ignoreIssue'])->whereNumber('id');
-    Route::post('issues/{id}/convert-to-work-order', [InspectionController::class, 'convertIssue'])->whereNumber('id');
+    Route::post('issues/{id}/resolve', [InspectionController::class, 'resolveIssue'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('issues/{id}/ignore', [InspectionController::class, 'ignoreIssue'])->whereNumber('id')->middleware('permission:service.edit|process.edit');
+    Route::post('issues/{id}/convert-to-work-order', [InspectionController::class, 'convertIssue'])->whereNumber('id')->middleware('permission:service.repair|process.approve');
 });
 
 // ========== 维修工单 ==========
