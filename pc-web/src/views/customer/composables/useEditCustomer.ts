@@ -354,7 +354,8 @@ export function useEditCustomer(props: Props, emit: (e: 'update:modelValue', v: 
       onSaved()
       handleClose()
     } catch (e: unknown) {
-      const msg = e?.response?.data?.message || e?.message || '保存失败'
+      const error = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = error.response?.data?.message || error.message || '保存失败'
       ElMessage.error(msg)
     } finally {
       submitting.value = false

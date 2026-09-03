@@ -7,21 +7,11 @@ import { ref, computed, onMounted } from 'vue'
 import { get } from '@/utils/request'
 import FollowKpiCards from './components/FollowKpiCards.vue'
 import FollowFilterBar from './components/FollowFilterBar.vue'
-import FollowCalendarGrid, { type CalCell } from './components/FollowCalendarGrid.vue'
+import FollowCalendarGrid, { type CalCell, type FollowEvent } from './components/FollowCalendarGrid.vue'
 import FollowUpcomingList from './components/FollowUpcomingList.vue'
 import FollowDayDrawer from './components/FollowDayDrawer.vue'
 
 // ==================== 类型 ====================
-interface FollowEvent {
-  id?: number
-  scheduled_at?: string
-  status?: string
-  type?: string
-  customer_name?: string
-  content?: string
-  result?: string
-  [key: string]: unknown
-}
 interface RawUser {
   id: number
   name?: string

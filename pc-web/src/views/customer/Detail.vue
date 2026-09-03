@@ -76,7 +76,7 @@ import FollowTimelineTab from './components/detail/FollowTimelineTab.vue'
 import FollowDialog from './components/detail/FollowDialog.vue'
 import EditCustomerDialog from './components/detail/EditCustomerDialog.vue'
 
-import type { Customer, FollowForm, Project, ServiceOrder } from './components/detail/types'
+import type { Customer, FollowForm, FollowRecord, Project, ServiceOrder } from './components/detail/types'
 import { displayCategory, categoryType } from './components/detail/types'
 
 // v0.3.20 拆 customer/Detail.vue 555→200 (-64%)
@@ -90,7 +90,7 @@ const activeTab = ref('basic')
 const loading = ref(false)
 const submitting = ref(false)
 const customer = ref<Customer>({} as Customer)
-const followRecords = ref<Record<string, any>[]>([])
+const followRecords = ref<FollowRecord[]>([])
 
 async function loadAll() {
   loading.value = true
@@ -105,7 +105,7 @@ async function loadAll() {
     const data = await get(`/customers/${customerId}/follow-ups`)
     // V0.6.3: 后端 paginator {code, data: paginator}
     const d = data?.data ?? {}
-    followRecords.value = Array.isArray(d?.data) ? d.data : (Array.isArray(data) ? data : [])
+    followRecords.value = (Array.isArray(d?.data) ? d.data : (Array.isArray(data) ? data : [])) as FollowRecord[]
   } catch { /* toast */ }
 
   // v0.5.8.9 开票信息 (主表 GET 不带, 单独拉)
