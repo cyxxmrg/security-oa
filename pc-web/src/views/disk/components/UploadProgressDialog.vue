@@ -56,7 +56,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{ visible: boolean; queue: Record<string, unknown>[] }>()
+interface UploadQueueItem {
+  id: string
+  name: string
+  progress: number
+  status: 'uploading' | 'done' | 'error' | 'canceled'
+  error?: string
+  speed?: string
+  eta?: string
+}
+
+const props = defineProps<{ visible: boolean; queue: UploadQueueItem[] }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
   (e: 'close'): void
