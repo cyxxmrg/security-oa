@@ -25,10 +25,9 @@ class ExternalConstructionWork extends Model
     protected $table = 'external_construction_works';
 
     protected $fillable = [
-        'project_id', 'code', 'title', 'description',
-        'work_scope', 'work_quantity', 'unit', 'bid_type',
-        'budget_amount', 'bid_deadline', 'start_date', 'end_date',
-        'requirements', 'attachments',
+        'project_id', 'code', 'title',
+        'work_scope', 'estimated_budget', 'bid_deadline', 'start_date', 'end_date',
+        'required_skills', 'attachments',
         'status', 'awarded_supplier_id', 'awarded_bid_id',
         'awarded_at', 'awarded_by',
         'created_by', 'remark',

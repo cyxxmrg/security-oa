@@ -30,14 +30,14 @@ class ExternalConstructionService
      */
     public function generateWorkCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "ECW-{$year}-";
-        $latest = ExternalConstructionWork::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "external-construction-work:{$year}",
+            fn () => (int) ExternalConstructionWork::where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'ECW-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -46,14 +46,15 @@ class ExternalConstructionService
      */
     public function generateBidCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "ECWB-{$year}-";
-        $latest = ExternalConstructionBid::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "external-construction-bid:{$year}",
+            fn () => (int) ExternalConstructionBid::withTrashed()
+                ->where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'ECWB-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -67,16 +68,66 @@ class ExternalConstructionService
                 'project_id'        => $projectId,
                 'code'              => $this->generateWorkCode(),
                 'title'             => $data['title'],
-                'work_scope'        => $data['description']    ?? $data['work_scope']  ?? null,
-                'estimated_budget'  => $data['budget']         ?? $data['budget_amount'] ?? $data['estimated_budget'] ?? 0,
+                'work_scope'        => $data['work_scope']    ?? $data['description'] ?? null,
+                'estimated_budget'  => $data['estimated_budget'] ?? $data['budget'] ?? $data['budget_amount'] ?? 0,
                 'bid_deadline'      => $data['deadline']       ?? $data['bid_deadline'] ?? null,
                 'start_date'        => $data['start_date']     ?? null,
                 'end_date'          => $data['end_date']       ?? null,
-                'required_skills'   => $data['requirements']   ?? [],
+                'required_skills'   => $data['required_skills'] ?? $data['requirements'] ?? [],
                 'attachments'       => $data['attachments']    ?? [],
                 'status'            => $data['status']         ?? ExternalConstructionWork::STATUS_OPEN,
                 'created_by'        => $userId,
             ]);
+        });
+    }
+
+    public function updateWork(int $workId, array $data): ExternalConstructionWork
+    {
+        return DB::transaction(function () use ($workId, $data) {
+            $work = ExternalConstructionWork::lockForUpdate()->findOrFail($workId);
+            if (!in_array($work->status, [
+                ExternalConstructionWork::STATUS_DRAFT,
+                ExternalConstructionWork::STATUS_OPEN,
+            ], true)) {
+                throw new \RuntimeException('只有草稿或投标中的发包可编辑');
+            }
+
+            $payload = [];
+            if (array_key_exists('title', $data)) {
+                $payload['title'] = $data['title'];
+            }
+            if (array_key_exists('description', $data)) {
+                $payload['work_scope'] = $data['description'];
+            }
+            if (array_key_exists('work_scope', $data)) {
+                $payload['work_scope'] = $data['work_scope'];
+            }
+            if (array_key_exists('budget', $data)) {
+                $payload['estimated_budget'] = $data['budget'];
+            }
+            if (array_key_exists('estimated_budget', $data)) {
+                $payload['estimated_budget'] = $data['estimated_budget'];
+            }
+            if (array_key_exists('deadline', $data)) {
+                $payload['bid_deadline'] = $data['deadline'];
+            }
+            if (array_key_exists('bid_deadline', $data)) {
+                $payload['bid_deadline'] = $data['bid_deadline'];
+            }
+            if (array_key_exists('requirements', $data)) {
+                $payload['required_skills'] = is_array($data['requirements'])
+                    ? $data['requirements']
+                    : ($data['requirements'] === null ? null : [$data['requirements']]);
+            }
+            if (array_key_exists('required_skills', $data)) {
+                $payload['required_skills'] = $data['required_skills'];
+            }
+
+            if ($payload) {
+                $work->update($payload);
+            }
+
+            return $work->fresh();
         });
     }
 
@@ -90,7 +141,7 @@ class ExternalConstructionService
         array $data
     ): ExternalConstructionBid {
         return DB::transaction(function () use ($workId, $supplierId, $bidderUserId, $data) {
-            $work = ExternalConstructionWork::findOrFail($workId);
+            $work = ExternalConstructionWork::lockForUpdate()->findOrFail($workId);
             if ($work->status !== ExternalConstructionWork::STATUS_OPEN) {
                 throw new \RuntimeException('该发包已截止/取消,不可投标');
             }
@@ -122,6 +173,7 @@ class ExternalConstructionService
                 'work_id'             => $workId,
                 'supplier_id'         => $supplierId,
                 'bidder_user_id'      => $bidderUserId,
+                'code'                => $this->generateBidCode(),
                 'bid_amount'          => $bidAmount,
                 'bid_days'            => $bidDays,
                 'technical_proposal'  => $data['technical_proposal'] ?? $data['proposal'] ?? null,
@@ -141,7 +193,7 @@ class ExternalConstructionService
     public function shortlistBids(int $workId, array $bidIds, int $userId): int
     {
         return DB::transaction(function () use ($workId, $bidIds, $userId) {
-            $work = ExternalConstructionWork::findOrFail($workId);
+            $work = ExternalConstructionWork::lockForUpdate()->findOrFail($workId);
             if (!in_array($work->status, [
                 ExternalConstructionWork::STATUS_OPEN,
                 ExternalConstructionWork::STATUS_SHORTLIST,
@@ -153,8 +205,8 @@ class ExternalConstructionService
                 ->whereIn('id', $bidIds)
                 ->update([
                     'status'      => ExternalConstructionBid::STATUS_SHORTLISTED,
-                    'reviewed_by' => $userId,
-                    'reviewed_at' => now(),
+                    'evaluator_id' => $userId,
+                    'evaluated_at' => now(),
                 ]);
 
             if ($count > 0 && $work->status === ExternalConstructionWork::STATUS_OPEN) {
@@ -171,7 +223,7 @@ class ExternalConstructionService
     public function evaluateBid(int $bidId, float $score, ?string $comment, int $userId): ExternalConstructionBid
     {
         return DB::transaction(function () use ($bidId, $score, $comment, $userId) {
-            $bid = ExternalConstructionBid::findOrFail($bidId);
+            $bid = ExternalConstructionBid::lockForUpdate()->findOrFail($bidId);
             if ($bid->status === ExternalConstructionBid::STATUS_ACCEPTED) {
                 throw new \RuntimeException('已中标的投标不可再评标');
             }
@@ -180,11 +232,11 @@ class ExternalConstructionService
             }
 
             $bid->update([
-                'score'         => $score,
-                'score_comment' => $comment,
+                'evaluation_score'   => $score,
+                'evaluation_comment' => $comment,
                 'status'        => ExternalConstructionBid::STATUS_EVALUATED,
-                'reviewed_by'   => $userId,
-                'reviewed_at'   => now(),
+                'evaluator_id'  => $userId,
+                'evaluated_at'  => now(),
             ]);
 
             return $bid->fresh();
@@ -203,8 +255,8 @@ class ExternalConstructionService
     public function awardWork(int $workId, int $bidId, int $awardedBy): array
     {
         return DB::transaction(function () use ($workId, $bidId, $awardedBy) {
-            $work = ExternalConstructionWork::findOrFail($workId);
-            $bid  = ExternalConstructionBid::where('work_id', $workId)->findOrFail($bidId);
+            $work = ExternalConstructionWork::lockForUpdate()->findOrFail($workId);
+            $bid  = ExternalConstructionBid::where('work_id', $workId)->lockForUpdate()->findOrFail($bidId);
 
             if ($work->status === ExternalConstructionWork::STATUS_AWARDED) {
                 throw new \RuntimeException('该发包已定标');
@@ -236,11 +288,12 @@ class ExternalConstructionService
                 ->update(['status' => ExternalConstructionBid::STATUS_REJECTED]);
 
             // 4) 创建 supplier_payable (type=construction)
-            $payable = SupplierPayable::create([
+            $payable = SupplierPayable::firstOrCreate([
+                'source_type'  => 'construction',
+                'source_id'    => $bid->id,
+            ], [
                 'supplier_id'  => $bid->supplier_id,
                 'project_id'   => $work->project_id,
-                'source_type'  => 'construction',   // 大哥拍板
-                'source_id'    => $bid->id,
                 'ref_no'       => $work->code,
                 'amount'       => $bid->bid_amount,
                 'paid_amount'  => 0,
@@ -286,7 +339,7 @@ class ExternalConstructionService
     public function cancelWork(int $workId, ?string $reason = null): ExternalConstructionWork
     {
         return DB::transaction(function () use ($workId, $reason) {
-            $work = ExternalConstructionWork::findOrFail($workId);
+            $work = ExternalConstructionWork::lockForUpdate()->findOrFail($workId);
             if ($work->status === ExternalConstructionWork::STATUS_AWARDED) {
                 throw new \RuntimeException('已定标的发包不可取消');
             }
@@ -349,7 +402,7 @@ class ExternalConstructionService
         $total = (clone $q)->count();
         $page  = max(1, (int) ($filters['page'] ?? 1));
         $size  = min(100, max(1, (int) ($filters['per_page'] ?? 20)));
-        $items = $q->orderByDesc('score')->orderByDesc('id')->skip(($page - 1) * $size)->take($size)->get();
+        $items = $q->orderByDesc('evaluation_score')->orderByDesc('id')->skip(($page - 1) * $size)->take($size)->get();
 
         return ['items' => $items, 'total' => $total];
     }

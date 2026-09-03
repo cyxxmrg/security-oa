@@ -28,7 +28,7 @@ class ExternalConstructionBid extends Model
         'bid_amount', 'bid_quantity', 'unit_price',
         'lead_time_days', 'work_plan', 'team_size',
         'attachments', 'note',
-        'status', 'score', 'score_comment', 'reviewed_by', 'reviewed_at',
+        'status', 'evaluation_score', 'evaluation_comment', 'evaluator_id', 'evaluated_at',
         'submitted_at',
     ];
 
@@ -39,8 +39,8 @@ class ExternalConstructionBid extends Model
         'unit_price'     => 'decimal:2',
         'lead_time_days' => 'integer',
         'team_size'      => 'integer',
-        'score'          => 'decimal:2',
-        'reviewed_at'    => 'datetime',
+        'evaluation_score'   => 'decimal:2',
+        'evaluated_at'       => 'datetime',
         'submitted_at'   => 'datetime',
     ];
 
@@ -71,7 +71,7 @@ class ExternalConstructionBid extends Model
 
     public function reviewer(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'reviewed_by');
+        return $this->belongsTo(User::class, 'evaluator_id');
     }
 
     public function getStatusLabelAttribute(): string

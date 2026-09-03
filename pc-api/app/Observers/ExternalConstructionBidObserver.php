@@ -19,14 +19,7 @@ class ExternalConstructionBidObserver
     {
         $work = ExternalConstructionWork::find($bid->work_id);
         if ($work) {
-            $count = ExternalConstructionBid::where('work_id', $work->id)
-                ->whereNull('deleted_at')
-                ->count();
-            $work->update([
-                'last_bid_at' => now(),
-            ]);
-            // 冗余记录到 work.remark 不优雅, 这里仅刷新缓存字段
-            // bid_count 走 withCount('bids') 实时计算
+            $work->increment('bid_count');
         }
     }
 

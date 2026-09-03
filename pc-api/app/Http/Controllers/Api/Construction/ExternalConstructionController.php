@@ -36,23 +36,19 @@ class ExternalConstructionController extends Controller
             $filters['_all_projects'] = true;  // 标记给 service, 不要加 project_id 过滤
         }
         $result = $this->service->listWorks($projectId, $filters);
-        $items = $result['items'] ?? $result ?? collect();
-        if ($items instanceof \Illuminate\Database\Eloquent\Collection) {
-            $items = $items->all();
-        }
-        $page    = (int) $request->input('page', 1);
-        $perPage = (int) $request->input('per_page', 20);
-        $offset = ($page - 1) * $perPage;
-        $paged  = array_slice((array) $items, $offset, $perPage);
+        $items = $result['items'] ?? $result ?? [];
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = min(100, max(1, (int) $request->input('per_page', 20)));
+        $total = (int) ($result['total'] ?? count((array) $items));
 
         return response()->json([
             'code' => 0,
             'data' => [
-                'items'     => $paged,
-                'total'     => is_array($items) ? count($items) : 0,
+                'items'     => $items,
+                'total'     => $total,
                 'page'      => $page,
                 'per_page'  => $perPage,
-                'last_page' => (int) ceil(count((array) $items) / max(1, $perPage)),
+                'last_page' => (int) ceil($total / $perPage),
             ],
         ]);
     }
