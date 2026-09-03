@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * 采购付款申请 (Payment Request) — 5 端点
@@ -61,7 +62,7 @@ class PurchasePaymentRequestController extends Controller
         $data = $request->validate([
             'contract_id'   => 'required|integer|exists:purchase_contracts,id',
             'supplier_id'   => 'nullable|integer|exists:suppliers,id',
-            'amount'        => 'required|numeric|min:0',
+            'amount'        => 'required|numeric|min:0.01',
             'payment_type'  => 'nullable|string|in:full,advance,progress,retention',
             'request_date'  => 'nullable|date',
             'applicant'     => 'nullable|string|max:50',
@@ -72,77 +73,96 @@ class PurchasePaymentRequestController extends Controller
         $data['status']       = 'pending';
         $data['applicant_id'] = $request->user()->id;
 
-        // 若没传 supplier_id，从合同里取
-        if (empty($data['supplier_id']) && $contract = PurchaseContract::find($data['contract_id'])) {
+        $result = DB::transaction(function () use ($data) {
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($data['contract_id']);
+            if (in_array($contract->status, ['draft', 'cancelled'], true)) {
+                return ['error' => '合同当前状态不可申请付款'];
+            }
+            if (!empty($data['supplier_id']) && (int) $data['supplier_id'] !== (int) $contract->supplier_id) {
+                return ['error' => '付款申请供应商与合同不匹配'];
+            }
             $data['supplier_id'] = $contract->supplier_id;
+            $existingAmount = (float) PurchasePaymentRequest::where('contract_id', $contract->id)
+                ->whereIn('status', ['pending', 'approved', 'paid'])
+                ->sum('amount');
+            $amount = (float) $data['amount'];
+            if ((float) $contract->total_amount > 0 && $existingAmount + $amount - (float) $contract->total_amount > 0.0001) {
+                return ['error' => '付款申请金额超过合同未申请金额'];
+            }
+            return ['request' => PurchasePaymentRequest::create($data)];
+        });
+        if (isset($result['error'])) {
+            return response()->json(['code' => 1, 'message' => $result['error']], 422);
         }
-
-        $contract = $contract ?? PurchaseContract::findOrFail($data['contract_id']);
-        $existingAmount = (float) PurchasePaymentRequest::where('contract_id', $contract->id)
-            ->whereIn('status', ['pending', 'approved', 'paid'])
-            ->sum('amount');
-        $amount = (float) $data['amount'];
-        if ((float) $contract->total_amount > 0 && $existingAmount + $amount - (float) $contract->total_amount > 0.0001) {
-            return response()->json(['code' => 1, 'message' => '付款申请金额超过合同未申请金额'], 422);
-        }
-
-        $pr = PurchasePaymentRequest::create($data);
+        $pr = $result['request'];
         return response()->json(['code' => 0, 'data' => $pr]);
     }
 
     public function approve(Request $request, PurchasePaymentRequest $pr): JsonResponse
     {
-        if ($pr->status !== 'pending') {
-            return response()->json(['code' => 1, 'message' => '只有待审批状态可审批'], 409);
-        }
-
         $data = $request->validate([
             'decision' => 'required|string|in:approve,reject',
             'remark'   => 'nullable|string|max:500',
         ]);
 
-        $pr->update([
-            'status'         => $data['decision'] === 'approve' ? 'approved' : 'rejected',
-            'approver_id'    => $request->user()->id,
-            'approved_at'    => now(),
-            'approve_remark' => $data['remark'] ?? null,
-        ]);
-
-        try {
-            $approval = ApprovalRecord::where('type', 'finance')
-                ->where('sub_type', 'purchase_payment')
-                ->where('payload->payment_request_id', $pr->id)
-                ->first();
-            if ($approval) {
-                $user = User::find($request->user()->id);
-                $comment = $data['remark'] ?? ($data['decision'] === 'approve' ? '同意' : '驳回');
-                $flowService = app(ApprovalFlowService::class);
-
-                if ($data['decision'] === 'approve') {
-                    $result = $flowService->advanceFlow($approval, $user, $comment);
-                } else {
-                    $result = $flowService->rejectFlow($approval, $user, $comment);
-                }
-
-                $approval->flow = $result['flow'];
-                $approval->status = $result['status'];
-                $approval->current_approver_id = $result['current_approver_id'];
-                $approval->comment = $comment;
-                $approval->save();
+        $approved = DB::transaction(function () use ($pr, $data, $request) {
+            $locked = PurchasePaymentRequest::lockForUpdate()->findOrFail($pr->id);
+            if ($locked->status !== 'pending') {
+                return null;
             }
-        } catch (\Throwable $e) {
-            \Log::error('PurchasePaymentRequest::approve sync failed', ['msg' => $e->getMessage()]);
-        }
+            $locked->update([
+                'status'         => $data['decision'] === 'approve' ? 'approved' : 'rejected',
+                'approver_id'    => $request->user()->id,
+                'approved_at'    => now(),
+                'approve_remark' => $data['remark'] ?? null,
+            ]);
 
-        return response()->json(['code' => 0, 'data' => $pr->fresh()]);
+            try {
+                $approval = ApprovalRecord::where('type', 'finance')
+                    ->where('sub_type', 'purchase_payment')
+                    ->where('payload->payment_request_id', $locked->id)
+                    ->lockForUpdate()
+                    ->first();
+                if ($approval) {
+                    $user = $request->user();
+                    $comment = $data['remark'] ?? ($data['decision'] === 'approve' ? '同意' : '驳回');
+                    $flowService = app(ApprovalFlowService::class);
+                    $flowResult = $data['decision'] === 'approve'
+                        ? $flowService->advanceFlow($approval, $user, $comment)
+                        : $flowService->rejectFlow($approval, $user, $comment);
+                    $approval->flow = $flowResult['flow'];
+                    $approval->status = $flowResult['status'];
+                    $approval->current_approver_id = $flowResult['current_approver_id'];
+                    $approval->comment = $comment;
+                    $approval->save();
+                }
+            } catch (\Throwable $e) {
+                \Log::error('PurchasePaymentRequest::approve sync failed', ['msg' => $e->getMessage()]);
+            }
+            return $locked->fresh();
+        });
+        if (!$approved) {
+            return response()->json(['code' => 1, 'message' => '只有待审批状态可审批'], 409);
+        }
+        return response()->json(['code' => 0, 'data' => $approved]);
     }
 
     public function destroy(PurchasePaymentRequest $pr): JsonResponse
     {
-        if ($pr->status === 'paid') {
-            return response()->json(['code' => 1, 'message' => '已付款的申请不可删除'], 409);
+        $result = DB::transaction(function () use ($pr) {
+            $locked = PurchasePaymentRequest::lockForUpdate()->findOrFail($pr->id);
+            if ($locked->status === 'paid' || $locked->payments()->exists()) {
+                return '已付款的申请不可删除';
+            }
+            if ($locked->vouchers()->exists()) {
+                return '存在付款凭证的申请不可删除';
+            }
+            $locked->delete();
+            return null;
+        });
+        if ($result) {
+            return response()->json(['code' => 1, 'message' => $result], 409);
         }
-        $pr->delete();
         return response()->json(['code' => 0, 'data' => ['deleted' => true]]);
     }
 }

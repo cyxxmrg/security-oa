@@ -88,16 +88,12 @@ class PurchaseContractController extends Controller
         $data['signer_id'] = $request->user()->id;
         $data['signed_at'] = $data['signed_at'] ?? now()->toDateString();
 
-        $contract = PurchaseContract::create($data);
+        $contract = DB::transaction(fn () => PurchaseContract::create($data));
         return response()->json(['code' => 0, 'data' => $contract]);
     }
 
     public function update(Request $request, PurchaseContract $contract): JsonResponse
     {
-        if (in_array($contract->status, ['shipping', 'completed'])) {
-            return response()->json(['code' => 1, 'message' => '已开始发货/已完成的合同不可编辑'], 409);
-        }
-
         $data = $request->validate([
             'plan_id'           => 'nullable|integer|exists:purchase_plans,id',
             'project_id'        => 'nullable|integer|exists:projects,id',
@@ -109,33 +105,48 @@ class PurchaseContractController extends Controller
             'end_date'          => 'nullable|date|after_or_equal:start_date',
             'payment_terms'     => 'nullable|string|max:200',
             'delivery_address'  => 'nullable|string|max:200',
-            'status'            => 'sometimes|string|in:draft,signed,shipping,completed,cancelled',
             'signer'            => 'nullable|string|max:50',
             'remark'            => 'nullable|string',
         ]);
 
-        $contract->update($data);
-        return response()->json(['code' => 0, 'data' => $contract->fresh()]);
+        $updated = DB::transaction(function () use ($contract, $data) {
+            $locked = PurchaseContract::lockForUpdate()->findOrFail($contract->id);
+            if (in_array($locked->status, ['shipping', 'completed'])) {
+                return null;
+            }
+            $locked->update($data);
+            return $locked->fresh();
+        });
+        if (!$updated) {
+            return response()->json(['code' => 1, 'message' => '已开始发货/已完成的合同不可编辑'], 409);
+        }
+        return response()->json(['code' => 0, 'data' => $updated]);
     }
 
     public function destroy(PurchaseContract $contract): JsonResponse
     {
-        if ($contract->status === 'completed') {
-            return response()->json(['code' => 1, 'message' => '已完成的合同不可删除'], 409);
+        $result = DB::transaction(function () use ($contract) {
+            $locked = PurchaseContract::lockForUpdate()->findOrFail($contract->id);
+            if ($locked->status === 'completed') {
+                return '已完成的合同不可删除';
+            }
+            if ($locked->shipments()->exists()) {
+                return '存在关联发货单，请先清理';
+            }
+            if ($locked->paymentRequests()->exists() || $locked->payments()->exists() || $locked->files()->exists() || $locked->itemsList()->exists()) {
+                return '合同存在关联付款、附件或清单，不可删除';
+            }
+            $locked->delete();
+            return null;
+        });
+        if ($result) {
+            return response()->json(['code' => 1, 'message' => $result], 409);
         }
-        if ($contract->shipments()->exists()) {
-            return response()->json(['code' => 1, 'message' => '存在关联发货单，请先清理'], 409);
-        }
-        $contract->delete();
         return response()->json(['code' => 0, 'data' => ['deleted' => true]]);
     }
 
     public function ship(Request $request, PurchaseContract $contract): JsonResponse
     {
-        if (!in_array($contract->status, ['signed', 'shipping'])) {
-            return response()->json(['code' => 1, 'message' => '只有已签订/运输中的合同可发货'], 409);
-        }
-
         $data = $request->validate([
             'carrier'              => 'required|string|max:100',
             'tracking_no'          => 'nullable|string|max:100',
@@ -146,9 +157,13 @@ class PurchaseContractController extends Controller
         ]);
 
         $result = DB::transaction(function () use ($contract, $data) {
+            $locked = PurchaseContract::lockForUpdate()->findOrFail($contract->id);
+            if (!in_array($locked->status, ['signed', 'shipping'])) {
+                return null;
+            }
             $shipment = PurchaseShipment::create([
-                'contract_id'         => $contract->id,
-                'supplier_id'         => $contract->supplier_id,
+                'contract_id'         => $locked->id,
+                'supplier_id'         => $locked->supplier_id,
                 'shipped_at'          => $data['shipped_at']          ?? now()->toDateString(),
                 'expected_arrival_at' => $data['expected_arrival_at'] ?? null,
                 'carrier'             => $data['carrier'],
@@ -158,10 +173,13 @@ class PurchaseContractController extends Controller
                 'status'              => 'shipped',
             ]);
 
-            $contract->update(['status' => 'shipping']);
+            $locked->update(['status' => 'shipping']);
 
             return $shipment;
         });
+        if (!$result) {
+            return response()->json(['code' => 1, 'message' => '只有已签订/运输中的合同可发货'], 409);
+        }
 
         return response()->json(['code' => 0, 'data' => $result]);
     }

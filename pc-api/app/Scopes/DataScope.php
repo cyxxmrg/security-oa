@@ -69,6 +69,32 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'purchase_payment_requests':
+                return [
+                    ['applicant_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = purchase_payment_requests.contract_id AND (pc.signer_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = pc.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))))",
+                        $userId, $userId, $userId
+                    )],
+                ];
+
+            case 'purchase_payments':
+                return [
+                    ['operator_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = purchase_payments.contract_id AND (pc.signer_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = pc.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))))",
+                        $userId, $userId, $userId
+                    )],
+                ];
+
+            case 'purchase_shipments':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = purchase_shipments.contract_id AND (pc.signer_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = pc.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))))",
+                        $userId, $userId, $userId
+                    )],
+                ];
+
             case 'construction_logs':
                 return [
                     ['user_id', '=', $userId],

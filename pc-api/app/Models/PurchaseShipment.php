@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueCode;
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseShipment extends Model
 {
-    use HasFactory, GeneratesUniqueCode;
+    use HasFactory, HasDataScope, GeneratesUniqueCode;
 
     protected $fillable = [
         'code', 'contract_id', 'supplier_id', 'shipped_at', 'expected_arrival_at',

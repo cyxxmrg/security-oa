@@ -1024,7 +1024,10 @@ class PurchaseFlowService
     public function setShippingPlan(int $contractId, array $data, ?User $user = null): PurchaseShippingPlan
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
-            $contract = PurchaseContract::findOrFail($contractId);
+            $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            if (!in_array($contract->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
+                throw new \RuntimeException("合同当前状态 {$contract->status} 不可设置发货计划");
+            }
             $itemId = $data['contract_item_id'] ?? null;
             if ($itemId) {
                 PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->firstOrFail();
@@ -1050,7 +1053,6 @@ class PurchaseFlowService
     public function addTracking(int $contractId, array $data, ?User $user = null): PurchaseShippingPlan
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
-            $contract = PurchaseContract::findOrFail($contractId);
             $itemId = $data['contract_item_id'] ?? null;
             $data['shipped_at'] = $data['shipped_at'] ?? today();
             $data['status'] = $data['status'] ?? 'shipped';

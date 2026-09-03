@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueCode;
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchasePaymentRequest extends Model
 {
-    use HasFactory, GeneratesUniqueCode;
+    use HasFactory, HasDataScope, GeneratesUniqueCode;
 
     protected $fillable = [
         'code', 'contract_id', 'supplier_id', 'amount', 'payment_type', 'request_date',
@@ -39,4 +40,5 @@ class PurchasePaymentRequest extends Model
     public function applicant(): BelongsTo { return $this->belongsTo(User::class, 'applicant_id'); }
     public function approver(): BelongsTo { return $this->belongsTo(User::class, 'approver_id'); }
     public function payments(): HasMany { return $this->hasMany(PurchasePayment::class, 'payment_request_id'); }
+    public function vouchers(): HasMany { return $this->hasMany(PurchasePaymentVoucher::class, 'payment_request_id'); }
 }

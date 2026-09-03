@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueCode;
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PurchasePayment extends Model
 {
-    use HasFactory, GeneratesUniqueCode;
+    use HasFactory, HasDataScope, GeneratesUniqueCode;
 
     protected $fillable = [
         'code', 'payment_request_id', 'contract_id', 'supplier_id', 'amount',
