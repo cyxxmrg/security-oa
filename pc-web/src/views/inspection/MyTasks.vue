@@ -49,9 +49,10 @@ const loading = ref(false)
 const list = ref<InspectionTask[]>([])
 const pagination = reactive({ total: 0, page: 1, per_page: 12 })
 const filter = reactive<{ scope: string }>({ scope: 'all' })
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
 
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
-const taskStatusColor = (s: string) => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: '', cancelled: '' }[s] || '')
+const taskStatusColor = (s: string): TagType | undefined => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger' }[s] as TagType | undefined)
 
 const loadList = async (page = 1) => {
   pagination.page = page
@@ -62,7 +63,7 @@ const loadList = async (page = 1) => {
     if (filter.scope === 'pending') params.status = 'pending'
     if (filter.scope === 'completed') params.status = 'completed'
     const r = await inspection.myTasks(params)
-    const d = r?.data ?? {}
+    const d = (r?.data ?? {}) as { data?: InspectionTask[]; total?: number }
     list.value = d.data || []
     pagination.total = d.total || 0
   } finally {

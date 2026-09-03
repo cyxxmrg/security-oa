@@ -37,7 +37,7 @@
         <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
             <el-button v-if="['pending','overdue','in_progress'].includes(row.status)" link type="success" size="small" @click="$router.push(`/inspection/tasks/checkin/${row.id}`)">打卡</el-button>
-            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" link type="warning" size="small" @click="handleSkip(row)">跳过</el-button>
+            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" link type="warning" size="small" @click="handleSkip(row as unknown as InspectionTask)">跳过</el-button>
             <el-button link type="primary" size="small" @click="$router.push(`/inspection/tasks/checkin/${row.id}`)">详情</el-button>
           </template>
         </el-table-column>
@@ -62,9 +62,10 @@ const loading = ref(false)
 const list = ref<InspectionTask[]>([])
 const pagination = reactive({ total: 0, page: 1, per_page: 20 })
 const filter = reactive<{ keyword: string; status: string; dateRange: [string, string] | null }>({ keyword: '', status: '', dateRange: null })
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
 
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
-const taskStatusColor = (s: string) => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: '', cancelled: '' }[s] || '')
+const taskStatusColor = (s: string): TagType | undefined => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger' }[s] as TagType | undefined)
 
 const loadList = async (page = 1) => {
   pagination.page = page
@@ -80,7 +81,7 @@ const loadList = async (page = 1) => {
       params.date_to = filter.dateRange[1]
     }
     const r = await inspection.listTasks(params)
-    const d = r?.data ?? {}
+    const d = (r?.data ?? {}) as { data?: InspectionTask[]; total?: number }
     list.value = d.data || []
     pagination.total = d.total || 0
   } finally {
@@ -103,7 +104,7 @@ const handleSkip = async (row: InspectionTask) => {
     ElMessage.success('已跳过')
     loadList(pagination.page)
   } catch (e: unknown) {
-    if (e !== 'cancel') ElMessage.error(e?.message || '操作失败')
+    if (e !== 'cancel') ElMessage.error(e instanceof Error ? e.message : '操作失败')
   }
 }
 

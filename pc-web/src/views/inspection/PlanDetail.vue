@@ -118,10 +118,11 @@ const route = useRoute()
 const loading = ref(false)
 const plan = ref<InspectionPlan | null>(null)
 const activeTab = ref('tasks')
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
 
-const planStatusColor = (s: string) => ({ active: 'success', paused: 'warning', expired: 'info', cancelled: '' }[s] || '')
+const planStatusColor = (s: string): TagType | undefined => ({ active: 'success', paused: 'warning', expired: 'info' }[s] as TagType | undefined)
 const taskStatusLabel = (s: string) => TASK_STATUS_LABEL[s as keyof typeof TASK_STATUS_LABEL] || s
-const taskStatusColor = (s: string) => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger', skipped: '', cancelled: '' }[s] || '')
+const taskStatusColor = (s: string): TagType | undefined => ({ pending: 'info', in_progress: 'warning', completed: 'success', overdue: 'danger' }[s] as TagType | undefined)
 
 const loadPlan = async () => {
   const id = props.planId || Number(route.params.id)
@@ -129,9 +130,9 @@ const loadPlan = async () => {
   loading.value = true
   try {
     const r = await inspection.getPlan(id)
-    plan.value = r?.data
+    plan.value = r
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '加载失败')
+    ElMessage.error(e instanceof Error ? e.message : '加载失败')
   } finally {
     loading.value = false
   }
