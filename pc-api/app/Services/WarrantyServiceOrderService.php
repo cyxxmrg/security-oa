@@ -300,27 +300,14 @@ class WarrantyServiceOrderService
     {
         $today = now()->format('Ymd');
         $prefix = "WS-{$today}-";
-        $maxAttempts = 10;
-
-        if (DB::connection()->getDriverName() === 'pgsql') {
-            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['warranty-service-order-number:' . $today]);
-        }
-
-        for ($i = 0; $i < $maxAttempts; $i++) {
-            $count = (int) WarrantyServiceOrder::withTrashed()
+        $next = NumberSequenceService::next(
+            "warranty-service-order:{$today}",
+            fn () => (int) WarrantyServiceOrder::withTrashed()
                 ->where('order_no', 'like', $prefix . '%')
-                ->count();
-            $seq = $count + 1 + $i;
-            $candidate = $prefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(order_no FROM 'WS-[0-9]{8}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
 
-            $exists = WarrantyServiceOrder::withTrashed()
-                ->where('order_no', $candidate)
-                ->exists();
-            if (!$exists) {
-                return $candidate;
-            }
-        }
-
-        return $prefix . str_pad((string) random_int(1000, 9999), 4, '0', STR_PAD_LEFT);
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 }

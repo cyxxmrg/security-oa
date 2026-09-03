@@ -382,28 +382,14 @@ class WarrantyService
     {
         $today  = now()->format('Ymd');
         $prefix = "WY-{$today}-";
-        $maxAttempts = 10;
-
-        if (DB::connection()->getDriverName() === 'pgsql') {
-            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['warranty-number:' . $today]);
-        }
-
-        for ($i = 0; $i < $maxAttempts; $i++) {
-            $count = (int) Warranty::withTrashed()
+        $next = NumberSequenceService::next(
+            "warranty:{$today}",
+            fn () => (int) Warranty::withTrashed()
                 ->where('warranty_no', 'like', $prefix . '%')
-                ->count();
-            $seq = $count + 1 + $i;
-            $candidate = $prefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(warranty_no FROM 'WY-[0-9]{8}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
 
-            $exists = Warranty::withTrashed()
-                ->where('warranty_no', $candidate)
-                ->exists();
-            if (!$exists) {
-                return $candidate;
-            }
-        }
-
-        // 极端兜底: 加 random 后缀
-        return $prefix . str_pad((string) random_int(1000, 9999), 4, '0', STR_PAD_LEFT);
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 }
