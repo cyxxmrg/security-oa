@@ -46,7 +46,8 @@ class OperationApprovalController extends Controller
         ]);
 
         $userId = $request->user()?->id;
-        $record = ApprovalRecord::create([
+        $record = \DB::transaction(function () use ($data, $userId) {
+            return ApprovalRecord::create([
             'code'         => $this->nextCode('OPS'),
             'type'         => 'operation',
             'sub_type'     => $data['sub_type'],
@@ -65,7 +66,8 @@ class OperationApprovalController extends Controller
                 'comment'  => '提交申请',
             ]],
             'cc'           => $data['cc'] ?? [],
-        ]);
+            ]);
+        });
 
         return response()->json([
             'code'    => 0,

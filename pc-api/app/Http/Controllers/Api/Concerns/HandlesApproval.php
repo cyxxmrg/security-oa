@@ -212,6 +212,9 @@ trait HandlesApproval
     protected function nextCode(string $prefix): string
     {
         $year = now()->format('Y');
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['approval-number:' . $prefix . ':' . $year]);
+        }
         $count = ApprovalRecord::where('code', 'like', "{$prefix}-{$year}-%")->count() + 1;
         return sprintf('%s-%s-%04d', $prefix, $year, $count);
     }
