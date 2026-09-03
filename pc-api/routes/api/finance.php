@@ -229,8 +229,9 @@ Route::prefix('knowledge')->middleware(['auth:sanctum', 'ensure_business'])->gro
     Route::put('articles/{article}', [KnowledgeController::class, 'update'])->middleware('permission:knowledge.create|knowledge.edit');
     Route::delete('articles/{article}', [KnowledgeController::class, 'destroy'])->middleware('permission:knowledge.create|knowledge.edit');
     Route::post('upload', [KnowledgeController::class, 'uploadAttachment'])->middleware('permission:knowledge.create|knowledge.edit');
-    Route::get('attachment/download', [KnowledgeController::class, 'downloadAttachment'])
-        ->middleware('permission:knowledge.view');
+    Route::get('articles/{article}/attachment', [KnowledgeController::class, 'downloadAttachment'])
+        ->middleware('permission:knowledge.view')
+        ->name('knowledge.articles.attachment');
 });
 
 // ========== 数据备份 (通用) ==========

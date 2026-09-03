@@ -95,7 +95,7 @@ export function useKnowledge() {
     loadArticles()
   }
 
-  function openArticle(item: Article) {
+  async function openArticle(item: Article) {
     if (item.content_type === 'file') {
       const fileName = item.file_name || item.title || '(未知文件)'
       const fileUrl = item.file_url || '#'
@@ -103,8 +103,15 @@ export function useKnowledge() {
         `该文章为附件类型，发布后用户可下载查看。\n\n📎 ${fileName}\n（点击下方"下载文件"按钮获取）`,
         item.title,
         { dangerouslyUseHTMLString: false, confirmButtonText: '下载文件', cancelButtonText: '关闭', showCancelButton: true }
-      ).then(() => {
-        if (fileUrl !== '#') window.open(String(fileUrl), '_blank')
+      ).then(async () => {
+        if (fileUrl === '#') return
+        const blob = await get<Blob>(String(fileUrl), undefined, { responseType: 'blob' })
+        const objectUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = fileName
+        anchor.click()
+        URL.revokeObjectURL(objectUrl)
       }).catch(() => { /* 关闭 */ })
       return
     }
