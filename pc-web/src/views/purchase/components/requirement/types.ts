@@ -15,9 +15,11 @@ export interface Requirement {
   project_id: number
   project_name?: string
   material: string
+  inventory_item_id?: number | null
   spec?: string
   quantity: number
   unit?: string
+  budget?: number | string
   need_date?: string
   priority: 'urgent' | 'high' | 'medium' | 'low' | string
   creator?: string

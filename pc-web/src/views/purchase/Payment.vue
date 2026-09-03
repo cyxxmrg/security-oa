@@ -230,7 +230,7 @@ const loadList = async () => {
       params.date_to = dateRange.value[1]
     }
     const res = await purchase.getPayments(params)
-    list.value = unwrapList(res)
+    list.value = unwrapList(res) as PaymentItem[]
   } catch {
     list.value = []
   } finally {

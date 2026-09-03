@@ -68,9 +68,12 @@ export interface PaymentItem {
   payment_no?: string
   amount?: number | string
   status?: string
+  contract_id?: number | null
+  contract?: { id?: number; code?: string; title?: string } | null
   supplier?: { id: number; name: string } | null
-  method?: string
-  payment_date?: string
+  payment_method?: string
+  paid_at?: string
+  operator?: string
   voucher_no?: string
   remark?: string
   [key: string]: unknown

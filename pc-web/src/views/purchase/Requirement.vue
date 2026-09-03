@@ -162,7 +162,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ per_page: 200 })
     // V0.6.3 不再解包, 兼容两种形态
-    projectOptions.value = unwrapList(res).map((p: Record<string, unknown>) => ({ id: p.id, name: p.name || p.code }))
+    projectOptions.value = unwrapList(res).map((p: Record<string, unknown>) => ({ id: Number(p.id), name: String(p.name || p.code || '') })).filter(p => p.name)
   } catch {
     projectOptions.value = []
   }
@@ -212,7 +212,7 @@ const handleEdit = (row: Requirement) => {
     priority: row.priority || 'medium',
     creator: row.creator || '',
     materials: [{
-      inventory_item_id: (row as Record<string, unknown>).inventory_item_id || null,
+      inventory_item_id: row.inventory_item_id || null,
       name: row.material,
       spec: row.spec || '',
       quantity: Number(row.quantity || 1),
@@ -386,12 +386,12 @@ const handleExport = () => {
     return
   }
   const headers = ['需求编号', '关联项目', '需求物资', '规格', '数量', '单位', '需求日期', '优先级', '发起人', '状态', '发起时间']
-  const rows = filteredList.value.map((r: Record<string, unknown>) => [
+  const rows = filteredList.value.map((r: Requirement) => [
     r.code, r.project_name, r.material, r.spec || '',
     r.quantity, r.unit || '件', r.need_date,
-    priorityLabel(r.priority), r.creator, statusLabel(r.status), r.created_at,
+    priorityLabel(r.priority), r.creator || '-', statusLabel(r.status), r.created_at || '-',
   ])
-  exportExcelLike(headers, rows, '采购需求', { title: '采购需求清单' })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '采购需求', { title: '采购需求清单' })
 }
 
 onMounted(() => {
