@@ -211,6 +211,7 @@ class PermissionRoleSeeder extends Seeder
                     str_starts_with($n, 'process.') ||
                      str_starts_with($n, 'knowledge.') ||
                      str_starts_with($n, 'repair.') ||
+                     $n === 'warranty.view' ||
                      str_starts_with($n, 'purchase') ||
                     str_starts_with($n, 'expense.') && $n !== 'expense.approve' ||
                     in_array($n, ['attendance.leave', 'attendance.overtime', 'attendance.report'], true) ||

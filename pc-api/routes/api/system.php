@@ -254,7 +254,7 @@ Route::prefix('warranties')->middleware(['auth:sanctum', 'ensure_business', 'per
 });
 
 // 质保期服务工单
-Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.view'])->group(function () {
     Route::get('technician-stats', [WarrantyServiceOrderController::class, 'technicianStats']);
     Route::get('/', [WarrantyServiceOrderController::class, 'index']);
     Route::post('/', [WarrantyServiceOrderController::class, 'store']);
@@ -380,18 +380,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // V1.3.2: 期初数据 (admin 角色可见, system 可解锁)
 use App\Http\Controllers\Api\OpeningBalanceController;
-Route::prefix('opening')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('opening')->middleware(['auth:sanctum', 'ensure_business', 'permission:finance.view'])->group(function () {
     Route::get('receivables', [OpeningBalanceController::class, 'receivables']);
-    Route::post('receivables', [OpeningBalanceController::class, 'storeReceivable']);
-    Route::delete('receivables/{receivable}', [OpeningBalanceController::class, 'destroyReceivable']);
+    Route::post('receivables', [OpeningBalanceController::class, 'storeReceivable'])->middleware('permission:finance.pay');
+    Route::delete('receivables/{receivable}', [OpeningBalanceController::class, 'destroyReceivable'])->middleware('permission:finance.pay');
     Route::get('payables', [OpeningBalanceController::class, 'payables']);
-    Route::post('payables', [OpeningBalanceController::class, 'storePayable']);
-    Route::delete('payables/{payable}', [OpeningBalanceController::class, 'destroyPayable']);
+    Route::post('payables', [OpeningBalanceController::class, 'storePayable'])->middleware('permission:finance.pay');
+    Route::delete('payables/{payable}', [OpeningBalanceController::class, 'destroyPayable'])->middleware('permission:finance.pay');
 });
 
-// 期初锁定状态 (挂在 settings 下, admin 可访问)
-Route::prefix('settings/opening-balances')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+// 期初锁定状态 (查看/锁定由业务管理员处理, 解锁只允许 system)
+Route::prefix('settings/opening-balances')->middleware(['auth:sanctum', 'ensure_business', 'permission:finance.view'])->group(function () {
     Route::get('status', [OpeningBalanceController::class, 'status']);
-    Route::post('lock', [OpeningBalanceController::class, 'lock']);
-    Route::post('unlock', [OpeningBalanceController::class, 'unlock']);
+    Route::post('lock', [OpeningBalanceController::class, 'lock'])->middleware('permission:finance.pay');
+});
+Route::prefix('settings/opening-balances')->middleware(['auth:sanctum', 'ensure_system'])->group(function () {
+    Route::post('unlock', [OpeningBalanceController::class, 'unlock'])->withoutMiddleware('ensure_business');
 });
