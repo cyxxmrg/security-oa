@@ -32,9 +32,22 @@ class ScheduleService
         $updated = 0;
 
         DB::transaction(function () use ($assignments, &$created, &$updated) {
+            $userIds = collect($assignments)
+                ->pluck('user_id')
+                ->unique()
+                ->sort()
+                ->values()
+                ->all();
+
+            User::whereIn('id', $userIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
             foreach ($assignments as $a) {
                 $rec = Schedule::where('user_id', $a['user_id'])
                     ->where('date', $a['date'])
+                    ->lockForUpdate()
                     ->first();
 
                 $payload = [
@@ -93,14 +106,7 @@ class ScheduleService
         }
 
         $count = count($assignments);
-        DB::transaction(function () use ($assignments) {
-            foreach ($assignments as $a) {
-                Schedule::updateOrCreate(
-                    ['user_id' => $a['user_id'], 'date' => $a['date']],
-                    ['group_id' => $a['group_id'], 'shift_id' => $a['shift_id'], 'created_by' => Auth::id()],
-                );
-            }
-        });
+        $this->batchSave($assignments);
 
         return ['count' => $count];
     }

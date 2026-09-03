@@ -30,28 +30,34 @@ Route::prefix('attendance')->middleware(['auth:sanctum', 'ensure_business'])->gr
 // ========== 排班管理 ==========
 Route::prefix('schedules')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
     // 班次
-    Route::get('shifts', [ScheduleController::class, 'listShifts']);
-    Route::post('shifts', [ScheduleController::class, 'storeShift']);
-    Route::put('shifts/{shift}', [ScheduleController::class, 'updateShift']);
-    Route::delete('shifts/{shift}', [ScheduleController::class, 'destroyShift']);
+    Route::middleware('permission:attendance.shifts')->group(function () {
+        Route::get('shifts', [ScheduleController::class, 'listShifts']);
+        Route::post('shifts', [ScheduleController::class, 'storeShift']);
+        Route::put('shifts/{shift}', [ScheduleController::class, 'updateShift']);
+        Route::delete('shifts/{shift}', [ScheduleController::class, 'destroyShift']);
+    });
 
     // 班组
-    Route::get('groups', [ScheduleController::class, 'listGroups']);
-    Route::post('groups', [ScheduleController::class, 'storeGroup']);
-    Route::put('groups/{group}', [ScheduleController::class, 'updateGroup']);
-    Route::delete('groups/{group}', [ScheduleController::class, 'destroyGroup']);
-    Route::post('groups/{group}/members', [ScheduleController::class, 'syncGroupMembers']);
-    Route::post('groups/{group}/add-member', [ScheduleController::class, 'addGroupMember']);
-    Route::delete('groups/{group}/members/{user}', [ScheduleController::class, 'removeGroupMember']);
+    Route::middleware('permission:attendance.groups')->group(function () {
+        Route::get('groups', [ScheduleController::class, 'listGroups']);
+        Route::post('groups', [ScheduleController::class, 'storeGroup']);
+        Route::put('groups/{group}', [ScheduleController::class, 'updateGroup']);
+        Route::delete('groups/{group}', [ScheduleController::class, 'destroyGroup']);
+        Route::post('groups/{group}/members', [ScheduleController::class, 'syncGroupMembers']);
+        Route::post('groups/{group}/add-member', [ScheduleController::class, 'addGroupMember']);
+        Route::delete('groups/{group}/members/{user}', [ScheduleController::class, 'removeGroupMember']);
+    });
 
     // 排班
-    Route::get('/', [ScheduleController::class, 'index']);
-    Route::post('/', [ScheduleController::class, 'batchSave']);
-    Route::post('batch-by-group', [ScheduleController::class, 'batchByGroup']);
-    Route::delete('{schedule}', [ScheduleController::class, 'destroy']);
+    Route::middleware('permission:attendance.schedule')->group(function () {
+        Route::get('/', [ScheduleController::class, 'index']);
+        Route::post('/', [ScheduleController::class, 'batchSave']);
+        Route::post('batch-by-group', [ScheduleController::class, 'batchByGroup']);
+        Route::delete('{schedule}', [ScheduleController::class, 'destroy']);
+        Route::get('smart-suggest', [ScheduleController::class, 'smartSuggest']);
+        Route::get('stats', [ScheduleController::class, 'stats']);
+    });
     Route::get('my-schedule', [ScheduleController::class, 'mySchedule']);
-    Route::get('smart-suggest', [ScheduleController::class, 'smartSuggest']);
     Route::get('next-reminder', [ScheduleController::class, 'nextReminder']);
-    Route::get('stats', [ScheduleController::class, 'stats']);
     Route::get('default-shift', [ScheduleController::class, 'defaultShift'])->withoutMiddleware('ensure_business');
 });

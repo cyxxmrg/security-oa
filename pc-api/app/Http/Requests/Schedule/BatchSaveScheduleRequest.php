@@ -11,8 +11,10 @@ class BatchSaveScheduleRequest extends BaseFormRequest
         return [
             'assignments'             => ['required', 'array', 'min:1', 'max:500'],
             'assignments.*.user_id'   => ['required', 'integer', 'exists:users,id'],
+            'assignments.*.group_id'  => ['nullable', 'integer', 'exists:shift_groups,id'],
             'assignments.*.date'      => ['required', 'date_format:Y-m-d'],
             'assignments.*.shift_id'  => ['required', 'integer', 'exists:shifts,id'],
+            'assignments.*.status'    => ['nullable', 'in:scheduled,rest,sick,leave,swapped'],
             'assignments.*.note'      => ['nullable', 'string', 'max:500'],
         ];
     }
@@ -26,9 +28,11 @@ class BatchSaveScheduleRequest extends BaseFormRequest
             'assignments.max'                 => '单次最多保存 500 条',
             'assignments.*.user_id.required'  => '员工ID不能为空',
             'assignments.*.user_id.exists'    => '员工不存在',
+            'assignments.*.group_id.exists'   => '班组不存在',
             'assignments.*.date.required'     => '日期不能为空',
             'assignments.*.shift_id.required' => '班次ID不能为空',
             'assignments.*.shift_id.exists'   => '班次不存在',
+            'assignments.*.status.in'          => '排班状态不合法',
         ];
     }
 }
