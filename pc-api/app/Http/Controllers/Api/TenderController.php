@@ -139,33 +139,32 @@ class TenderController extends Controller
 
     public function publish(int $id): JsonResponse
     {
-        $t = TenderProject::findOrFail($id);
-        if ($t->status !== 'draft') {
-            return response()->json(['code' => 1001, 'message' => '仅草稿状态可发布'], 422);
+        try {
+            $t = app(TenderService::class)->publishLegacy($id);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
         }
-        $t->status     = 'bidding';
-        $t->publish_at = now();
-        if (!$t->public_token) {
-            $t->public_token = (string) Str::uuid();
-        }
-        $t->save();
         return response()->json(['code' => 0, 'message' => '已发布', 'data' => $t]);
     }
 
     public function close(int $id): JsonResponse
     {
-        $t = TenderProject::findOrFail($id);
-        $t->status = 'closed';
-        $t->save();
-        return response()->json(['code' => 0, 'message' => '已关闭']);
+        try {
+            $t = app(TenderService::class)->closeLegacy($id);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
+        }
+        return response()->json(['code' => 0, 'message' => '已关闭', 'data' => $t]);
     }
 
     public function cancel(int $id): JsonResponse
     {
-        $t = TenderProject::findOrFail($id);
-        $t->status = 'cancelled';
-        $t->save();
-        return response()->json(['code' => 0, 'message' => '已取消']);
+        try {
+            $t = app(TenderService::class)->cancelLegacy($id);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
+        }
+        return response()->json(['code' => 0, 'message' => '已取消', 'data' => $t]);
     }
 
     // 评标打分 (内部用) — 接收 { bid_id, scores: { technical, price, business } }
@@ -179,6 +178,9 @@ class TenderController extends Controller
             'evaluations.*.business'  => 'required|numeric|min:0|max:100',
         ]);
         $t = TenderProject::findOrFail($id);
+        if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating'], true)) {
+            return response()->json(['code' => 1001, 'message' => '当前状态不可评标'], 422);
+        }
         // 评分权重 (从 score_config 读, 缺省 40/40/20)
         $cfg = $t->score_config ?: ['technical' => 40, 'price' => 40, 'business' => 20];
         $wT = (float)($cfg['technical'] ?? 40);
@@ -187,29 +189,44 @@ class TenderController extends Controller
         $wSum = max(0.0001, $wT + $wP + $wB);
 
         // V1.2.10 修复 N+1: 一次性加载所有 bid, 避免循环内逐条查询
-        $bidIds = array_column($data['evaluations'], 'bid_id');
-        $bids = TenderBid::where('tender_project_id', $id)
-            ->whereIn('id', $bidIds)
-            ->get()
-            ->keyBy('id');
+        try {
+            $result = DB::transaction(function () use ($id, $data, $wT, $wP, $wB, $wSum) {
+                $t = TenderProject::lockForUpdate()->findOrFail($id);
+                if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating'], true)) {
+                    throw new \RuntimeException('当前状态不可评标');
+                }
 
-        foreach ($data['evaluations'] as $e) {
-            $bid = $bids->get($e['bid_id']);
-            if (!$bid) continue;
-            $score = [
-                'technical' => (float)$e['technical'],
-                'price'     => (float)$e['price'],
-                'business'  => (float)$e['business'],
-            ];
-            $total = round(($score['technical'] * $wT + $score['price'] * $wP + $score['business'] * $wB) / $wSum, 2);
-            $bid->scores = $score;
-            $bid->total_score = $total;
-            $bid->status = 'shortlisted';
-            $bid->save();
+                $bidIds = array_values(array_unique(array_map('intval', array_column($data['evaluations'], 'bid_id'))));
+                $bids = TenderBid::where('tender_project_id', $id)
+                    ->whereIn('id', $bidIds)
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+                if ($bids->count() !== count($bidIds)) {
+                    throw new \RuntimeException('存在不属于该招标项目的投标记录');
+                }
+
+                foreach ($data['evaluations'] as $e) {
+                    $bid = $bids->get((int) $e['bid_id']);
+                    $score = [
+                        'technical' => (float) $e['technical'],
+                        'price'     => (float) $e['price'],
+                        'business'  => (float) $e['business'],
+                    ];
+                    $total = round(($score['technical'] * $wT + $score['price'] * $wP + $score['business'] * $wB) / $wSum, 2);
+                    $bid->scores = $score;
+                    $bid->total_score = $total;
+                    $bid->status = 'shortlisted';
+                    $bid->save();
+                }
+                $t->status = 'evaluating';
+                $t->save();
+                return $t->fresh();
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
         }
-        $t->status = 'evaluating';
-        $t->save();
-        return response()->json(['code' => 0, 'message' => '已记录评分']);
+        return response()->json(['code' => 0, 'message' => '已记录评分', 'data' => $result]);
     }
 
     // V0.6.4 中标 (自动生成 PO + 应付 + 物料明细 + 审计) — 整事务包裹
@@ -218,20 +235,24 @@ class TenderController extends Controller
         $data = $request->validate([
             'bid_id' => 'required|integer|exists:tender_bids,id',
         ]);
-        $t = TenderProject::with('bids')->findOrFail($id);
-        if (in_array($t->status, ['awarded', 'cancelled', 'closed'])) {
-            return response()->json(['code' => 1001, 'message' => '该状态不可定标'], 422);
-        }
-        $bid = $t->bids()->find($data['bid_id']);
-        if (!$bid) {
-            return response()->json(['code' => 1001, 'message' => '投标不属于该项目'], 422);
-        }
-
         $flow = app(PurchaseFlowService::class);
         $tenderService = app(TenderService::class);
         $user = $request->user();
 
-        $result = DB::transaction(function () use ($t, $bid, $user, $flow) {
+        try {
+            $award = DB::transaction(function () use ($id, $data, $user, $flow) {
+            $t = TenderProject::lockForUpdate()->findOrFail($id);
+            if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating'], true)) {
+                throw new \RuntimeException('该状态不可定标');
+            }
+            $bid = TenderBid::where('tender_project_id', $t->id)
+                ->whereKey($data['bid_id'])
+                ->lockForUpdate()
+                ->first();
+            if (!$bid) {
+                throw new \RuntimeException('投标不属于该项目');
+            }
+
             // 1) 中标 — bid & tender 状态
             $bid->status = 'awarded';
             $bid->save();
@@ -296,11 +317,21 @@ class TenderController extends Controller
             $flow->log('payable', $payable->id, null, $payable->status, 'create_from_tender', $user, "从 PO #{$po->id} 自动建应付 ¥{$payable->amount}");
 
             return [
+                'tender'       => $t->fresh(),
+                'bid'          => $bid->fresh(),
+                'result'       => [
                 'po'           => $po->only(['id', 'code', 'po_no', 'total_amount', 'status']),
                 'payable'      => $payable->only(['id', 'ref_no', 'amount', 'status']),
                 'items_copied' => $itemsCopied,
+                ],
             ];
-        });
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
+        }
+        $t = $award['tender'];
+        $bid = $award['bid'];
+        $result = $award['result'];
 
         // V0.6.5 Sprint 4: 联动保证金 — winner 留 paid (待合同后退)，其他自动 refund
         $depositResult = null;

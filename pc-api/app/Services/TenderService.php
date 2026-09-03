@@ -37,6 +37,62 @@ class TenderService
     // ========== 状态机操作 ==========
 
     /**
+     * 旧版快捷发布：draft → bidding。
+     * 保留旧接口行为，但必须与新版状态机使用同一行锁。
+     */
+    public function publishLegacy(int $tenderId): TenderProject
+    {
+        return DB::transaction(function () use ($tenderId) {
+            $t = TenderProject::lockForUpdate()->findOrFail($tenderId);
+            if ($t->status !== TenderProject::STATUS_DRAFT) {
+                throw new RuntimeException('仅草稿状态可发布');
+            }
+
+            $t->status = 'bidding';
+            $t->publish_at = now();
+            $t->public_token = $t->public_token ?: (string) \Illuminate\Support\Str::uuid();
+            $t->save();
+            $this->log($t, TenderProject::STATUS_DRAFT, 'bidding', 'publish_legacy', '旧版快捷发布');
+            return $t->fresh();
+        });
+    }
+
+    public function closeLegacy(int $tenderId): TenderProject
+    {
+        return DB::transaction(function () use ($tenderId) {
+            $t = TenderProject::lockForUpdate()->findOrFail($tenderId);
+            if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating'], true)) {
+                throw new RuntimeException('当前状态不能关闭');
+            }
+
+            $from = $t->status;
+            $t->status = TenderProject::STATUS_CLOSED;
+            $t->save();
+            $this->log($t, $from, TenderProject::STATUS_CLOSED, 'close_legacy', '旧版关闭接口');
+            return $t->fresh();
+        });
+    }
+
+    public function cancelLegacy(int $tenderId): TenderProject
+    {
+        return DB::transaction(function () use ($tenderId) {
+            $t = TenderProject::lockForUpdate()->findOrFail($tenderId);
+            if (in_array($t->status, ['awarded', 'cancelled', 'closed', 'withdrawn'], true)) {
+                throw new RuntimeException('当前状态不能取消');
+            }
+
+            $from = $t->status;
+            $t->status = TenderProject::STATUS_CANCELLED;
+            $t->cancelled_at = now();
+            $t->cancelled_by = Auth::id();
+            $t->save();
+            $t->bids()->whereNotIn('status', ['rejected', 'withdrawn'])->update(['status' => 'withdrawn']);
+            $this->log($t, $from, TenderProject::STATUS_CANCELLED, 'cancel_legacy', '旧版取消接口');
+            return $t->fresh();
+        });
+    }
+
+    /**
      * 提交审核：草稿 → 待审核
      */
     public function submitReview(int $tenderId, ?string $note = null): TenderProject

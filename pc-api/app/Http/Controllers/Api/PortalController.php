@@ -36,7 +36,7 @@ class PortalController extends Controller
         $t = TenderProject::where('public_token', $token)->firstOr(function () {
             abort(response()->json(['code' => 1001, 'message' => '链接无效或已过期'], 404));
         });
-        if (!in_array($t->status, ['bidding', 'published', 'evaluating', 'awarded', 'closed'])) {
+        if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating', 'awarded', 'closed'])) {
             return response()->json(['code' => 1001, 'message' => '该项目当前不可访问'], 403);
         }
         // 公开附件 (visibility=public, 且是项目级非投标级)
@@ -109,7 +109,7 @@ class PortalController extends Controller
         $t = TenderProject::where('public_token', $token)->firstOr(function () {
             abort(response()->json(['code' => 1001, 'message' => '链接无效'], 404));
         });
-        if (!in_array($t->status, ['bidding', 'published'])) {
+        if (!in_array($t->status, ['open', 'bidding', 'published'])) {
             return response()->json(['code' => 1001, 'message' => '该项目已截止投标'], 422);
         }
         // 校验是否在邀请名单
@@ -176,7 +176,7 @@ class PortalController extends Controller
             return $verify;
         }
         $t = TenderProject::where('public_token', $token)->firstOrFail();
-        if (!in_array($t->status, ['bidding', 'published'], true)) {
+        if (!in_array($t->status, ['open', 'bidding', 'published'], true)) {
             return response()->json(['code' => 1003, 'message' => '该项目当前不接受投标附件'], 422);
         }
         $bid = $t->bids()->where('id', $data['bid_id'])->where('supplier_id', $data['supplier_id'])->firstOrFail();
@@ -291,7 +291,7 @@ class PortalController extends Controller
         }
         // 该供应商被邀请的招标 (在 invited_supplier_ids 数组中)
         $list = TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)
-                              ->whereIn('status', ['bidding', 'published', 'evaluating', 'awarded', 'closed'])
+                              ->whereIn('status', ['open', 'bidding', 'published', 'evaluating', 'awarded', 'closed'])
                               ->orderByDesc('publish_at')
                               ->get(['id', 'code', 'name', 'status', 'deadline', 'public_token']);
         // 脱敏: 不返回 supplier_id 给未认证查询, 手机号打码
@@ -342,7 +342,7 @@ class PortalController extends Controller
             'bid_count'        => $bids->count(),
             'won_count'        => $bids->where('status', 'awarded')->count(),
             'active_tender'    => TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)
-                                                ->whereIn('status', ['bidding', 'published'])->count(),
+                                                ->whereIn('status', ['open', 'bidding', 'published'])->count(),
         ];
 
         return response()->json(['code' => 0, 'data' => [
