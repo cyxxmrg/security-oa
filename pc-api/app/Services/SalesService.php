@@ -725,33 +725,63 @@ class SalesService
 
     public function uploadFollowUpAttachment(Request $request, SalesFollowUp $followUp, FileUploadService $uploader): SalesFollowUpAttachment
     {
-        return DB::transaction(function () use ($request, $followUp, $uploader) {
-            $file = $uploader->uploadSingle(
-                $request,
-                folder: 'followups/' . $followUp->id,
-                prefix: 'fu',
-                disk: 'public',
-            );
-            return $followUp->attachments()->create([
-                'name'          => $file['name'],
-                'original_name' => $file['original_name'],
-                'path'          => $file['path'],
-                'size'          => $file['size'],
-                'mime'          => $file['mime'],
-                'uploaded_by'   => $request->user()->id,
-            ]);
-        });
+        $storedPath = null;
+        try {
+            return DB::transaction(function () use ($request, $followUp, $uploader, &$storedPath) {
+                $lockedFollowUp = SalesFollowUp::lockForUpdate()->findOrFail($followUp->id);
+                $result = $uploader->store($request, 'file', [
+                    'disk'         => 'attachments',
+                    'subdir'       => 'followups/' . $lockedFollowUp->id,
+                    'allowed_ext'  => FileUploadService::DEFAULT_ALLOWED_EXT,
+                    'allowed_mime' => FileUploadService::DEFAULT_ALLOWED_MIME,
+                    'max_size'     => 51200,
+                ]);
+                $storedPath = $result['path'];
+
+                return $lockedFollowUp->attachments()->create([
+                    'name' => $result['original_name'],
+                    'path' => $result['path'],
+                    'size' => $result['size'],
+                    'mime' => $result['mime'],
+                ]);
+            });
+        } catch (\Throwable $e) {
+            if ($storedPath) {
+                Storage::disk('attachments')->delete($storedPath);
+            }
+            throw $e;
+        }
     }
 
     public function downloadFollowUpAttachment(SalesFollowUpAttachment $att)
     {
-        return Storage::disk('public')->download($att->path, $att->original_name);
+        $name = $att->name ?: basename($att->path);
+        $privateDisk = Storage::disk('attachments');
+        if ($privateDisk->exists($att->path)) {
+            return $privateDisk->download($att->path, $name, [
+                'Content-Type' => $att->mime ?: 'application/octet-stream',
+            ]);
+        }
+
+        $legacyDisk = Storage::disk('public');
+        if ($legacyDisk->exists($att->path)) {
+            return $legacyDisk->download($att->path, $name, [
+                'Content-Type' => $att->mime ?: 'application/octet-stream',
+            ]);
+        }
+
+        abort(404, '附件不存在');
     }
 
     public function destroyFollowUpAttachment(SalesFollowUpAttachment $att): void
     {
-        Storage::disk('public')->delete($att->path);
-        $att->delete();
+        DB::transaction(function () use ($att) {
+            $locked = SalesFollowUpAttachment::lockForUpdate()->findOrFail($att->id);
+            $path = $locked->path;
+            $locked->delete();
+            Storage::disk('attachments')->delete($path);
+            Storage::disk('public')->delete($path);
+        });
     }
 
     // ============================================================
