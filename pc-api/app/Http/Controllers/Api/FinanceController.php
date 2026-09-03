@@ -377,6 +377,18 @@ class FinanceController extends Controller
         $amount = (float)$data['amount'];
         $payment = DB::transaction(function () use ($data, $amount, $receivable) {
             $receivable = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            if (!empty($data['voucher_no'])) {
+                $existing = FinancePayment::where('receivable_id', $receivable->id)
+                    ->where('voucher_no', $data['voucher_no'])
+                    ->lockForUpdate()
+                    ->first();
+                if ($existing) {
+                    if (abs((float) $existing->amount - $amount) > 0.0001) {
+                        throw ValidationException::withMessages(['voucher_no' => '凭证号已使用，但金额不一致']);
+                    }
+                    return $existing;
+                }
+            }
             $remaining = (float) $receivable->remaining_amount;
             if ($amount - $remaining > 0.0001) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -397,10 +409,8 @@ class FinanceController extends Controller
             ]);
             // 入账到指定资金账户
             if (!empty($data['account_id'])) {
-                $account = FinanceAccount::lockForUpdate()->find($data['account_id']);
-                if ($account) {
-                    $account->increment('balance', $amount);
-                }
+                $account = $this->lockActiveAccount((int) $data['account_id']);
+                $account->increment('balance', $amount);
             }
             return $payment;
         });
@@ -438,6 +448,15 @@ class FinanceController extends Controller
             $receivable = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
             $amount = (float) $receivable->remaining_amount;
             if ($amount > 0) {
+                if (!empty($data['voucher_no'])) {
+                    $existing = FinancePayment::where('receivable_id', $receivable->id)
+                        ->where('voucher_no', $data['voucher_no'])
+                        ->lockForUpdate()
+                        ->first();
+                    if ($existing) {
+                        return;
+                    }
+                }
                 FinancePayment::create([
                     'receivable_id' => $receivable->id,
                     'account_id' => $data['account_id'] ?? null,
@@ -478,6 +497,18 @@ class FinanceController extends Controller
         $amount = (float)$data['amount'];
         $payment = DB::transaction(function () use ($data, $amount, $payable) {
             $payable = PayableModel::lockForUpdate()->findOrFail($payable->id);
+            if (!empty($data['voucher_no'])) {
+                $existing = FinancePayment::where('payable_id', $payable->id)
+                    ->where('voucher_no', $data['voucher_no'])
+                    ->lockForUpdate()
+                    ->first();
+                if ($existing) {
+                    if (abs((float) $existing->amount - $amount) > 0.0001) {
+                        throw ValidationException::withMessages(['voucher_no' => '凭证号已使用，但金额不一致']);
+                    }
+                    return $existing;
+                }
+            }
             $remaining = (float) $payable->remaining_amount;
             if ($amount - $remaining > 0.0001) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -593,19 +624,43 @@ class FinanceController extends Controller
             'status' => ['nullable', Rule::in(['active', 'frozen', 'closed'])],
             'remark' => 'nullable|string',
         ]);
-        $account->update($data);
-        return response()->json(['code' => 0, 'data' => $account, 'message' => '账户已更新']);
+        $updated = DB::transaction(function () use ($data, $account, $request) {
+            $locked = FinanceAccount::lockForUpdate()->findOrFail($account->id);
+            $requestedBalance = array_key_exists('balance', $data) ? (float) $data['balance'] : (float) $locked->balance;
+            $delta = round($requestedBalance - (float) $locked->balance, 2);
+            unset($data['balance']);
+
+            $locked->update($data);
+            if (abs($delta) > 0.0001) {
+                FinancePayment::create([
+                    'account_id'   => $locked->id,
+                    'amount'       => $delta,
+                    'payment_date' => now()->toDateString(),
+                    'method'       => 'balance_adjustment',
+                    'operator'     => $request->user()?->name,
+                    'remark'       => $data['remark'] ?? '账户余额调整',
+                    'type'         => 'adjustment',
+                ]);
+                $locked->update(['balance' => $requestedBalance]);
+            }
+
+            return $locked->fresh();
+        });
+        return response()->json(['code' => 0, 'data' => $updated, 'message' => '账户已更新']);
     }
 
     public function destroyAccount(FinanceAccount $account): JsonResponse
     {
-        if ((float)$account->balance > 0.0001 || (float)$account->balance < -0.0001) {
-            return response()->json(['code' => 1004, 'message' => '账户余额不为0，请先转出或结清'], 422);
-        }
-        if (FinancePayment::where('account_id', $account->id)->exists()) {
-            return response()->json(['code' => 1005, 'message' => '该账户存在流水记录，不允许删除'], 422);
-        }
-        $account->delete();
+        DB::transaction(function () use ($account) {
+            $locked = FinanceAccount::lockForUpdate()->findOrFail($account->id);
+            if (abs((float) $locked->balance) > 0.0001) {
+                throw ValidationException::withMessages(['account' => '账户余额不为0，请先转出或结清']);
+            }
+            if (FinancePayment::where('account_id', $locked->id)->exists()) {
+                throw ValidationException::withMessages(['account' => '该账户存在流水记录，不允许删除']);
+            }
+            $locked->delete();
+        });
         return response()->json(['code' => 0, 'message' => '账户已删除']);
     }
 
@@ -857,7 +912,7 @@ class FinanceController extends Controller
             'tax_amount' => 'nullable|numeric|min:0',
             'total_amount' => 'nullable|numeric|min:0',
             'issue_date' => 'nullable|date',
-            'status' => 'nullable|string', // 移除严格限制，允许任意状态
+            'status' => ['nullable', Rule::in(['draft', 'requested', 'pending_approval', 'issued', 'delivered', 'cancelled'])],
             'remark' => 'nullable|string',
         ]);
         // 自动生成发票号
@@ -870,6 +925,12 @@ class FinanceController extends Controller
         $data['status'] = $data['status'] ?? 'requested'; // V1.2.10: 默认申请状态
         $data['applicant_id'] = $data['applicant_id'] ?? $request->user()->id; // 自动记录申请人
         $data['direction'] = $data['direction'] ?? 'sales'; // 默认销售发票
+        if ($data['direction'] === 'sales' && empty($data['customer_id'])) {
+            throw ValidationException::withMessages(['customer_id' => '销售发票必须关联客户']);
+        }
+        if ($data['direction'] === 'purchase' && empty($data['supplier_id'])) {
+            throw ValidationException::withMessages(['supplier_id' => '采购发票必须关联供应商']);
+        }
         // 兜底：NOT NULL 字段
         $data['issue_date']   = $data['issue_date'] ?? now()->toDateString();
         $data['amount']       = isset($data['amount']) ? (float)$data['amount'] : 0;
@@ -892,7 +953,7 @@ class FinanceController extends Controller
             'tax_amount' => 'nullable|numeric|min:0',
             'total_amount' => 'nullable|numeric|min:0',
             'issue_date' => 'sometimes|required|date',
-            'status' => ['nullable', Rule::in(['draft', 'issued', 'cancelled'])],
+            'status' => ['sometimes', Rule::in(['draft', 'requested', 'pending_approval', 'issued', 'delivered', 'cancelled'])],
             'remark' => 'nullable|string',
         ]);
         // 重新算税与合计
@@ -906,8 +967,36 @@ class FinanceController extends Controller
                 $data['total_amount'] = round($amount + (float) $data['tax_amount'], 2);
             }
         }
-        $invoice->update($data);
-        return response()->json(['code' => 0, 'data' => $invoice, 'message' => '已更新']);
+        $updated = DB::transaction(function () use ($data, $invoice) {
+            $locked = FinanceInvoice::lockForUpdate()->findOrFail($invoice->id);
+            $coreFields = [
+                'invoice_no', 'invoice_type', 'direction', 'customer_id', 'supplier_id',
+                'project_id', 'receivable_id', 'contract_id', 'amount', 'tax_rate',
+                'tax_amount', 'total_amount', 'issue_date',
+            ];
+            if (array_intersect(array_keys($data), $coreFields)
+                && !in_array($locked->status, ['draft', 'requested'], true)) {
+                throw ValidationException::withMessages(['status' => '当前发票状态不可修改发票主体信息']);
+            }
+
+            if (array_key_exists('status', $data) && $data['status'] !== $locked->status) {
+                $transitions = [
+                    'draft'           => ['requested', 'cancelled'],
+                    'requested'       => ['pending_approval', 'cancelled'],
+                    'pending_approval'=> ['issued', 'cancelled'],
+                    'issued'          => ['delivered'],
+                    'delivered'       => [],
+                    'cancelled'       => [],
+                ];
+                if (!in_array($data['status'], $transitions[$locked->status] ?? [], true)) {
+                    throw ValidationException::withMessages(['status' => '发票状态不能从当前状态直接跳转']);
+                }
+            }
+
+            $locked->update($data);
+            return $locked->fresh();
+        });
+        return response()->json(['code' => 0, 'data' => $updated, 'message' => '已更新']);
     }
 
     public function destroyInvoice(FinanceInvoice $invoice): JsonResponse
