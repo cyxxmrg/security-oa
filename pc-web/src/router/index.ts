@@ -357,8 +357,8 @@ const routes: RouteRecordRaw[] = [
         alias: '/expense',
         meta: { title: '报销管理', icon: 'Money' },
         children: [
-          { path: 'list', name: 'ExpenseList', component: () => import('@/views/expense/index.vue'), meta: { title: '报销列表' } },
-          { path: 'apply', name: 'ExpenseApply', component: () => import('@/views/expense/Apply.vue'), meta: { title: '申请报销', hidden: true } }
+          { path: 'list', name: 'ExpenseList', component: () => import('@/views/expense/index.vue'), meta: { title: '报销列表', permission: 'expense.view' } },
+          { path: 'apply', name: 'ExpenseApply', component: () => import('@/views/expense/Apply.vue'), meta: { title: '申请报销', hidden: true, permission: 'expense.create' } }
         ]
       },
       // ---- 车辆管理 ----

@@ -10,7 +10,7 @@
       </el-select>
       <el-button type="primary" :icon="Search" @click="$emit('search', 1)">搜索</el-button>
       <el-button @click="$emit('reset')">重置</el-button>
-      <el-button type="primary" plain :icon="Plus" @click="$emit('apply')">申请报销</el-button>
+      <el-button v-if="canCreate" type="primary" plain :icon="Plus" @click="$emit('apply')">申请报销</el-button>
     </div>
 
     <div class="content-card">
@@ -80,6 +80,7 @@ defineProps<{
   loading: boolean
   list: any[]
   pagination: { page: number; per_page: number; total: number }
+  canCreate: boolean
   canCancel: (row: any) => boolean
   canDelete: (row: any) => boolean
   canPay: (row: any) => boolean

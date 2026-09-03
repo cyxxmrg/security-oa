@@ -17,13 +17,13 @@ use Illuminate\Support\Facades\Route;
 
 // ========== 报销管理 ==========
 Route::prefix('expenses')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
-    Route::get('/', [ExpenseController::class, 'index']);
+    Route::get('/', [ExpenseController::class, 'index'])->middleware('permission:expense.view');
     Route::post('/', [ExpenseController::class, 'store'])->middleware('permission:expense.create|expense.edit');
-    Route::get('stats', [ExpenseController::class, 'stats']);
-    Route::get('stats-group', [ExpenseController::class, 'statsGroup']);
-    Route::get('projects', [ExpenseController::class, 'projects']);
-    Route::get('my', [ExpenseController::class, 'myClaims']);
-    Route::get('{claim}', [ExpenseController::class, 'show']);
+    Route::get('stats', [ExpenseController::class, 'stats'])->middleware('permission:expense.view');
+    Route::get('stats-group', [ExpenseController::class, 'statsGroup'])->middleware('permission:expense.view');
+    Route::get('projects', [ExpenseController::class, 'projects'])->middleware('permission:expense.create|expense.edit');
+    Route::get('my', [ExpenseController::class, 'myClaims'])->middleware('permission:expense.view');
+    Route::get('{claim}', [ExpenseController::class, 'show'])->middleware('permission:expense.view');
     Route::put('{claim}', [ExpenseController::class, 'update'])->middleware('permission:expense.create|expense.edit');
     Route::delete('{claim}', [ExpenseController::class, 'destroy'])->middleware('permission:expense.create|expense.edit');
     Route::post('{claim}/approve', [ExpenseController::class, 'approve'])->middleware('permission:expense.approve');

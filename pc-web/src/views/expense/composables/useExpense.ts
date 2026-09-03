@@ -251,22 +251,26 @@ export function useExpense() {
   }
 
   const currentUserId = computed(() => userStore.userInfo?.id)
+  const canCreate = computed(() => userStore.hasPermission('expense.create'))
 
   function canCancel(row: ExpenseListItem) {
     if (!row) return false
     if (row.user_id && currentUserId.value && row.user_id !== currentUserId.value) return false
-    return ['submitted', 'draft'].includes(row.status || '')
+    return userStore.hasPermission('expense.edit')
+      && ['submitted', 'draft'].includes(row.status || '')
   }
 
   function canDelete(row: ExpenseListItem) {
     if (!row) return false
     if (['approved', 'paid'].includes(row.status || '')) return false
-    if (row.user_id && currentUserId.value && row.user_id === currentUserId.value) return true
+    if (row.user_id && currentUserId.value && row.user_id === currentUserId.value) {
+      return userStore.hasPermission('expense.edit')
+    }
     return userStore.hasPermission('expense.delete')
   }
 
   function canPay(row: ExpenseListItem) {
-    return row?.status === 'approved'
+    return row?.status === 'approved' && userStore.hasPermission('expense.approve')
   }
 
   function handleDetailAction(action: 'cancel' | 'delete' | 'pay') {
@@ -372,7 +376,7 @@ export function useExpense() {
     statsDateRange, statsGroupBy, statsLoading, statsData, statsGroup,
     resetStatsDate, loadStatsBoard,
     showDetailDialog, detailRow, detailLoading, handleView,
-    canCancel, canDelete, canPay, handleDetailAction,
+    canCreate, canCancel, canDelete, canPay, handleDetailAction,
     handleCancel, handleDelete,
     showPayDialog, payTarget, payLoading, payForm, handlePay, confirmPay,
     expenseCategoryLabel, commonStatusLabel,

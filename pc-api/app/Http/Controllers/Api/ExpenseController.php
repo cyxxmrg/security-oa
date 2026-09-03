@@ -14,6 +14,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use App\Support\AuthScope;
+use DomainException;
 
 class ExpenseController extends Controller
 {
@@ -72,6 +75,10 @@ class ExpenseController extends Controller
     public function store(StoreExpenseClaimRequest $request): JsonResponse
     {
         $data = $request->validated();
+        if (!empty($data['project_id']) && !Project::query()->whereKey($data['project_id'])->exists()) {
+            return response()->json(['code' => 403, 'message' => '无权关联该项目'], 403);
+        }
+
         $data['user_id']       = $request->user()->id;
         $data['status']        = 'submitted';
         $data['total_amount']  = collect($data['items'])->sum('amount');
@@ -80,63 +87,59 @@ class ExpenseController extends Controller
         if (empty($data['description'])) {
             $data['description'] = $data['category'] ?? '报销';
         }
-        $items = $data['items']; unset($data['items']);
-        $claim = ExpenseClaim::create($data);
-        // 兜底: expense_items.item_date + description 都是 NOT NULL
-        $today = now()->toDateString();
-        foreach ($items as $item) {
-            if (empty($item['item_date'])) {
-                $item['item_date'] = $today;
-            }
-            if (empty($item['category'])) {
-                $item['category'] = $data['category'] ?? '其他';
-            }
-            if (empty($item['description'])) {
-                $item['description'] = $item['category'] ?? '报销明细';
-            }
-            $claim->items()->create($item);
-        }
-        $claim->load(['user', 'project', 'items']);
 
-        // V1.2.5: 同步创建审批中心记录 (finance/expense), 按审批流程模板设定审批节点
         try {
-            $code = \App\Services\ApprovalNumberService::next('FIN');
-            $applicant = User::find($request->user()->id);
+            $claim = DB::transaction(function () use ($data, $request): ExpenseClaim {
+                $items = $data['items'];
+                unset($data['items']);
 
-            // 按模板初始化审批流程
-            $flowService = app(\App\Services\ApprovalFlowService::class);
-            $template = $flowService->resolveTemplate('expense');
-            $flowData = $template
-                ? $flowService->initFlow($template, $applicant, '提交报销单: ' . $claim->claim_no)
-                : ['current_approver_id' => 1, 'flow' => [[
-                    'operator' => $applicant?->name ?? '—',
-                    'action'   => 'submit',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => '提交报销单: ' . $claim->claim_no,
-                ]]];
+                $claim = ExpenseClaim::create($data);
+                $today = now()->toDateString();
+                foreach ($items as $item) {
+                    $item['item_date'] = $item['item_date'] ?? $today;
+                    $item['category'] = $item['category'] ?? ($data['category'] ?? '其他');
+                    $item['description'] = $item['description'] ?? ($item['category'] ?? '报销明细');
+                    $claim->items()->create($item);
+                }
 
-            ApprovalRecord::create([
-                'code'                => $code,
-                'type'                => 'finance',
-                'sub_type'            => 'expense',
-                'title'               => $applicant?->name . '的报销申请 (' . $this->categoryLabel($data['category']) . ' ¥' . number_format($data['total_amount'], 2) . ')',
-                'priority'            => 'normal',
-                'status'              => ApprovalRecord::STATUS_PENDING,
-                'amount'              => $data['total_amount'],
-                'applicant_id'        => $request->user()->id,
-                'current_approver_id' => $flowData['current_approver_id'],
-                'payload'             => [
-                    'claim_id'    => $claim->id,
-                    'claim_no'    => $claim->claim_no,
-                    'category'    => $data['category'],
-                    'description' => $data['description'] ?? '',
-                    'total_amount' => $data['total_amount'],
-                    'project_id'  => $data['project_id'] ?? null,
-                ],
-                'flow'                => $flowData['flow'],
-            ]);
+                $applicant = $request->user();
+                $flowService = app(\App\Services\ApprovalFlowService::class);
+                $template = $flowService->resolveTemplate('expense', 'finance');
+                if (!$template) {
+                    throw new DomainException('未找到报销对应的启用流程模板，请先在审批流程引擎中配置');
+                }
+                $flowData = $flowService->initFlow($template, $applicant, '提交报销单: ' . $claim->claim_no);
+
+                ApprovalRecord::create([
+                    'code'                => \App\Services\ApprovalNumberService::next('FIN'),
+                    'type'                => 'finance',
+                    'sub_type'            => 'expense',
+                    'title'               => $applicant->name . '的报销申请 (' . $this->categoryLabel($data['category']) . ' ¥' . number_format($data['total_amount'], 2) . ')',
+                    'priority'            => 'normal',
+                    'status'              => ApprovalRecord::STATUS_PENDING,
+                    'amount'              => $data['total_amount'],
+                    'applicant_id'        => $applicant->id,
+                    'current_approver_id' => $flowData['current_approver_id'],
+                    'payload'             => [
+                        'claim_id'        => $claim->id,
+                        'claim_no'        => $claim->claim_no,
+                        'category'        => $data['category'],
+                        'description'     => $data['description'] ?? '',
+                        'total_amount'    => $data['total_amount'],
+                        'project_id'      => $data['project_id'] ?? null,
+                        '_approval_flow' => $flowData['definition'],
+                    ],
+                    'flow'                => $flowData['flow'],
+                ]);
+
+                return $claim->load(['user', 'project', 'items']);
+            });
         } catch (\Throwable $e) {
-            \Log::error('ExpenseController::store sync to approval center failed', ['msg' => $e->getMessage()]);
+            \Log::error('ExpenseController::store failed', ['msg' => $e->getMessage()]);
+            if ($e instanceof DomainException) {
+                return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+            }
+            return response()->json(['code' => 1, 'message' => '报销提交失败，请稍后重试'], 500);
         }
         $this->clearListCache('expenses:index');
 
@@ -145,42 +148,96 @@ class ExpenseController extends Controller
 
     public function update(Request $request, ExpenseClaim $claim): JsonResponse
     {
+        if (!$this->canManageClaim($request, $claim)) {
+            return response()->json(['code' => 1001, 'message' => '只能修改自己的报销单'], 403);
+        }
         if ($claim->status !== 'draft' && $claim->status !== 'submitted') {
-        $this->clearListCache('expenses:index');
             return response()->json(['code' => 1001, 'message' => '只有草稿/待审批状态的报销单可以修改'], 422);
         }
         $data = $request->validate([
             'category'    => 'sometimes|string',
             'description' => 'sometimes|string|max:1000',
-            'project_id'  => 'sometimes|nullable|integer',
+            'project_id'  => 'sometimes|nullable|integer|exists:projects,id',
             'items'       => 'sometimes|array|min:1',
             'items.*.item_date'   => 'required_with:items|date',
             'items.*.description' => 'required_with:items|string|max:200',
             'items.*.amount'      => 'required_with:items|numeric|min:0',
         ]);
-        if (isset($data['items'])) {
-            $data['total_amount'] = collect($data['items'])->sum('amount');
-            $items = $data['items']; unset($data['items']);
-            $claim->items()->delete();
-            // V1.2.10 修复 N+1: 批量插入替代循环逐条 create
-            $claim->items()->createMany($items);
+        if (array_key_exists('project_id', $data) && $data['project_id'] !== null
+            && !Project::query()->whereKey($data['project_id'])->exists()) {
+            return response()->json(['code' => 403, 'message' => '无权关联该项目'], 403);
         }
-        $claim->fill($data)->save();
+
+        DB::transaction(function () use ($claim, $data): void {
+            if (isset($data['items'])) {
+                $data['total_amount'] = collect($data['items'])->sum('amount');
+                $items = $data['items'];
+                unset($data['items']);
+                $claim->items()->delete();
+                $claim->items()->createMany($items);
+            }
+            $claim->fill($data)->save();
+
+            if ($claim->status === 'submitted') {
+                $approval = ApprovalRecord::query()
+                    ->where('type', 'finance')
+                    ->where('sub_type', 'expense')
+                    ->where('payload->claim_id', $claim->id)
+                    ->where('status', ApprovalRecord::STATUS_PENDING)
+                    ->lockForUpdate()
+                    ->first();
+                if ($approval) {
+                    $payload = is_array($approval->payload) ? $approval->payload : [];
+                    $approval->amount = $claim->total_amount;
+                    $approval->payload = array_merge($payload, [
+                        'category'     => $claim->category,
+                        'description'  => $claim->description,
+                        'total_amount' => $claim->total_amount,
+                        'project_id'   => $claim->project_id,
+                    ]);
+                    $approval->save();
+                }
+            }
+        });
         $claim->load(['user', 'project', 'items']);
+        $this->clearListCache('expenses:index');
         return response()->json(['code' => 0, 'message' => '已更新', 'data' => $claim]);
     }
 
     public function destroy(Request $request, ExpenseClaim $claim): JsonResponse
     {
-        if ($claim->user_id !== $request->user()->id && !$request->user()->can('expense.delete')) {
-        $this->clearListCache('expenses:index');
+        if (!$this->canManageClaim($request, $claim) && !$request->user()->can('expense.delete')) {
             return response()->json(['code' => 1001, 'message' => '只能删除自己的报销单'], 403);
         }
-        if (in_array($claim->status, ['approved', 'paid'])) {
+        if (in_array($claim->status, ['approved', 'paid'], true)) {
             return response()->json(['code' => 1002, 'message' => '已审批/已支付的单据不能删除'], 422);
         }
-        $claim->items()->delete();
-        $claim->delete();
+        DB::transaction(function () use ($claim, $request): void {
+            $approval = ApprovalRecord::query()
+                ->where('type', 'finance')
+                ->where('sub_type', 'expense')
+                ->where('payload->claim_id', $claim->id)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+            if ($approval) {
+                $flow = is_array($approval->flow) ? $approval->flow : [];
+                $flow[] = [
+                    'operator' => $request->user()->name ?? '—',
+                    'action'   => 'delete',
+                    'time'     => now()->toDateTimeString(),
+                    'comment'  => '报销单已删除',
+                ];
+                $approval->flow = $flow;
+                $approval->status = ApprovalRecord::STATUS_CANCELLED;
+                $approval->current_approver_id = null;
+                $approval->comment = '报销单已删除';
+                $approval->save();
+            }
+            $claim->items()->delete();
+            $claim->delete();
+        });
+        $this->clearListCache('expenses:index');
         return response()->json(['code' => 0, 'message' => '已删除']);
     }
 
@@ -190,83 +247,117 @@ class ExpenseController extends Controller
             'action'  => 'required|in:approved,rejected',
             'comment' => 'nullable|string|max:500',
         ]);
-        // P1-8 修复: 禁止自审 + 校验审批权限
-        if ($claim->user_id === $request->user()->id) {
-            return response()->json(['code' => 1010, 'message' => '不能审批自己的申请'], 403);
-        }
         if (!$request->user()->can('expense.approve')) {
             return response()->json(['code' => 1011, 'message' => '当前账号没有报销审批权限'], 403);
         }
-        if (!in_array($claim->status, ['submitted'], true)) {
-            return response()->json(['code' => 1001, 'message' => '只能审批待审批状态的报销单'], 422);
-        }
-        $claim->update([
-            'status'        => $request->action,
-            'approver_id'   => $request->user()->id,
-            'approved_at'   => now(),
-            'reject_reason' => $request->action === 'rejected' ? $request->comment : null,
-        ]);
 
-        // V1.2.5: 同步更新审批中心记录
         try {
-            $approval = ApprovalRecord::where('type', 'finance')
-                ->where('sub_type', 'expense')
-                ->where('payload->claim_id', $claim->id)
-                ->first();
-            if ($approval) {
-                $flow = is_array($approval->flow) ? $approval->flow : [];
-                $flow[] = [
-                    'operator' => User::find($request->user()->id)?->name ?? '—',
-                    'action'   => $request->action === 'approved' ? 'approve' : 'reject',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => $request->comment ?? ($request->action === 'approved' ? '同意' : '驳回'),
-                ];
-                $approval->flow = $flow;
-                $approval->status = $request->action === 'approved'
-                    ? ApprovalRecord::STATUS_APPROVED
-                    : ApprovalRecord::STATUS_REJECTED;
-                $approval->comment = $request->comment ?? null;
-                $approval->save();
-            }
-        } catch (\Throwable $e) {
-            \Log::error('ExpenseController::approve sync approval failed', ['msg' => $e->getMessage()]);
-        }
+            return DB::transaction(function () use ($request, $claim): JsonResponse {
+                $user = $request->user();
+                if ((int) $claim->user_id === (int) $user->id) {
+                    return response()->json(['code' => 1010, 'message' => '不能审批自己的申请'], 403);
+                }
 
-        return response()->json(['code' => 0, 'message' => '审批完成']);
+                $approval = ApprovalRecord::query()
+                    ->where('type', 'finance')
+                    ->where('sub_type', 'expense')
+                    ->where('payload->claim_id', $claim->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (!$approval) {
+                    return response()->json(['code' => 1003, 'message' => '该报销单没有关联的审批流程'], 422);
+                }
+                if ($approval->status !== ApprovalRecord::STATUS_PENDING || $claim->status !== 'submitted') {
+                    return response()->json(['code' => 1001, 'message' => '只能审批待审批状态的报销单'], 422);
+                }
+
+                $isOverride = AuthScope::isAdmin($user)
+                    || ($user->is_system ?? false) === true
+                    || ($user->user_type ?? null) === 'system';
+                if (!$isOverride && (int) $approval->current_approver_id !== (int) $user->id) {
+                    return response()->json(['code' => 1011, 'message' => '当前用户不是该审批节点的审批人'], 403);
+                }
+
+                $comment = $request->input('comment', $request->action === 'approved' ? '同意' : '已驳回');
+                $flowService = app(\App\Services\ApprovalFlowService::class);
+                $result = $request->action === 'approved'
+                    ? $flowService->advanceFlow($approval, $user, $comment)
+                    : $flowService->rejectFlow($approval, $user, $comment);
+
+                $approval->flow = $result['flow'];
+                $approval->status = $result['status'];
+                $approval->current_approver_id = $result['current_approver_id'];
+                $approval->comment = $comment;
+                $approval->save();
+
+                if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
+                    $claim->update([
+                        'status'        => 'approved',
+                        'approver_id'   => $user->id,
+                        'approved_at'   => now(),
+                        'reject_reason' => null,
+                    ]);
+                } elseif ($result['status'] === ApprovalRecord::STATUS_REJECTED) {
+                    $claim->update([
+                        'status'        => 'rejected',
+                        'approver_id'   => $user->id,
+                        'approved_at'   => now(),
+                        'reject_reason' => $comment,
+                    ]);
+                }
+
+                return response()->json([
+                    'code' => 0,
+                    'message' => '审批完成',
+                    'data' => ['status' => $claim->fresh()->status],
+                ]);
+            });
+        } catch (\Throwable $e) {
+            \Log::error('ExpenseController::approve failed', ['msg' => $e->getMessage()]);
+            return response()->json(['code' => 1, 'message' => '审批失败: ' . $e->getMessage()], 422);
+        }
     }
 
     public function cancel(Request $request, ExpenseClaim $claim): JsonResponse
     {
-        if ($claim->user_id !== $request->user()->id) {
+        if (!$this->canManageClaim($request, $claim)) {
             return response()->json(['code' => 1001, 'message' => '只能撤销自己的报销单'], 403);
         }
         if (in_array($claim->status, ['approved', 'paid'], true)) {
             return response()->json(['code' => 1002, 'message' => '已审批/已支付的单据不能撤销'], 422);
         }
-        $claim->update(['status' => 'cancelled']);
-
-        // V1.2.5: 同步撤销审批中心记录
         try {
-            $approval = ApprovalRecord::where('type', 'finance')
-                ->where('sub_type', 'expense')
-                ->where('payload->claim_id', $claim->id)
-                ->first();
-            if ($approval && $approval->status === ApprovalRecord::STATUS_PENDING) {
-                $flow = is_array($approval->flow) ? $approval->flow : [];
-                $flow[] = [
-                    'operator' => User::find($request->user()->id)?->name ?? '—',
-                    'action'   => 'cancel',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => '申请人撤销报销单',
-                ];
-                $approval->flow = $flow;
-                $approval->status = ApprovalRecord::STATUS_CANCELLED;
-                $approval->save();
-            }
+            DB::transaction(function () use ($claim, $request): void {
+                $claim->update(['status' => 'cancelled']);
+
+                $approval = ApprovalRecord::query()
+                    ->where('type', 'finance')
+                    ->where('sub_type', 'expense')
+                    ->where('payload->claim_id', $claim->id)
+                    ->where('status', ApprovalRecord::STATUS_PENDING)
+                    ->lockForUpdate()
+                    ->first();
+                if ($approval) {
+                    $flow = is_array($approval->flow) ? $approval->flow : [];
+                    $flow[] = [
+                        'operator' => $request->user()->name ?? '—',
+                        'action'   => 'cancel',
+                        'time'     => now()->toDateTimeString(),
+                        'comment'  => '申请人撤销报销单',
+                    ];
+                    $approval->flow = $flow;
+                    $approval->status = ApprovalRecord::STATUS_CANCELLED;
+                    $approval->current_approver_id = null;
+                    $approval->comment = '申请人撤销报销单';
+                    $approval->save();
+                }
+            });
         } catch (\Throwable $e) {
-            \Log::error('ExpenseController::cancel sync approval failed', ['msg' => $e->getMessage()]);
+            \Log::error('ExpenseController::cancel failed', ['msg' => $e->getMessage()]);
+            return response()->json(['code' => 1, 'message' => '撤销失败，请稍后重试'], 500);
         }
 
+        $this->clearListCache('expenses:index');
         return response()->json(['code' => 0, 'message' => '已撤销']);
     }
 
@@ -275,6 +366,9 @@ class ExpenseController extends Controller
         $data = $request->validate([
             'paid_amount' => 'required|numeric|min:0',
         ]);
+        if ((float) $data['paid_amount'] > (float) $claim->total_amount) {
+            return response()->json(['code' => 1003, 'message' => '付款金额不能超过报销总额'], 422);
+        }
         if ($claim->status !== 'approved') {
             return response()->json(['code' => 1001, 'message' => '只有已审批的单据可以标记付款'], 422);
         }
@@ -327,13 +421,13 @@ class ExpenseController extends Controller
 
     public function stats(Request $request): JsonResponse
     {
-        $uid = $request->user()->id;
-        $total    = ExpenseClaim::where('user_id', $uid)->count();
-        $pending  = ExpenseClaim::where('user_id', $uid)->where('status', 'submitted')->count();
-        $approved = ExpenseClaim::where('user_id', $uid)->where('status', 'approved')->count();
-        $paid     = ExpenseClaim::where('user_id', $uid)->where('status', 'paid')->count();
-        $totalAmount = ExpenseClaim::where('user_id', $uid)->sum('total_amount');
-        $paidAmount  = ExpenseClaim::where('user_id', $uid)->where('status', 'paid')->sum('paid_amount');
+        $query = ExpenseClaim::query();
+        $total    = (clone $query)->count();
+        $pending  = (clone $query)->where('status', 'submitted')->count();
+        $approved = (clone $query)->where('status', 'approved')->count();
+        $paid     = (clone $query)->where('status', 'paid')->count();
+        $totalAmount = (clone $query)->sum('total_amount');
+        $paidAmount  = (clone $query)->where('status', 'paid')->sum('paid_amount');
         return response()->json(['code' => 0, 'data' => compact('total', 'pending', 'approved', 'paid', 'totalAmount', 'paidAmount')]);
     }
 
@@ -423,6 +517,14 @@ class ExpenseController extends Controller
         usort($group, fn($a, $b) => $b['amount'] <=> $a['amount']);
 
         return response()->json(['code' => 0, 'data' => ['summary' => $summary, 'group' => array_slice($group, 0, 50)]]);
+    }
+
+    private function canManageClaim(Request $request, ExpenseClaim $claim): bool
+    {
+        return (int) $claim->user_id === (int) $request->user()->id
+            || AuthScope::isUnrestricted($request->user())
+            || ($request->user()->is_system ?? false) === true
+            || ($request->user()->user_type ?? null) === 'system';
     }
 
     private function statusLabel(string $s): string

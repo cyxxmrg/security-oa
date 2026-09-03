@@ -130,6 +130,11 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'expense_claims':
+                return [
+                    ['user_id', '=', $userId],
+                ];
+
             case 'rectifications':
                 return [
                     ['created_by', '=', $userId],
@@ -183,8 +188,14 @@ class DataScope implements Scope
         $user = Auth::user();
         if (!$user) return;
 
-        // 2. admin/finance 直接放行
-        if (AuthScope::isUnrestricted($user)) return;
+        // 2. admin/finance/system 直接放行
+        if (
+            AuthScope::isUnrestricted($user)
+            || ($user->is_system ?? false) === true
+            || ($user->user_type ?? null) === 'system'
+        ) {
+            return;
+        }
 
         // 3. 拿到表名 + 拼 OR 条件
         $table = $model->getTable();

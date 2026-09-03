@@ -26,6 +26,7 @@
         :loading="loading"
         :list="list"
         :pagination="pagination"
+        :can-create="canCreate"
         :can-cancel="canCancel"
         :can-delete="canDelete"
         :can-pay="canPay"
@@ -156,7 +157,7 @@ const {
   showApplyDialog, activeTab, switchApply, onTabChange,
   statusOptions, categoryOptions, expenseStatusType,
   formatDate, formatMoney,
-  searchForm, list, loading, pagination, stats,
+  searchForm, list, loading, pagination, stats, canCreate,
   loadList, resetSearch,
   formRef, submitting, projectOptions, form, formRules, totalAmount,
   addItem, removeItem, resetForm, handleSubmit,

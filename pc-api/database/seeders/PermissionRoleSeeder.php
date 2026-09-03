@@ -106,6 +106,7 @@ class PermissionRoleSeeder extends Seeder
         ],
         // V1.2.12: 报销管理权限
         '报销管理' => [
+            ['name' => 'expense.view',     'label' => '报销单查看'],
             ['name' => 'expense.create',   'label' => '报销单创建/编辑'],
             ['name' => 'expense.edit',     'label' => '报销单编辑'],
             ['name' => 'expense.approve',  'label' => '报销审批/付款'],
@@ -195,7 +196,8 @@ class PermissionRoleSeeder extends Seeder
                     in_array($n, ['attendance.view', 'attendance.record'], true) ||
                     str_starts_with($n, 'approval.mine') ||
                     $n === 'disk.view' ||
-                    $n === 'inventory.view'
+                    $n === 'inventory.view' ||
+                    $n === 'expense.view'
                 )),
             ],
             'manager' => [

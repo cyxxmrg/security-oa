@@ -463,7 +463,7 @@ class RoleController extends Controller
             ]],
             ['path' => 'expense', 'title' => '报销管理', 'icon' => 'Money', 'leaves' => [
                 ['path' => 'list',  'name' => 'ExpenseList',  'title' => '报销列表', 'perm_key' => 'expense.view'],
-                ['path' => 'apply', 'name' => 'ExpenseApply', 'title' => '申请报销', 'perm_key' => 'expense.apply'],
+                ['path' => 'apply', 'name' => 'ExpenseApply', 'title' => '申请报销', 'perm_key' => 'expense.create'],
             ]],
             ['path' => 'vehicle', 'title' => '车辆管理', 'icon' => 'Van', 'leaves' => [
                 ['path' => 'fleet',       'name' => 'VehicleFleet',       'title' => '车辆档案', 'perm_key' => 'vehicle.view'],
