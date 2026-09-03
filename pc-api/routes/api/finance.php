@@ -114,7 +114,7 @@ Route::prefix('inventory')->middleware(['auth:sanctum', 'ensure_business', 'perm
 });
 
 // ========== 库存分类 ==========
-Route::prefix('inventory-categories')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('inventory-categories')->middleware(['auth:sanctum', 'ensure_business', 'permission:inventory.view'])->group(function () {
     Route::get('/', [InventoryCategoryController::class, 'index']);
     Route::get('tree', [InventoryCategoryController::class, 'tree']);
     Route::post('/', [InventoryCategoryController::class, 'store'])->middleware('permission:inventory.create');
