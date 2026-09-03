@@ -164,7 +164,7 @@ const handleSave = async (payload: Record<string, unknown>) => {
       await supplier.update(editingSupplier.value.id, payload)
       ElMessage.success('已更新')
     } else {
-      await supplier.create(payload)
+      await supplier.create(payload as unknown as Parameters<typeof supplier.create>[0])
       ElMessage.success('已创建')
     }
     showFormDialog.value = false

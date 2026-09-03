@@ -117,7 +117,7 @@ import type { SupplierDetail, SupplierEvaluation } from '@/api/supplier'
 // 局部小组件：金额统计
 const SummaryStat = {
   props: ['label', 'value', 'color'],
-  setup(p: Record<string, unknown>) {
+  setup(p: { label?: string; value?: string | number; color?: string }) {
     return () => h('div', { style: 'text-align:center' }, [
       h('div', { style: 'color:#999;font-size:12px' }, p.label),
       h('div', { style: `font-size:22px;font-weight:700;color:${p.color}` }, p.value),
