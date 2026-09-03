@@ -88,7 +88,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { processApi, getProjectList, getUserList } from '@/api/modules'
 import { unwrapList, unwrapPaginate } from '@/utils/response'
@@ -262,7 +262,7 @@ const actionDialog = reactive({
   commentLabel: '备注',
   commentKey: 'comment',
   commentPlaceholder: '',
-  rules: {} as Record<string, unknown>,
+  rules: {} as FormRules,
   form: { comment: '', reason: '' } as Record<string, unknown>,
   target: null as Instance | null,
 })

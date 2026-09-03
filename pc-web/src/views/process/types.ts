@@ -32,7 +32,7 @@ export const statusLabel = (s?: string): string =>
   STATUS_OPTIONS.find((o) => o.value === s)?.label || s || '-'
 
 export const statusTagType = (s?: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' =>
-  (STATUS_TAG_TYPE as Record<string, unknown>)[s || ''] || 'info'
+  STATUS_TAG_TYPE[s as ProcessStatus] || 'info'
 
 // 行业映射
 export const INDUSTRY_MAP: Record<string, string> = {
@@ -73,7 +73,7 @@ export const resultLabel = (r?: string): string =>
   RESULT_OPTIONS.find((o) => o.value === r)?.label || r || '-'
 
 export const resultTagType = (r?: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' =>
-  (RESULT_TAG_TYPE as Record<string, unknown>)[r || ''] || 'info'
+  RESULT_TAG_TYPE[r || ''] || 'info'
 
 // 前端 UI (rectify) → 后端 (partial)
 export const toBackendResult = (r: string): string => (r === 'rectify' ? 'partial' : r)
@@ -112,11 +112,11 @@ export const formatDateTime = (s?: string | null): string => {
 }
 
 export const getInspectorName = (row: Record<string, unknown>): string =>
-  row.inspector?.name || row.inspector_name || ''
+  String((row.inspector as { name?: string } | undefined)?.name || row.inspector_name || '')
 
 export const getDefects = (row: Record<string, unknown>): string => {
-  if (row.defects) return row.defects
-  if (Array.isArray(row.issues)) return row.issues.filter(Boolean).join('；')
+  if (row.defects) return String(row.defects)
+  if (Array.isArray(row.issues)) return row.issues.filter(Boolean).map(String).join('；')
   if (typeof row.issues === 'string' && row.issues) return row.issues
   return ''
 }
