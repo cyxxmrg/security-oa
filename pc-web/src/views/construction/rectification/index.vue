@@ -69,13 +69,13 @@
         <el-table-column prop="created_at" label="创建时间" width="160" align="center" show-overflow-tooltip />
         <el-table-column label="操作" width="180" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" :icon="View" @click="handleView(row)">详情</el-button>
+            <el-button link type="primary" :icon="View" @click="handleView(row as unknown as Rectification)">详情</el-button>
             <el-button
               v-if="row.status !== 'completed'"
               link
               type="success"
               :icon="CircleCheck"
-              @click="handleComplete(row)"
+              @click="handleComplete(row as unknown as Rectification)"
             >完成</el-button>
           </template>
         </el-table-column>
@@ -136,7 +136,7 @@
         </el-form-item>
         <el-form-item label="责任人" prop="responsible_id">
           <el-select v-model="formData.responsible_id" filterable placeholder="请选择" style="width: 100%">
-            <el-option v-for="u in userOptions" :key="u.id" :label="u.name" :value="u.id" />
+            <el-option v-for="u in userOptions" :key="u.id" :label="u.name ?? ''" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="截止日期" prop="deadline">
@@ -270,10 +270,10 @@ const statusOptions = [
   { value: 'completed', label: '已完成' },
   { value: 'rejected',  label: '已驳回' },
 ]
-const statusLabel = (s: string) => statusOptions.find(x => x.value === s)?.label || s || '-'
-const statusTagType = (s: string): string => ({
+const statusLabel = (s?: string) => statusOptions.find(x => x.value === s)?.label || s || '-'
+const statusTagType = (s?: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => ({
   pending: 'info', in_progress: 'warning', completed: 'success', rejected: 'danger',
-} as Record<string, string>)[s] || 'info'
+} as Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'>)[s || ''] || 'info'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -305,15 +305,23 @@ const formFileRef = ref<HTMLInputElement | null>(null)
 
 // 详情弹窗
 const showDetailDialog = ref(false)
-const viewDetail = ref<Record<string, unknown> | null>(null)
+type RectificationDetail = Rectification & {
+  responsible?: { name?: string | null } | null
+  source_type?: string | null
+  severity?: string | null
+  description?: string | null
+  images?: unknown[] | null
+  complete_images?: unknown[] | null
+}
+const viewDetail = ref<RectificationDetail | null>(null)
 const detailLoading = ref(false)
 const viewImages = computed(() => {
   const imgs = viewDetail.value?.images
-  return Array.isArray(imgs) ? imgs : []
+  return Array.isArray(imgs) ? imgs.filter((img): img is string => typeof img === 'string') : []
 })
 const completeImages = computed(() => {
   const imgs = viewDetail.value?.complete_images
-  return Array.isArray(imgs) ? imgs : []
+  return Array.isArray(imgs) ? imgs.filter((img): img is string => typeof img === 'string') : []
 })
 
 // 完成弹窗
@@ -374,7 +382,7 @@ const loadOptions = async () => {
       getProjectList({ per_page: 500 }),
       getUserList({ per_page: 500 }),
     ])
-    projectOptions.value = unwrapList(p).map((x: Record<string, unknown>) => ({ id: x.id, code: x.code, name: x.name }))
+    projectOptions.value = unwrapList(p).map((x: Record<string, unknown>) => ({ id: Number(x.id) || 0, code: String(x.code ?? ''), name: String(x.name ?? '') }))
     userOptions.value = unwrapList(u)
   } catch {
     projectOptions.value = []
@@ -433,8 +441,10 @@ const handleView = async (row: Rectification) => {
   showDetailDialog.value = true
   detailLoading.value = true
   try {
-    const res = await rectificationApi.show(row.id)
-    viewDetail.value = res?.data || res || null
+    const rectificationId = Number(row.id)
+    if (!Number.isFinite(rectificationId)) return
+    const res = await rectificationApi.show(rectificationId)
+    viewDetail.value = (res?.data || res || null) as RectificationDetail | null
   } catch {
     viewDetail.value = null
   } finally {
@@ -463,7 +473,7 @@ const handleFormFileChange = (e: Event) => {
 }
 
 // 完成弹窗
-const handleComplete = (row: Record<string, unknown>) => {
+const handleComplete = (row: Rectification) => {
   completingTarget.value = row
   completeResult.value = ''
   completePhotoList.value = []
@@ -499,7 +509,9 @@ const submitComplete = async () => {
       rectify_result: completeResult.value || '已完成整改',
       complete_images: completeImagesData.value,
     }
-    await rectificationApi.complete(completingTarget.value?.id, payload)
+    const rectificationId = Number(completingTarget.value?.id)
+    if (!Number.isFinite(rectificationId)) return
+    await rectificationApi.complete(rectificationId, payload)
     ElMessage.success('整改已完成')
     showCompleteDialog.value = false
     await loadList()

@@ -62,9 +62,9 @@ const statusOptions = [
   { value: 'rejected',  label: '已驳回' },
 ]
 const statusLabel = (s: string) => statusOptions.find(x => x.value === s)?.label || s || '-'
-const statusTagType = (s: string): string => ({
+const statusTagType = (s?: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => ({
   pending: 'info', in_progress: 'warning', completed: 'success', rejected: 'danger',
-} as Record<string, string>)[s] || 'info'
+} as Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'>)[s || ''] || 'info'
 
 const id = computed(() => Number(route.params.id))
 
