@@ -96,59 +96,62 @@ class OperationApprovalController extends Controller
                 return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
             }
 
-            if ($approval->sub_type === 'material-request') {
-                $payload = $approval->payload;
-                $items = $payload['items'] ?? [];
-                $projectId = $payload['project_id'] ?? null;
-                if (!empty($items)) {
-                    $today = date('Ymd');
-                    if (\DB::connection()->getDriverName() === 'pgsql') {
-                        \DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['material-request-stock:' . $today]);
-                    }
-                    foreach ($items as $item) {
-                        $invItem = \App\Models\InventoryItem::lockForUpdate()->findOrFail($item['inventory_item_id']);
-                        $qty = (int) ($item['quantity'] ?? 1);
-                        if ($qty < 1) {
-                            throw new \RuntimeException('物料申领数量必须大于 0');
-                        }
-                        $warehouseId = $item['warehouse_id'] ?? $invItem->warehouse_id;
-                        if ($warehouseId === null) {
-                            throw new \RuntimeException("物料「{$invItem->name}」未配置仓库");
-                        }
-                        if ($invItem->warehouse_id !== null && (int) $invItem->warehouse_id !== (int) $warehouseId) {
-                            throw new \RuntimeException("物料「{$invItem->name}」不属于申领仓库");
-                        }
-                        if ($invItem->current_stock < $qty) {
-                            throw new \RuntimeException("物料 {$invItem->name} 库存不足（当前 {$invItem->current_stock}，需要 {$qty}）");
-                        }
-                        $newStock = $invItem->current_stock - $qty;
-                        $invItem->current_stock = $newStock;
-                        if ($invItem->warehouse_id === null && $warehouseId !== null) {
-                            $invItem->warehouse_id = (int) $warehouseId;
-                        }
-                        $invItem->save();
-                        $cnt = \App\Models\StockRecord::where('record_no', 'like', "MR-{$today}-%")->count();
-                        $seq = str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
-                        \App\Models\StockRecord::create([
-                            'record_no'         => "MR-{$today}-{$seq}",
-                            'inventory_item_id' => $invItem->id,
-                            'warehouse_id'      => $warehouseId,
-                            'type'              => 'out',
-                            'quantity'          => $qty,
-                            'remaining_stock'   => $newStock,
-                            'out_method'        => 'pickup',
-                            'project_id'        => $projectId,
-                            'operator_id'       => $approval->applicant_id,
-                            'remark'            => '物料申领 #' . $approval->code,
-                        ]);
-                    }
-                }
-            }
-
             $comment = $request->input('comment', '同意');
             $user = $request->user();
             $flowService = app(ApprovalFlowService::class);
             $result = $flowService->advanceFlow($approval, $user, $comment);
+
+            if ($result['status'] === ApprovalRecord::STATUS_APPROVED && $approval->sub_type === 'material-request') {
+                $payload = $approval->payload;
+                $items = $payload['items'] ?? [];
+                $projectId = $payload['project_id'] ?? null;
+                foreach ($items as $item) {
+                    $invItem = \App\Models\InventoryItem::lockForUpdate()->findOrFail($item['inventory_item_id']);
+                    $qty = (int) ($item['quantity'] ?? 1);
+                    if ($qty < 1) {
+                        throw new \RuntimeException('物料申领数量必须大于 0');
+                    }
+                    $warehouseId = $item['warehouse_id'] ?? $invItem->warehouse_id;
+                    if ($warehouseId === null) {
+                        throw new \RuntimeException("物料「{$invItem->name}」未配置仓库");
+                    }
+                    if ($invItem->warehouse_id !== null && (int) $invItem->warehouse_id !== (int) $warehouseId) {
+                        throw new \RuntimeException("物料「{$invItem->name}」不属于申领仓库");
+                    }
+                    if ($invItem->current_stock < $qty) {
+                        throw new \RuntimeException("物料 {$invItem->name} 库存不足（当前 {$invItem->current_stock}，需要 {$qty}）");
+                    }
+                    $newStock = $invItem->current_stock - $qty;
+                    $invItem->current_stock = $newStock;
+                    if ($invItem->warehouse_id === null) {
+                        $invItem->warehouse_id = (int) $warehouseId;
+                    }
+                    $invItem->save();
+
+                    $today = date('Ymd');
+                    $sequence = \App\Services\NumberSequenceService::next("material-request-stock:{$today}", static function () use ($today): int {
+                        return \App\Models\StockRecord::where('record_no', 'like', "MR-{$today}-%")
+                            ->pluck('record_no')
+                            ->map(static function (string $recordNo): int {
+                                $parts = explode('-', $recordNo);
+                                return (int) end($parts);
+                            })
+                            ->max() ?? 0;
+                    });
+                    \App\Models\StockRecord::create([
+                        'record_no'         => sprintf('MR-%s-%04d', $today, $sequence),
+                        'inventory_item_id' => $invItem->id,
+                        'warehouse_id'      => $warehouseId,
+                        'type'              => 'out',
+                        'quantity'          => $qty,
+                        'remaining_stock'   => $newStock,
+                        'out_method'        => 'pickup',
+                        'project_id'        => $projectId,
+                        'operator_id'       => $approval->applicant_id,
+                        'remark'            => '物料申领 #' . $approval->code,
+                    ]);
+                }
+            }
 
             $approval->flow = $result['flow'];
             $approval->status = $result['status'];
@@ -162,7 +165,7 @@ class OperationApprovalController extends Controller
             }
 
             $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部审批节点已完成）' : '已通过，已转交下一节点';
-            return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status, 'remark' => $approval->sub_type === 'material-request' ? '物料已出库' : null]]);
+            return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status, 'remark' => $result['status'] === ApprovalRecord::STATUS_APPROVED && $approval->sub_type === 'material-request' ? '物料已出库' : null]]);
             });
         } catch (\Throwable $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
@@ -173,50 +176,52 @@ class OperationApprovalController extends Controller
     public function reject(Request $request, ApprovalRecord $approval): JsonResponse
     {
         abort_unless($approval->type === 'operation', 404, '资源不存在或参数错误');
-        if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-            return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-        }
-        if (!$this->canCurrentUserApprove($approval)) {
-            return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
-        }
-
         $request->validate(['comment' => 'required|string|max:500']);
-        $user = $request->user();
         $comment = $request->input('comment');
+        return \DB::transaction(function () use ($request, $approval, $comment) {
+            $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+            if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
+            }
+            if (!$this->canCurrentUserApprove($approval)) {
+                return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
+            }
 
-        $flowService = app(ApprovalFlowService::class);
-        $result = $flowService->rejectFlow($approval, $user, $comment);
+            $result = app(ApprovalFlowService::class)->rejectFlow($approval, $request->user(), $comment);
+            $approval->flow = $result['flow'];
+            $approval->status = $result['status'];
+            $approval->current_approver_id = $result['current_approver_id'];
+            $approval->comment = $comment;
+            $approval->save();
+            $this->syncPurchaseRequirementStatus($approval, 'rejected', $comment);
+            $this->syncOvertimeStatus($approval, 'rejected');
 
-        $approval->flow = $result['flow'];
-        $approval->status = $result['status'];
-        $approval->current_approver_id = $result['current_approver_id'];
-        $approval->comment = $comment;
-        $approval->save();
-        $this->syncPurchaseRequirementStatus($approval, 'rejected', $comment);
-        $this->syncOvertimeStatus($approval, 'rejected');
-
-        return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
+            return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
+        });
     }
 
     public function forward(Request $request, ApprovalRecord $approval): JsonResponse
     {
         abort_unless($approval->type === 'operation', 404, '资源不存在或参数错误');
-        if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-            return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-        }
-        if (!$this->canCurrentUserApprove($approval)) {
-            return response()->json(['code' => 1, 'message' => '当前用户无权转交该单'], 403);
-        }
-
         $request->validate(['target' => 'required|string|max:100']);
         $target = $request->input('target');
-        $this->appendFlow($approval, 'transfer', "转交给 {$target}");
-        $approval->current_approver_id = null;
-        $approval->status  = ApprovalRecord::STATUS_TRANSFERRED;
-        $approval->comment = "已转交：{$target}";
-        $approval->save();
+        return \DB::transaction(function () use ($approval, $target) {
+            $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+            if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
+            }
+            if (!$this->canCurrentUserApprove($approval)) {
+                return response()->json(['code' => 1, 'message' => '当前用户无权转交该单'], 403);
+            }
 
-        return response()->json(['code' => 0, 'message' => "已转交 {$target}"]);
+            $this->appendFlow($approval, 'transfer', "转交给 {$target}");
+            $approval->current_approver_id = null;
+            $approval->status  = ApprovalRecord::STATUS_TRANSFERRED;
+            $approval->comment = "已转交：{$target}";
+            $approval->save();
+
+            return response()->json(['code' => 0, 'message' => "已转交 {$target}"]);
+        });
     }
 
     private function syncPurchaseRequirementStatus(ApprovalRecord $approval, string $status, ?string $comment = null): void

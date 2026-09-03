@@ -130,47 +130,49 @@ class FinanceApprovalController extends Controller
     public function reject(Request $request, ApprovalRecord $approval): JsonResponse
     {
         abort_unless($approval->type === 'finance', 404, '资源不存在或参数错误');
-        if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-            return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-        }
-        if (!$this->canCurrentUserApprove($approval)) {
-            return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
-        }
-
         $request->validate(['comment' => 'required|string|max:500']);
-        $user = $request->user();
         $comment = $request->input('comment');
+        return \DB::transaction(function () use ($request, $approval, $comment) {
+            $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+            if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
+            }
+            if (!$this->canCurrentUserApprove($approval)) {
+                return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
+            }
 
-        // 按模板驳回
-        $flowService = app(ApprovalFlowService::class);
-        $result = $flowService->rejectFlow($approval, $user, $comment);
+            $result = app(ApprovalFlowService::class)->rejectFlow($approval, $request->user(), $comment);
+            $approval->flow = $result['flow'];
+            $approval->status = $result['status'];
+            $approval->current_approver_id = $result['current_approver_id'];
+            $approval->comment = $comment;
+            $approval->save();
 
-        $approval->flow = $result['flow'];
-        $approval->status = $result['status'];
-        $approval->current_approver_id = $result['current_approver_id'];
-        $approval->save();
-
-        return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
+            return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
+        });
     }
 
     public function forward(Request $request, ApprovalRecord $approval): JsonResponse
     {
         abort_unless($approval->type === 'finance', 404, '资源不存在或参数错误');
-        if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-            return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-        }
-        if (!$this->canCurrentUserApprove($approval)) {
-            return response()->json(['code' => 1, 'message' => '当前用户无权转交该单'], 403);
-        }
-
         $request->validate(['target' => 'required|string|max:100']);
         $target = $request->input('target');
-        $this->appendFlow($approval, 'transfer', "转交给 {$target}");
-        $approval->current_approver_id = null;
-        $approval->status  = ApprovalRecord::STATUS_TRANSFERRED;
-        $approval->comment = "已转交：{$target}";
-        $approval->save();
+        return \DB::transaction(function () use ($approval, $target) {
+            $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+            if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
+            }
+            if (!$this->canCurrentUserApprove($approval)) {
+                return response()->json(['code' => 1, 'message' => '当前用户无权转交该单'], 403);
+            }
 
-        return response()->json(['code' => 0, 'message' => "已转交 {$target}"]);
+            $this->appendFlow($approval, 'transfer', "转交给 {$target}");
+            $approval->current_approver_id = null;
+            $approval->status  = ApprovalRecord::STATUS_TRANSFERRED;
+            $approval->comment = "已转交：{$target}";
+            $approval->save();
+
+            return response()->json(['code' => 0, 'message' => "已转交 {$target}"]);
+        });
     }
 }
