@@ -112,33 +112,7 @@ class InspectionService
      */
     public function generateInitialTasks(InspectionPlan $plan): int
     {
-        $days = $plan->ahead_generate_days ?? 30;
-        $endDate = now()->addDays($days);
-        $count = 0;
-        $date = new \DateTime($plan->start_date->toDateString());
-
-        while ($date <= $endDate) {
-            if ($plan->end_date && $date > $plan->end_date) break;
-            $this->createTaskForDate($plan, $date);
-            $count++;
-            $nextDate = $plan->calculateNextDate($date);
-            if (!$nextDate) break;
-            $date = $nextDate;
-        }
-
-        // 更新排程器
-        InspectionSchedule::updateOrCreate(
-            ['plan_id' => $plan->id],
-            [
-                'last_generated_date' => $endDate->toDateString(),
-                'next_scheduled_date' => $endDate->modify('+1 day')->toDateString(),
-                'generated_count'     => $count,
-                'last_run_at'         => now(),
-            ]
-        );
-
-        $plan->increment('total_generated', $count);
-        return $count;
+        return $this->generateTasksForPlan($plan->id, true) ?? 0;
     }
 
     /**
@@ -150,18 +124,68 @@ class InspectionService
         $query = InspectionPlan::where('status', InspectionPlan::STATUS_ACTIVE);
         if ($planId) $query->where('id', $planId);
 
-        $plans = $query->with('schedule')->get();
+        $plans = $query->pluck('id');
         foreach ($plans as $plan) {
-            $schedule = $plan->schedule()->first();
-            if (!$schedule) continue;
-            $now = now()->toDateString();
-            if ($schedule->next_scheduled_date && $schedule->next_scheduled_date->toDateString() > $now) continue;
-
-            $count = $this->generateInitialTasks($plan);
+            $count = $this->generateTasksForPlan($plan);
+            if ($count === null) {
+                continue;
+            }
             $results['generated'] += $count;
             $results['plans']++;
         }
         return $results;
+    }
+
+    /**
+     * 在计划行与排程行锁定期间，生成当前提前窗口内尚未创建的任务。
+     *
+     * @return int|null 返回 null 表示本次尚未到该计划的生成时间
+     */
+    protected function generateTasksForPlan(int $planId, bool $force = false): ?int
+    {
+        return DB::transaction(function () use ($planId, $force) {
+            $plan = InspectionPlan::lockForUpdate()->findOrFail($planId);
+            $schedule = InspectionSchedule::where('plan_id', $plan->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $today = now()->toDateString();
+            if (!$force && $schedule->next_scheduled_date?->toDateString() > $today) {
+                return null;
+            }
+
+            $horizon = now()->addDays($plan->ahead_generate_days ?? 30)->startOfDay();
+            $latestScheduledDate = InspectionTask::where('plan_id', $plan->id)->max('scheduled_date');
+            $date = $latestScheduledDate
+                ? $plan->calculateNextDate(new \DateTime($latestScheduledDate))
+                : new \DateTime($plan->start_date->toDateString());
+            $count = 0;
+
+            while ($date && $date <= $horizon) {
+                if ($plan->end_date && $date > $plan->end_date) {
+                    break;
+                }
+
+                $task = $this->createTaskForDate($plan, $date);
+                if ($task->wasRecentlyCreated) {
+                    $count++;
+                }
+                $date = $plan->calculateNextDate($date);
+            }
+
+            $schedule->update([
+                'last_generated_date' => $horizon->toDateString(),
+                'next_scheduled_date' => $horizon->copy()->addDay()->toDateString(),
+                'generated_count'     => $count,
+                'last_run_at'         => now(),
+            ]);
+
+            if ($count > 0) {
+                $plan->increment('total_generated', $count);
+            }
+
+            return $count;
+        });
     }
 
     /**
@@ -181,11 +205,12 @@ class InspectionService
             $assignedTo = is_array($assignees) ? ($assignees[array_rand($assignees)] ?? null) : $plan->assigned_to;
         }
 
-        return InspectionTask::create([
+        return InspectionTask::firstOrCreate([
             'plan_id'        => $plan->id,
+            'scheduled_date' => $date->format('Y-m-d'),
+        ], [
             'contract_id'    => $plan->contract_id,
             'customer_id'    => $plan->customer_id,
-            'scheduled_date' => $date->format('Y-m-d'),
             'scheduled_hour' => $scheduledHour,
             'scheduled_at'   => $scheduledAt,
             'assigned_to'    => $assignedTo,
