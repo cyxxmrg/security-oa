@@ -7,6 +7,7 @@ use App\Models\TenderProject;
 use App\Models\TenderBid;
 use App\Models\TenderAttachment;
 use App\Models\Supplier;
+use App\Services\FileUploadService;
 use App\Services\PortalInviteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -160,7 +161,7 @@ class PortalController extends Controller
     /**
      * 供应商上传投标附件
      */
-    public function uploadBidAttachment(Request $request, string $token): JsonResponse
+    public function uploadBidAttachment(Request $request, string $token, FileUploadService $uploader): JsonResponse
     {
         $data = $request->validate([
             'supplier_id' => 'required|integer|exists:suppliers,id',
@@ -175,19 +176,34 @@ class PortalController extends Controller
             return $verify;
         }
         $t = TenderProject::where('public_token', $token)->firstOrFail();
+        if (!in_array($t->status, ['bidding', 'published'], true)) {
+            return response()->json(['code' => 1003, 'message' => '该项目当前不接受投标附件'], 422);
+        }
         $bid = $t->bids()->where('id', $data['bid_id'])->where('supplier_id', $data['supplier_id'])->firstOrFail();
-        $file = $request->file('file');
-        $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = "tenders/{$t->id}/bids/{$bid->id}";
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'attachments');
+        if (in_array($bid->status, ['awarded', 'rejected', 'withdrawn'], true)) {
+            return response()->json(['code' => 1003, 'message' => '该投标已结束，不能继续上传附件'], 422);
+        }
+        $result = $uploader->store($request, 'file', [
+            'disk'         => 'attachments',
+            'subdir'       => "tenders/{$t->id}/bids/{$bid->id}",
+            'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar'],
+            'allowed_mime' => [
+                'application/pdf', 'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'image/jpeg', 'image/png', 'application/zip', 'application/x-rar-compressed',
+            ],
+            'max_size'     => 51200,
+        ]);
         $att  = TenderAttachment::create([
             'tender_project_id' => $t->id,
             'tender_bid_id'     => $bid->id,
             'uploaded_by_supplier_id' => $data['supplier_id'],
-            'file_name' => $file->getClientOriginalName(),
-            'file_path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => $file->getSize(),
+            'file_name' => $result['original_name'],
+            'file_path' => $result['path'],
+            'mime_type' => $result['mime'],
+            'file_size' => $result['size'],
             'category'  => $data['category'] ?? 'bid_file',
             'visibility' => $data['visibility'] ?? 'eval_only',
         ]);

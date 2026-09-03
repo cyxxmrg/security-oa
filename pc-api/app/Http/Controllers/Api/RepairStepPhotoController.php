@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\RepairStepPhoto;
+use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -65,7 +66,7 @@ class RepairStepPhotoController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, FileUploadService $uploader): JsonResponse
     {
         $data = $request->validate([
             'target_type' => 'required|in:work_order,repair_order',
@@ -87,18 +88,23 @@ class RepairStepPhotoController extends Controller
         }
 
         $file = $request->file('file');
-        $ext = $file->getClientOriginalExtension();
         $dir = "repair-photos/{$data['target_type']}/{$code}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('p_') . '.' . $ext, 'attachments');
+        $result = $uploader->store($request, 'file', [
+            'disk'         => 'attachments',
+            'subdir'       => $dir,
+            'allowed_ext'  => ['jpg', 'jpeg', 'png', 'webp', 'heic'],
+            'allowed_mime' => ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
+            'max_size'     => 10240,
+        ]);
 
         $photo = RepairStepPhoto::create([
             'target_type' => $data['target_type'],
             'target_id'   => $data['target_id'],
             'step'        => $data['step'],
-            'file_path'   => $path,
-            'file_name'   => $file->getClientOriginalName(),
-            'file_type'   => $file->getMimeType(),
-            'file_size'   => $file->getSize(),
+            'file_path'   => $result['path'],
+            'file_name'   => $result['original_name'],
+            'file_type'   => $result['mime'],
+            'file_size'   => $result['size'],
             'description' => $data['description'] ?? null,
             'uploaded_by' => $request->user()?->id,
             'uploaded_at' => now(),

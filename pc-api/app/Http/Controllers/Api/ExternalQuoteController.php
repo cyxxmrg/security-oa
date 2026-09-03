@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalQuote;
 use App\Models\ExternalQuoteRequest;
 use App\Services\ExternalQuoteService;
+use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -86,26 +87,36 @@ class ExternalQuoteController extends Controller
     }
 
     // v0.5.8.10 对外报价附件 (required_files: 招标文件/图纸/技术规格 等)
-    public function uploadRequiredFile(Request $request, int $id): JsonResponse
+    public function uploadRequiredFile(Request $request, int $id, FileUploadService $uploader): JsonResponse
     {
         $request->validate([
             'file' => 'required|file|max:51200|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,zip,rar', // 50MB
         ]);
         $req = \App\Models\ExternalQuoteRequest::findOrFail($id);
-        $file = $request->file('file');
-        $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = "external-quotes/{$req->id}/" . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('reqfile_') . ($ext ? ".{$ext}" : ''), 'attachments');
+        $result = $uploader->store($request, 'file', [
+            'disk'         => 'attachments',
+            'subdir'       => "external-quotes/{$req->id}/" . date('Ymd'),
+            'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'dwg', 'zip', 'rar'],
+            'allowed_mime' => [
+                'application/pdf', 'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'image/jpeg', 'image/png', 'application/acad', 'application/dwg', 'image/vnd.dwg',
+                'application/zip', 'application/x-rar-compressed',
+            ],
+            'max_size'     => 51200,
+        ]);
 
         $files = $req->required_files ?? [];
         $fileId = uniqid('f_');
         $files[] = [
             'id'        => $fileId,
-            'name'      => $file->getClientOriginalName(),
-            'path'      => $path,
+            'name'      => $result['original_name'],
+            'path'      => $result['path'],
             'url'       => route('external-quotes.files.download', [$req->id, $fileId]),
-            'size'      => $file->getSize(),
-            'mime'      => $file->getMimeType(),
+            'size'      => $result['size'],
+            'mime'      => $result['mime'],
             'uploaded_at' => now()->toIso8601String(),
         ];
         $req->required_files = $files;
@@ -156,24 +167,34 @@ class ExternalQuoteController extends Controller
     }
 
     // v0.5.8.10 通用附件上传 (新建请求时用, 不依赖 disk_folder)
-    public function uploadAttachment(Request $request): JsonResponse
+    public function uploadAttachment(Request $request, FileUploadService $uploader): JsonResponse
     {
         $request->validate([
             'file' => 'required|file|max:51200|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,zip,rar',
         ]);
-        $file = $request->file('file');
-        $ext  = strtolower($file->getClientOriginalExtension());
-        $dir  = 'external-quotes/_draft/' . date('Ymd');
-        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'attachments');
+        $result = $uploader->store($request, 'file', [
+            'disk'         => 'attachments',
+            'subdir'       => 'external-quotes/_draft/' . date('Ymd'),
+            'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'dwg', 'zip', 'rar'],
+            'allowed_mime' => [
+                'application/pdf', 'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'image/jpeg', 'image/png', 'application/acad', 'application/dwg', 'image/vnd.dwg',
+                'application/zip', 'application/x-rar-compressed',
+            ],
+            'max_size'     => 51200,
+        ]);
 
         return response()->json(['code' => 0, 'message' => '已上传', 'data' => [
             'id'            => uniqid('f_'),
-            'name'          => $file->getClientOriginalName(),
-            'original_name' => $file->getClientOriginalName(),
-            'path'          => $path,
+            'name'          => $result['original_name'],
+            'original_name' => $result['original_name'],
+            'path'          => $result['path'],
             'url'           => null,
-            'size'          => $file->getSize(),
-            'mime_type'     => $file->getMimeType(),
+            'size'          => $result['size'],
+            'mime_type'     => $result['mime'],
             'uploaded_at'   => now()->toIso8601String(),
         ]]);
     }
