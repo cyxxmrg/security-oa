@@ -66,7 +66,11 @@ export interface KanbanProject {
   code?: string
   status?: string
   stage?: string
+  progress?: number
   total_amount?: number | string
+  end_date?: string
+  priority?: string
+  customer?: { id?: number; name?: string } | null
   manager?: { id?: number; name?: string } | null
   [key: string]: unknown
 }

@@ -43,7 +43,7 @@
                 {{ p.customer?.name || '-' }}
               </div>
               <div class="card-progress">
-                <el-progress :percentage="p.progress || 0" :stroke-width="6" :show-text="false" :color="progressColor(p.progress)" />
+                <el-progress :percentage="p.progress || 0" :stroke-width="6" :show-text="false" :color="progressColor(p.progress || 0)" />
                 <span class="card-progress-text">{{ p.progress || 0 }}%</span>
               </div>
               <div class="card-meta">
@@ -94,7 +94,8 @@ const grouped = computed(() => {
   const g: Record<string, KanbanProject[]> = {}
   for (const c of stageColumns) g[c.value] = []
   for (const p of list.value) {
-    if (g[p.stage]) g[p.stage].push(p)
+    const stage = p.stage || ''
+    if (g[stage]) g[stage].push(p)
   }
   return g
 })
@@ -105,7 +106,7 @@ const loadList = async () => {
     // V0.6.3: res = {code, data: paginator}
     const d = r?.data ?? {}
     const items = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : [])
-    list.value = Array.isArray(items) ? items : []
+    list.value = (Array.isArray(items) ? items : []) as KanbanProject[]
   } catch (e) {
     ElMessage.error('加载项目列表失败')
   }
@@ -151,7 +152,8 @@ const onDrop = async (newStage: string) => {
     ElMessage.success(`项目已推进到「${stageColumns.find(s => s.value === newStage)?.label || newStage}」`)
   } catch (e: unknown) {
     project.stage = oldStage
-    ElMessage.error(e?.response?.data?.message || '阶段更新失败，已回滚')
+    const error = e as { response?: { data?: { message?: string } } }
+    ElMessage.error(error.response?.data?.message || '阶段更新失败，已回滚')
   }
 }
 
@@ -162,8 +164,8 @@ const progressColor = (p: number) => {
   return '#A32D2D'
 }
 
-const isOverdue = (d: string) => d && new Date(d) < new Date()
-const formatDate = (d: string) => d ? d.slice(0, 10) : '-'
+const isOverdue = (d?: string) => Boolean(d && new Date(d) < new Date())
+const formatDate = (d?: string) => d ? d.slice(0, 10) : '-'
 
 onMounted(() => {
   loadList()

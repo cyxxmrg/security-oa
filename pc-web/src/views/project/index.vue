@@ -91,7 +91,7 @@
         </el-table-column>
         <el-table-column prop="name" label="项目名称" min-width="240" fixed>
           <template #default="{ row }">
-            <div class="project-name" @click="handleView(row)">
+              <div class="project-name" @click="handleView(row as unknown as Project)">
               <el-icon :size="16" :color="typeColor(row.type)">
                 <component :is="typeIcon(row.type)" />
               </el-icon>
@@ -118,7 +118,7 @@
           <template #default="{ row }">
             <el-progress
               :percentage="row.progress || 0"
-              :status="progressStatus(row)"
+              :status="progressStatus(row as unknown as Project)"
               :stroke-width="10"
               :format="(p) => p + '%'"
             />
@@ -141,8 +141,8 @@
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleView(row)">查看</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" @click="handleView(row as unknown as Project)">查看</el-button>
+            <el-button link type="danger" @click="handleDelete(row as unknown as Project)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -282,8 +282,9 @@ const loadList = async () => {
     const res = await get('/projects', params)
     // V0.6.3: res = {code, data: paginator}
     const pag = unwrapPaginate(res)
-    list.value = pag.list
-    total.value = pag.total || (pag as Record<string, unknown>).meta?.total || 0
+    list.value = pag.list as Project[]
+    const meta = (pag as Record<string, unknown>).meta as { total?: number } | undefined
+    total.value = pag.total || meta?.total || 0
   } catch (e) {
     console.error('加载项目列表失败', e)
     ElMessage.error('加载项目列表失败')
@@ -296,7 +297,7 @@ const loadCustomers = async () => {
   try {
     const res = await get('/customers', { per_page: 200 })
     // V0.6.3: res = {code, data: paginator}
-    customerOptions.value = unwrapList(res)
+    customerOptions.value = unwrapList(res) as Customer[]
   } catch (e) {
     console.error('加载客户列表失败', e)
   }
@@ -427,7 +428,7 @@ const handleExport = () => {
     stageLabel(r.stage), r.progress + '%', r.manager?.name || '-',
     r.end_date ? r.end_date.slice(0, 10) : '-', statusLabel(r.status),
   ])
-  exportExcelLike(headers, rows, '项目列表', { title: '项目列表导出' })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '项目列表', { title: '项目列表导出' })
 }
 </script>
 
