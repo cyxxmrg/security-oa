@@ -4,14 +4,12 @@ namespace App\Observers;
 
 use App\Models\ConstructionLog;
 use App\Models\RectificationDailyRequired;
-use App\Services\ConstructionLogService;
 
 /**
  * V0.4.3 施工日志 Observer
  *
  * 行为:
  *  - created / updated 时, 把对应 rectification_daily_required.status = submitted
- *  - 若 log 含 process_progress, 走 Service 累加工序进度
  *  - 删除时, 把对应日报需求回退为 pending (便于重报)
  *
  * V0.4.4 修复: rectification_daily_required 表实际字段是 is_required (不是 is_rectification)
@@ -19,8 +17,6 @@ use App\Services\ConstructionLogService;
  */
 class ConstructionLogObserver
 {
-    public function __construct(private ConstructionLogService $service) {}
-
     public function created(ConstructionLog $log): void
     {
         $this->syncDailyRequired($log, RectificationDailyRequired::STATUS_SUBMITTED);
@@ -69,9 +65,5 @@ class ConstructionLogObserver
             ]);
         }
 
-        // 累加工序进度 (仅 submitted/approved 状态)
-        if (!empty($log->process_progress) && is_array($log->process_progress)) {
-            $this->service->applyProcessProgress($log, $log->process_progress);
-        }
     }
 }

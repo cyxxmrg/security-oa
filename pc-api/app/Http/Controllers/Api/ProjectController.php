@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectStageRequest;
-use App\Models\{Project, ProjectContract, ConstructionLog, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
+use App\Models\{Project, ProjectContract, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -177,8 +177,8 @@ class ProjectController extends Controller
     {
         $data = $request->validated();
         $data['project_id'] = $project->id;
-        $data['user_id'] = $request->user()->id;
-        $log = ConstructionLog::create($data);
+        $log = app(\App\Services\ConstructionLogService::class)
+            ->submitLog($data, $request->user()->id);
         return response()->json(['code' => 0, 'data' => $log]);
     }
 

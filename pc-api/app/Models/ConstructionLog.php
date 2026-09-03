@@ -30,9 +30,9 @@ class ConstructionLog extends Model
         // 原 V0.4.1 字段（保持兼容）
         'project_id', 'user_id', 'work_date', 'weather',
         'content', 'problems', 'solutions', 'photos',
-        'work_hours', 'location', 'status',
+        'work_hours', 'worker_count', 'progress_percentage', 'location', 'status',
         // V0.4.3 扩展字段
-        'commencement_order_id', 'team_id', 'process_progress',
+        'commencement_order_id', 'team_id', 'process_id', 'process_progress',
         'is_rectification', 'rectification_order_id',
         'reviewer_id', 'reviewed_at', 'review_remark',
     ];
@@ -42,6 +42,8 @@ class ConstructionLog extends Model
         'process_progress'       => 'array',
         'work_date'              => 'date',
         'work_hours'             => 'decimal:1',
+        'progress_percentage'    => 'decimal:2',
+        'worker_count'           => 'integer',
         'is_rectification'       => 'boolean',
         'reviewed_at'            => 'datetime',
     ];

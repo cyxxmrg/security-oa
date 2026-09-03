@@ -8,7 +8,6 @@ use App\Services\ConstructionLogService;
 use App\Services\ProjectStageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * V0.4.3 施工日志（每日日志）控制器
@@ -71,8 +70,11 @@ class ConstructionLogController extends Controller
             'photos'                => ['nullable', 'array'],
             'work_hours'            => ['nullable', 'numeric', 'min:0', 'max:24'],
             'worker_count'          => ['nullable', 'integer', 'min:0'],
-            'team_id'               => ['nullable', 'integer'],
+            'team_id'               => ['nullable', 'integer', 'required_with:process_progress'],
             'process_id'            => ['nullable', 'integer'],
+            'process_progress'      => ['nullable', 'array'],
+            'process_progress.*.process_id' => ['required', 'integer', 'distinct'],
+            'process_progress.*.completed_qty' => ['required', 'numeric', 'min:0'],
         ]);
 
         try {

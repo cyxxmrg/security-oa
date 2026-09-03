@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\ConstructionLog;
+use App\Models\ConstructionTeam;
+use App\Models\Project;
+use App\Models\ProjectCommencementOrder;
 use App\Models\RectificationDailyRequired;
 use App\Models\WorkProcess;
 use App\Models\WorkProcessProgress;
@@ -29,37 +32,67 @@ class ConstructionLogService
     public function submitLog(array $data, int $userId, ?int $logId = null): ConstructionLog
     {
         return DB::transaction(function () use ($data, $userId, $logId) {
+            $previousProgress = [];
+            $shouldApplyStoredProgress = false;
+
             // 0) 若指定 logId, 直接从 DB 取出
             if ($logId) {
-                $log = ConstructionLog::findOrFail($logId);
+                $log = ConstructionLog::lockForUpdate()->findOrFail($logId);
+                if (!in_array($log->status, [ConstructionLog::STATUS_DRAFT, ConstructionLog::STATUS_REJECTED], true)) {
+                    throw new \RuntimeException('只有草稿或已驳回日志可提交');
+                }
+                $this->validateReferences($log->project_id, [
+                    'team_id'               => $log->team_id,
+                    'commencement_order_id' => $log->commencement_order_id,
+                    'process_id'            => $log->process_id,
+                    'process_progress'      => $log->process_progress ?? [],
+                ]);
+                $shouldApplyStoredProgress = $log->status === ConstructionLog::STATUS_DRAFT
+                    && is_array($log->process_progress);
                 $log->update(['status' => ConstructionLog::STATUS_SUBMITTED]);
             } else {
+                $projectId = (int) ($data['project_id'] ?? 0);
+                Project::lockForUpdate()->findOrFail($projectId);
+                $this->validateReferences($projectId, $data);
+
                 // 1) 防重：同一 project+date 同一 user (草稿覆盖)
                 // 表字段: content (text) / progress_percentage / problems / solutions
-                $payload = [
-                    'content'             => $data['content']             ?? $data['work_content']  ?? '',
-                    'progress_percentage' => $data['progress_percentage'] ?? 0,
-                    'problems'            => $data['problems']            ?? null,
-                    'solutions'           => $data['solutions']           ?? null,
-                    'weather'             => $data['weather']             ?? null,
-                    'photos'              => $data['photos']              ?? null,
-                    'work_hours'          => $data['work_hours']          ?? 0,
-                    'worker_count'        => $data['worker_count']        ?? 0,
-                    'team_id'             => $data['team_id']             ?? null,
-                    'process_id'          => $data['process_id']          ?? null,
-                    'is_rectification'    => $data['is_rectification']    ?? false,
-                ];
-                $log = ConstructionLog::updateOrCreate(
-                    [
-                        'project_id' => $data['project_id'],
+                $payload = $this->buildPayload($data);
+                $log = ConstructionLog::where('project_id', $projectId)
+                    ->where('user_id', $userId)
+                    ->where('work_date', $data['work_date'])
+                    ->lockForUpdate()
+                    ->first();
+                if ($log) {
+                    if (!in_array($log->status, [ConstructionLog::STATUS_DRAFT, ConstructionLog::STATUS_REJECTED], true)) {
+                        throw new \RuntimeException('当天日志已提交，不可重复提交');
+                    }
+                    $previousProgress = $log->process_progress ?? [];
+                    if (array_key_exists('team_id', $data)
+                        && (int) ($log->team_id ?? 0) !== (int) ($data['team_id'] ?? 0)) {
+                        throw new \RuntimeException('同一日报不可更换施工团队');
+                    }
+                    $log->update(array_merge($payload, [
+                        'status' => ($data['is_rectification'] ?? $log->is_rectification)
+                            ? ConstructionLog::STATUS_DRAFT
+                            : ($data['status'] ?? ConstructionLog::STATUS_SUBMITTED),
+                    ]));
+                } else {
+                    $log = ConstructionLog::create(array_merge([
+                        'content'             => $data['content'] ?? $data['work_content'] ?? '',
+                        'progress_percentage' => 0,
+                        'work_hours'          => 0,
+                        'worker_count'        => 0,
+                        'is_rectification'    => false,
+                    ], $payload, [
+                        'project_id' => $projectId,
                         'user_id'    => $userId,
                         'work_date'  => $data['work_date'],
-                    ],
-                    array_merge($payload, [
-                        'user_id' => $userId,
-                        'status'  => $payload['is_rectification'] ? ConstructionLog::STATUS_DRAFT : ($data['status'] ?? ConstructionLog::STATUS_SUBMITTED),
-                    ])
-                );
+                        'status'     => ($data['is_rectification'] ?? false)
+                            ? ConstructionLog::STATUS_DRAFT
+                            : ($data['status'] ?? ConstructionLog::STATUS_SUBMITTED),
+                    ]));
+                }
             }
 
             // 2) 联动日报需求单
@@ -76,8 +109,12 @@ class ConstructionLogService
             }
 
             // 3) 工序进度 (若有)
-            if (!empty($data['process_progress']) && is_array($data['process_progress'])) {
-                $this->applyProcessProgress($log, $data['process_progress']);
+            if ($shouldApplyStoredProgress) {
+                $this->applyProcessProgress($log, $log->process_progress, []);
+            } elseif (array_key_exists('process_progress', $data)
+                && is_array($data['process_progress'])
+                && in_array($log->status, [ConstructionLog::STATUS_SUBMITTED, ConstructionLog::STATUS_APPROVED], true)) {
+                $this->applyProcessProgress($log, $data['process_progress'], $previousProgress);
             }
 
             return $log->fresh(['project', 'user', 'team', 'commencementOrder']);
@@ -90,8 +127,8 @@ class ConstructionLogService
     public function updateLog(int $logId, array $data): ConstructionLog
     {
         return DB::transaction(function () use ($logId, $data) {
-            $log = ConstructionLog::findOrFail($logId);
-            if ($log->status !== 'draft') {
+            $log = ConstructionLog::lockForUpdate()->findOrFail($logId);
+            if ($log->status !== ConstructionLog::STATUS_DRAFT) {
                 throw new \RuntimeException('已提交的日志不可修改');
             }
             $log->update($data);
@@ -99,59 +136,125 @@ class ConstructionLogService
         });
     }
 
+    private function buildPayload(array $data): array
+    {
+        $fields = [
+            'content'             => $data['content'] ?? $data['work_content'] ?? null,
+            'progress_percentage' => $data['progress_percentage'] ?? null,
+            'problems'            => $data['problems'] ?? null,
+            'solutions'           => $data['solutions'] ?? null,
+            'weather'             => $data['weather'] ?? null,
+            'photos'              => $data['photos'] ?? null,
+            'work_hours'          => $data['work_hours'] ?? null,
+            'worker_count'        => $data['worker_count'] ?? null,
+            'location'            => $data['location'] ?? null,
+            'commencement_order_id' => $data['commencement_order_id'] ?? null,
+            'team_id'             => $data['team_id'] ?? null,
+            'process_id'          => $data['process_id'] ?? null,
+            'process_progress'    => $data['process_progress'] ?? null,
+            'is_rectification'    => $data['is_rectification'] ?? null,
+            'rectification_order_id' => $data['rectification_order_id'] ?? null,
+        ];
+
+        return array_filter($fields, static fn ($value) => $value !== null);
+    }
+
+    private function validateReferences(int $projectId, array $data): void
+    {
+        if (!empty($data['team_id'])) {
+            ConstructionTeam::where('project_id', $projectId)
+                ->findOrFail($data['team_id']);
+        }
+
+        if (!empty($data['commencement_order_id'])) {
+            $order = ProjectCommencementOrder::where('project_id', $projectId)
+                ->findOrFail($data['commencement_order_id']);
+
+            if (!empty($data['team_id']) && $order->team_id !== null
+                && (int) $order->team_id !== (int) $data['team_id']) {
+                throw new \RuntimeException('施工团队与开工单不匹配');
+            }
+        }
+
+        if (!empty($data['process_id'])) {
+            $this->findProcessForProject($projectId, (int) $data['process_id']);
+        }
+
+        foreach (($data['process_progress'] ?? []) as $row) {
+            $processId = (int) ($row['process_id'] ?? 0);
+            if ($processId <= 0) {
+                throw new \RuntimeException('工序编号无效');
+            }
+            $this->findProcessForProject($projectId, $processId);
+        }
+    }
+
+    private function findProcessForProject(int $projectId, int $processId): WorkProcess
+    {
+        return WorkProcess::where('id', $processId)
+            ->where(function ($query) use ($projectId) {
+                $query->where('project_id', $projectId)->orWhereNull('project_id');
+            })
+            ->firstOrFail();
+    }
+
     /**
      * 累加工序进度
      *
      * @param array $progresses [{process_id, completed_qty, percentage?}, ...]
+     * @param array $previousProgresses 同一日志更新前的工程量，用于按差量累计
      */
-    public function applyProcessProgress(ConstructionLog $log, array $progresses): void
+    public function applyProcessProgress(ConstructionLog $log, array $progresses, array $previousProgresses = []): void
     {
+        if (!$log->team_id) {
+            throw new \RuntimeException('更新工序进度前必须选择施工团队');
+        }
+
+        $currentByProcess = [];
         foreach ($progresses as $row) {
             $processId = (int) ($row['process_id'] ?? 0);
-            if ($processId <= 0) {
+            if ($processId > 0) {
+                $currentByProcess[$processId] = (float) ($row['completed_qty'] ?? 0);
+            }
+        }
+
+        $previousByProcess = [];
+        foreach ($previousProgresses as $row) {
+            $processId = (int) ($row['process_id'] ?? 0);
+            if ($processId > 0) {
+                $previousByProcess[$processId] = (float) ($row['completed_qty'] ?? 0);
+            }
+        }
+
+        $processIds = array_unique(array_merge(array_keys($currentByProcess), array_keys($previousByProcess)));
+        foreach ($processIds as $processId) {
+            $qty = ($currentByProcess[$processId] ?? 0) - ($previousByProcess[$processId] ?? 0);
+            if ($qty === 0.0) {
                 continue;
             }
-            $qty = (float) ($row['completed_qty'] ?? 0);
 
             $progress = WorkProcessProgress::where('process_id', $processId)
                 ->where('project_id', $log->project_id)
-                ->first();
+                ->where('team_id', $log->team_id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            if (!$progress) {
-                // 防御性: 日志到时工序进度记录不存在则补建
-                $process = WorkProcess::find($processId);
-                if (!$process) {
-                    continue;
-                }
-                $progress = WorkProcessProgress::create([
-                    'process_id'            => $process->id,
-                    'project_id'            => $log->project_id,
-                    'team_id'               => $log->team_id,
-                    'planned_quantity'      => $process->planned_quantity,
-                    'completed_quantity'    => $qty,
-                    'progress_percentage'   => 0,
-                    'status'                => WorkProcessProgress::STATUS_IN_PROGRESS,
-                ]);
-            } else {
-                $completed = (float) $progress->completed_quantity + $qty;
-                $pct = ((float) $progress->planned_quantity) > 0
-                    ? round($completed / (float) $progress->planned_quantity * 100, 2)
-                    : 0.00;
-                $pct = min(100.0, $pct);
+            $completed = max(0.0, (float) $progress->completed_quantity + $qty);
+            $pct = ((float) $progress->planned_quantity) > 0
+                ? round($completed / (float) $progress->planned_quantity * 100, 2)
+                : 0.00;
+            $pct = min(100.0, $pct);
 
-                $newStatus = $pct >= 100.0
+            $progress->update([
+                'completed_quantity'   => $completed,
+                'progress_percentage'  => $pct,
+                'status'               => $pct >= 100.0
                     ? WorkProcessProgress::STATUS_COMPLETED
-                    : WorkProcessProgress::STATUS_IN_PROGRESS;
-
-                $progress->update([
-                    'completed_quantity'   => $completed,
-                    'progress_percentage'  => $pct,
-                    'status'               => $newStatus,
-                    'last_log_id'          => $log->id,
-                    'last_log_date'        => $log->work_date,
-                    'updated_by'           => $log->user_id,
-                ]);
-            }
+                    : WorkProcessProgress::STATUS_IN_PROGRESS,
+                'last_log_id'          => $log->id,
+                'last_log_date'        => $log->work_date,
+                'updated_by'           => $log->user_id,
+            ]);
         }
     }
 
@@ -161,12 +264,17 @@ class ConstructionLogService
     public function updateProgress(int $logId, int $processId, float $completedQty): WorkProcessProgress
     {
         return DB::transaction(function () use ($logId, $processId, $completedQty) {
-            $log = ConstructionLog::findOrFail($logId);
+            $log = ConstructionLog::lockForUpdate()->findOrFail($logId);
+            if (!$log->team_id) {
+                throw new \RuntimeException('更新工序进度前必须选择施工团队');
+            }
             $progress = WorkProcessProgress::where('process_id', $processId)
                 ->where('project_id', $log->project_id)
+                ->where('team_id', $log->team_id)
+                ->lockForUpdate()
                 ->firstOrFail();
 
-            $completed = (float) $progress->completed_quantity + $completedQty;
+            $completed = max(0.0, (float) $progress->completed_quantity + $completedQty);
             $pct = ((float) $progress->planned_quantity) > 0
                 ? round($completed / (float) $progress->planned_quantity * 100, 2)
                 : 0.00;

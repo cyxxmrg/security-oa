@@ -63,7 +63,7 @@ class ProjectStageService
                     'stage_key'   => $targetStage,
                     'action'      => 'enter',
                     'note'        => $note ?: "自动从 [$current] 推进到 [$targetStage]",
-                    'operator_id' => $userId,
+                    'entered_by'  => $userId,
                     'created_at'  => now(),
                 ]);
             });
