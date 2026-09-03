@@ -3,7 +3,7 @@
     <div class="page-header">
       <span class="page-title">内部转账明细</span>
       <div class="header-actions">
-        <el-button :icon="Refresh" @click="loadList">刷新</el-button>
+        <el-button :icon="Refresh" @click="() => loadList()">刷新</el-button>
         <el-button type="primary" :icon="Plus" @click="handleCreate">新增内部转账</el-button>
       </div>
     </div>

@@ -61,10 +61,10 @@
         </el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'requested'" link type="primary" size="small" @click="changeStatus(row, 'pending_approval')">提交审批</el-button>
-            <el-button v-if="row.status === 'pending_approval'" link type="success" size="small" @click="changeStatus(row, 'issued')">开具发票</el-button>
-            <el-button v-if="row.status === 'issued'" link type="warning" size="small" @click="changeStatus(row, 'delivered')">确认交付</el-button>
-            <el-button v-if="['requested','pending_approval'].includes(row.status)" link type="danger" size="small" @click="changeStatus(row, 'cancelled')">取消</el-button>
+            <el-button v-if="row.status === 'requested'" link type="primary" size="small" @click="changeStatus(row as unknown as InvoiceItem, 'pending_approval')">提交审批</el-button>
+            <el-button v-if="row.status === 'pending_approval'" link type="success" size="small" @click="changeStatus(row as unknown as InvoiceItem, 'issued')">开具发票</el-button>
+            <el-button v-if="row.status === 'issued'" link type="warning" size="small" @click="changeStatus(row as unknown as InvoiceItem, 'delivered')">确认交付</el-button>
+            <el-button v-if="['requested','pending_approval'].includes(row.status)" link type="danger" size="small" @click="changeStatus(row as unknown as InvoiceItem, 'cancelled')">取消</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty description="暂无发票数据" /></template>

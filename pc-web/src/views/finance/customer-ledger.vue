@@ -146,9 +146,15 @@ const filter = reactive({
 })
 
 const typeLabel = (t?: string): string => ({ contract: '合同', progress: '进度', retention: '保留金', warranty: '质保金' }[t ?? ''] ?? '-')
-const typeTagType = (t?: string): 'primary' | 'success' | 'warning' | 'info' | '' => ({ contract: 'primary', progress: 'success', retention: 'warning', warranty: 'info' }[t ?? ''] ?? '') as 'primary' | 'success' | 'warning' | 'info' | ''
+const typeTagType = (t?: string): 'primary' | 'success' | 'warning' | 'info' => {
+  const map: Record<string, 'primary' | 'success' | 'warning' | 'info'> = { contract: 'primary', progress: 'success', retention: 'warning', warranty: 'info' }
+  return map[t ?? ''] ?? 'info'
+}
 const statusLabel = (s?: string): string => ({ pending: '待收', partial: '部分收', paid: '已结清', overdue: '逾期' }[s ?? ''] ?? '-')
-const statusType = (s?: string): 'info' | 'warning' | 'success' | 'danger' | '' => ({ pending: 'info', partial: 'warning', paid: 'success', overdue: 'danger' }[s ?? ''] ?? '') as 'info' | 'warning' | 'success' | 'danger' | ''
+const statusType = (s?: string): 'info' | 'warning' | 'success' | 'danger' => {
+  const map: Record<string, 'info' | 'warning' | 'success' | 'danger'> = { pending: 'info', partial: 'warning', paid: 'success', overdue: 'danger' }
+  return map[s ?? ''] ?? 'info'
+}
 
 const loadAll = async () => {
   loading.value = true

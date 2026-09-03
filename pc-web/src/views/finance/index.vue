@@ -132,12 +132,12 @@
       <el-form ref="transferFormRef" :model="transferForm" :rules="transferRules" label-width="100px">
         <el-form-item label="转出账户" prop="from_account_id">
           <el-select v-model="transferForm.from_account_id" placeholder="请选择转出账户" style="width: 100%" filterable @change="onFromAccountChange">
-            <el-option v-for="a in activeAccounts" :key="a.id" :label="`${a.name} (¥${formatMoney(a.balance)})`" :value="a.id" />
+            <el-option v-for="a in activeAccounts" :key="a.id ?? 0" :label="`${a.name} (¥${formatMoney(a.balance)})`" :value="a.id ?? 0" />
           </el-select>
         </el-form-item>
         <el-form-item label="转入账户" prop="to_account_id">
           <el-select v-model="transferForm.to_account_id" placeholder="请选择转入账户" style="width: 100%" filterable>
-            <el-option v-for="a in activeAccounts" :key="a.id" :label="`${a.name} (¥${formatMoney(a.balance)})`" :value="a.id" :disabled="a.id === transferForm.from_account_id" />
+            <el-option v-for="a in activeAccounts" :key="a.id ?? 0" :label="`${a.name} (¥${formatMoney(a.balance)})`" :value="a.id ?? 0" :disabled="a.id === transferForm.from_account_id" />
           </el-select>
         </el-form-item>
         <el-form-item label="转账金额" prop="amount">

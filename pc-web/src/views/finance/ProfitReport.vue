@@ -62,7 +62,7 @@
         </el-table-column>
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
+            <el-button link type="primary" size="small" @click.stop="openDetail(row as unknown as ProfitRow)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -82,8 +82,8 @@
         </div>
 
         <el-descriptions :column="2" border class="detail-table">
-          <el-descriptions-item v-for="(val, key) in detailItem._detail" :key="key" :label="key" :span="1">
-            <span :style="{ fontWeight: 600, color: key.includes('收入') || key.includes('应收') ? '#1D9E75' : '#A32D2D' }">
+           <el-descriptions-item v-for="(val, key) in detailItem._detail" :key="key" :label="String(key)" :span="1">
+             <span :style="{ fontWeight: 600, color: String(key).includes('收入') || String(key).includes('应收') ? '#1D9E75' : '#A32D2D' }">
               ¥{{ fmt(val) }}
             </span>
           </el-descriptions-item>

@@ -71,8 +71,8 @@
         </el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleView(row)">查看</el-button>
-            <el-button link type="primary" size="small" @click="handlePrint(row)">打印</el-button>
+           <el-button link type="primary" size="small" @click="handleView(row as unknown as ReceiptItem)">查看</el-button>
+           <el-button link type="primary" size="small" @click="handlePrint(row as unknown as ReceiptItem)">打印</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -169,7 +169,7 @@ import { get, post, put } from '@/utils/request'
 import { paymentMethodLabel } from '@/utils/labels'
 import { printTable } from '@/utils/exporter'
 
-const methodLabel = (m: string) => paymentMethodLabel(m)
+const methodLabel = (m?: string) => paymentMethodLabel(m || '')
 
 const userStore = useUserStore()
 const currentUserName = computed(() => {
@@ -199,10 +199,11 @@ interface NamedEntity { name?: string }
 interface ReceiptItem {
   id: string | number
   receipt_no?: string
-  customer?: string
+  customer?: NamedEntity
   customerEntity?: NamedEntity
   customer_name?: string
   project?: NamedEntity
+  account?: NamedEntity
   project_name?: string
   amount?: number | string
   method?: string
@@ -402,7 +403,7 @@ const handlePrint = (row: ReceiptItem) => {
     ['经手人', row.operator || '-'],
     ['备注', row.remark || row.notes || '-'],
   ]
-  printTable(`收款单 - ${row.receipt_no || ''}`, headers, rows, { orientation: 'portrait' })
+  printTable(`收款单 - ${row.receipt_no || ''}`, headers, rows as unknown as Record<string, unknown>[][], { orientation: 'portrait' })
 }
 </script>
 

@@ -3,7 +3,7 @@
     <div class="page-header">
       <span class="page-title">付款单管理</span>
       <div class="header-actions">
-        <el-button :icon="Refresh" @click="loadList">刷新</el-button>
+        <el-button :icon="Refresh" @click="() => loadList()">刷新</el-button>
         <el-button type="primary" :icon="Plus" @click="handleCreate">新增付款单</el-button>
       </div>
     </div>
@@ -46,7 +46,7 @@
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="voucher_no" label="付款单号" width="170" />
         <el-table-column label="收款方" min-width="160">
-          <template #default="{ row }">{{ extractPayee(row) }}</template>
+          <template #default="{ row }">{{ extractPayee(row as unknown as PaymentRow) }}</template>
         </el-table-column>
         <el-table-column label="关联项目" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.project_name || '-' }}</template>
@@ -68,7 +68,7 @@
         </el-table-column>
         <el-table-column label="操作" width="70" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
+            <el-button link type="primary" size="small" @click="openDetail(row as unknown as PaymentRow)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -173,7 +173,7 @@ import { get, post } from '@/utils/request'
 import { getPayments, createPayment } from '@/api/modules'
 import { paymentMethodLabel } from '@/utils/labels'
 
-const methodLabel = (m: string) => paymentMethodLabel(m)
+const methodLabel = (m?: string) => paymentMethodLabel(m || '')
 const currentUserName = ref('')
 
 interface AccountOption { id: number; name: string; balance: number }

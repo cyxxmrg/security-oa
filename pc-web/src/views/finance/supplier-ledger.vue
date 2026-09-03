@@ -143,7 +143,10 @@ const paymentSupplierName = ref('')
 
 const sourceLabel = (s?: string): string => ({ quote: '报价', contract: '合同', manual: '手工' }[s ?? ''] ?? s ?? '-')
 const statusLabel = (s?: string): string => ({ pending: '待付', partial: '部分付', paid: '已结清', overdue: '逾期' }[s ?? ''] ?? '-')
-const statusType = (s?: string): 'info' | 'warning' | 'success' | 'danger' | '' => ({ pending: 'info', partial: 'warning', paid: 'success', overdue: 'danger' }[s ?? ''] ?? '') as 'info' | 'warning' | 'success' | 'danger' | ''
+const statusType = (s?: string): 'info' | 'warning' | 'success' | 'danger' => {
+  const map: Record<string, 'info' | 'warning' | 'success' | 'danger'> = { pending: 'info', partial: 'warning', paid: 'success', overdue: 'danger' }
+  return map[s ?? ''] ?? 'info'
+}
 
 const loadAll = async () => {
   loading.value = true

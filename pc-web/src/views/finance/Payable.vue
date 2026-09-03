@@ -282,7 +282,7 @@ const handleExport = () => {
     ({ pending: '待付', partial: '部分付', paid: '已付', overdue: '逾期' }[r.status as string] || r.status || '-'),
     r.notes || '',
   ])
-  exportExcelLike(headers, rows, '应付账款报表', { title: '应付账款报表' })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '应付账款报表', { title: '应付账款报表' })
 }
 </script>
 
