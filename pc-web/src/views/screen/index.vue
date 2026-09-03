@@ -118,7 +118,7 @@ onMounted(() => {
   update()
   clockTimer = setInterval(update, 1000)
 })
-onUnmounted(() => clearInterval(clockTimer))
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer) })
 
 // 数据
 const metrics = ref<Metric[]>([])
@@ -158,7 +158,7 @@ async function loadData() {
     }
   } catch (e: unknown) {
     console.error('[screen] load error', e)
-    ElMessage.error('大屏数据加载失败：' + (e?.message || e))
+    ElMessage.error('大屏数据加载失败：' + (e instanceof Error ? e.message : String(e)))
   } finally {
     loading.value = false
   }
@@ -171,8 +171,8 @@ onMounted(() => {
   refreshTimer = setInterval(loadData, 60000)
 })
 onUnmounted(() => {
-  clearInterval(clockTimer)
-  clearInterval(refreshTimer)
+  if (clockTimer) clearInterval(clockTimer)
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
