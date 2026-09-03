@@ -19,7 +19,7 @@ class NumberSequenceService
                 $nextValue = $currentMax ? max(1, (int) $currentMax() + 1) : 1;
                 DB::table('number_sequences')->insertOrIgnore([
                     'scope'      => $scope,
-                    'next_value' => $nextValue + 1,
+                    'next_value' => $nextValue,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
