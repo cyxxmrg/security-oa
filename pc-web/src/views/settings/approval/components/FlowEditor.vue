@@ -126,7 +126,7 @@ const FlowNode = {
   }
 }
 
-const customNodeTypes = { custom: markRaw(FlowNode) }
+const customNodeTypes = { custom: markRaw(FlowNode) } as any
 
 const emit = defineEmits<{ (e: 'update:nodes', v: Record<string, unknown>[]): void }>()
 
@@ -223,7 +223,7 @@ function onDrop(event: DragEvent) {
 }
 
 // 点击节点
-function onNodeClick({ node }: { node: any; event: MouseEvent }) {
+function onNodeClick({ node }: any) {
   selectedNode.value = node
 }
 

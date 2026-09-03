@@ -70,19 +70,19 @@
               <template #default="{ row }">
                 <el-switch
                   v-model="row.enabled"
-                  @change="(val: string | number | boolean) => onToggle(row, val === true)"
+                  @change="(val: string | number | boolean) => onToggle(row as unknown as MaskRule, val === true)"
                 />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="220" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" :icon="Edit" @click="openEditDialog(row)">
+                <el-button link type="primary" size="small" :icon="Edit" @click="openEditDialog(row as unknown as MaskRule)">
                   编辑
                 </el-button>
-                <el-button link type="danger" size="small" :icon="Delete" @click="onDelete(row)">
+                <el-button link type="danger" size="small" :icon="Delete" @click="onDelete(row as unknown as MaskRule)">
                   删除
                 </el-button>
-                <el-button link type="warning" size="small" :icon="View" @click="onTestMask(row)">
+                <el-button link type="warning" size="small" :icon="View" @click="onTestMask(row as unknown as MaskRule)">
                   测试
                 </el-button>
               </template>

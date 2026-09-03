@@ -191,7 +191,7 @@ const filteredRows = computed(() => {
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const debouncedSearch = () => {
-  clearTimeout(debounceTimer)
+  if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => loadData(), 300)
 }
 
@@ -222,7 +222,7 @@ const actionColor = (a: string): TagType => ({
   role_changed: 'danger',
   temporary_role_granted: 'warning',
   role_revoked: 'info',
-}[a] || 'info')
+}[a] as TagType | undefined || 'info')
 
 const actionIcon = (a: string) => ({
   role_changed: UserFilled,

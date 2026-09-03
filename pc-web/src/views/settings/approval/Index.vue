@@ -43,12 +43,12 @@
         <el-table-column prop="updatedAt" label="修改时间" width="170" />
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" :icon="View" @click="handlePreview(row)">预览</el-button>
-            <el-button link type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-            <el-button link type="warning" size="small" :icon="SwitchButton" @click="handleToggle(row)">
+            <el-button link type="primary" size="small" :icon="View" @click="handlePreview(row as unknown as FlowTemplate)">预览</el-button>
+            <el-button link type="primary" size="small" :icon="Edit" @click="handleEdit(row as unknown as FlowTemplate)">编辑</el-button>
+            <el-button link type="warning" size="small" :icon="SwitchButton" @click="handleToggle(row as unknown as FlowTemplate)">
               {{ row.status === '启用' ? '停用' : '启用' }}
             </el-button>
-            <el-popconfirm :title="`确定删除「${row.name}」？`" @confirm="handleDelete(row)">
+            <el-popconfirm :title="`确定删除「${row.name}」？`" @confirm="handleDelete(row as unknown as FlowTemplate)">
               <template #reference>
                 <el-button link type="danger" size="small" :icon="Delete">删除</el-button>
               </template>
@@ -149,8 +149,8 @@ const pagedTemplates = computed(() => {
   return filteredTemplates.value.slice(start, start + pageSize.value)
 })
 
-function moduleTagType(module: string) {
-  const map: Record<string, string> = { '请假': 'warning', '报销': 'danger', '出差': 'info', '采购': 'primary', '合同': 'success' }
+function moduleTagType(module: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' {
+  const map: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { '请假': 'warning', '报销': 'danger', '出差': 'info', '采购': 'primary', '合同': 'success' }
   return map[module] || 'info'
 }
 
@@ -159,7 +159,7 @@ async function loadTemplates() {
   try {
     const res = await get('/approval-templates')
     // V0.6.3: res = {code, data: <templates>} 可能是 array
-    templates.value = unwrapList(res)
+    templates.value = unwrapList(res) as FlowTemplate[]
   } catch (e) {
     ElMessage.error('加载流程模板失败')
   } finally {

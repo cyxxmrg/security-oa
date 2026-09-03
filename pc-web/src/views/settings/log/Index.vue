@@ -73,7 +73,7 @@
             </el-table-column>
             <el-table-column label="操作" width="80" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="handleViewDetail(row)">详情</el-button>
+                <el-button link type="primary" size="small" @click="handleViewDetail(row as unknown as AuditLog)">详情</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -189,8 +189,8 @@ function avatarColor(name: string) {
   return COLOR_POOL[h % COLOR_POOL.length]
 }
 
-function actionTagType(action: string) {
-  const map: Record<string, string> = { '新增': 'success', '修改': 'warning', '删除': 'danger', 'login': 'primary' }
+function actionTagType(action: string): 'success' | 'primary' | 'info' | 'warning' | 'danger' {
+  const map: Record<string, 'success' | 'primary' | 'info' | 'warning' | 'danger'> = { '新增': 'success', '修改': 'warning', '删除': 'danger', 'login': 'primary' }
   return map[action] || 'info'
 }
 
