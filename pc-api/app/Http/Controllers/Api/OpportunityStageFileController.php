@@ -6,9 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Opportunity;
 use App\Models\OpportunityStageFile;
 use App\Models\User;
+use App\Services\FileUploadService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -58,7 +59,7 @@ class OpportunityStageFileController extends Controller
     /**
      * 上传文件到指定阶段
      */
-    public function store(Request $request, Opportunity $opp): JsonResponse
+    public function store(Request $request, Opportunity $opp, FileUploadService $uploader): JsonResponse
     {
         $request->validate([
             'stage' => 'required|string|in:' . implode(',', self::STAGES),
@@ -68,36 +69,40 @@ class OpportunityStageFileController extends Controller
 
         /** @var User $user */
         $user = $request->user();
-        /** @var UploadedFile $file */
-        $file = $request->file('file');
         $stage = $request->input('stage');
         $notes = $request->input('notes');
 
-        // 按机会编号/项目名组织文件夹: opportunity-files/{opp_no}/{stage}/
-        $dir = $opp->opp_no ?? 'opp_' . $opp->id;
-        $stageDir = "{$dir}/{$stage}";
+        $storedPath = null;
+        try {
+            $record = DB::transaction(function () use ($request, $opp, $uploader, $stage, $notes, $user, &$storedPath) {
+                $lockedOpp = Opportunity::lockForUpdate()->findOrFail($opp->id);
+                $dir = $lockedOpp->opp_no ?? 'opp_' . $lockedOpp->id;
+                $result = $uploader->store($request, 'file', [
+                    'disk'         => self::DISK,
+                    'subdir'       => "{$dir}/{$stage}",
+                    'allowed_ext'  => FileUploadService::DEFAULT_ALLOWED_EXT,
+                    'allowed_mime' => FileUploadService::DEFAULT_ALLOWED_MIME,
+                    'max_size'     => 51200,
+                ]);
+                $storedPath = $result['path'];
 
-        // 原文件名保留 + 时间戳防重
-        $ext = $file->getClientOriginalExtension();
-        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-        // 清理特殊字符
-        $safeBase = preg_replace('/[^\w\-\x{4e00}-\x{9fff}]/u', '_', $baseName);
-        $storedName = $safeBase . '_' . time() . '.' . $ext;
-        $relPath = $stageDir . '/' . $storedName;
-
-        // 存储
-        Storage::disk(self::DISK)->put($relPath, file_get_contents($file->getRealPath()));
-
-        $record = OpportunityStageFile::create([
-            'opportunity_id' => $opp->id,
-            'stage'          => $stage,
-            'original_name'  => $file->getClientOriginalName(),
-            'stored_path'    => $relPath,
-            'mime_type'      => $file->getMimeType(),
-            'file_size'      => $file->getSize(),
-            'notes'          => $notes,
-            'uploaded_by'    => $user->id,
-        ]);
+                return OpportunityStageFile::create([
+                    'opportunity_id' => $lockedOpp->id,
+                    'stage'          => $stage,
+                    'original_name'  => $result['original_name'],
+                    'stored_path'    => $result['path'],
+                    'mime_type'      => $result['mime'],
+                    'file_size'      => $result['size'],
+                    'notes'          => $notes,
+                    'uploaded_by'    => $user->id,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            if ($storedPath) {
+                Storage::disk(self::DISK)->delete($storedPath);
+            }
+            throw $e;
+        }
 
         return response()->json([
             'code' => 0,
@@ -129,7 +134,8 @@ class OpportunityStageFileController extends Controller
 
         return Storage::disk(self::DISK)->download(
             $file->stored_path,
-            $file->original_name
+            $file->original_name,
+            ['Content-Type' => $file->mime_type ?: 'application/octet-stream']
         );
     }
 
@@ -138,14 +144,15 @@ class OpportunityStageFileController extends Controller
      */
     public function destroy(Request $request, Opportunity $opp, OpportunityStageFile $file): JsonResponse
     {
-        abort_unless($file->opportunity_id === $opp->id, 404);
-
-        // 删磁盘
-        if ($file->fileExists()) {
-            Storage::disk(self::DISK)->delete($file->stored_path);
-        }
-        // 删记录
-        $file->delete();
+        DB::transaction(function () use ($opp, $file) {
+            Opportunity::lockForUpdate()->findOrFail($opp->id);
+            $lockedFile = OpportunityStageFile::where('opportunity_id', $opp->id)
+                ->lockForUpdate()
+                ->findOrFail($file->id);
+            $path = $lockedFile->stored_path;
+            $lockedFile->delete();
+            Storage::disk(self::DISK)->delete($path);
+        });
 
         return response()->json(['code' => 0, 'data' => ['deleted' => true]]);
     }

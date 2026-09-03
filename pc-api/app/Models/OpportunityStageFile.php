@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class OpportunityStageFile extends Model
 {
@@ -30,10 +29,10 @@ class OpportunityStageFile extends Model
         return 'opportunity-files';
     }
 
-    /** 文件在磁盘上的完整 URL */
+    /** 文件下载地址 */
     public function getUrlAttribute(): string
     {
-        return Storage::disk($this->getDisk())->url($this->stored_path);
+        return "/api/sales/opps/{$this->opportunity_id}/stage-files/{$this->id}/download";
     }
 
     /** 是否存在于磁盘 */
