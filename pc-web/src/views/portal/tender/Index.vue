@@ -66,13 +66,16 @@ import { portalApi } from '@/api/portal-tender'
 
 const router = useRouter()
 const loading = ref(false)
-const result = ref<Awaited<ReturnType<typeof portalApi.listInvitations>> | null>(null)
+type InvitationResult = Awaited<ReturnType<typeof portalApi.listInvitations>>
+type Invitation = InvitationResult['invitations'][number]
+const result = ref<InvitationResult | null>(null)
 const form = reactive({ phone: '' })
 
 const fmt = (s?: string) => s ? s.replace('T', ' ').slice(0, 16) : '-'
-const statusType = (s: string) => ({
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+const statusType = (s: string): TagType => ({
   bidding: 'warning', published: 'warning', evaluating: 'primary', awarded: 'success', closed: 'info', cancelled: 'danger',
-}[s] || 'info') as Record<string, unknown>
+}[s] as TagType | undefined) || 'info'
 
 const onQuery = async () => {
   if (!/^1\d{10}$/.test(form.phone)) {
@@ -83,13 +86,13 @@ const onQuery = async () => {
     result.value = await portalApi.listInvitations(form.phone)
     sessionStorage.setItem('portal_phone_suffix', form.phone.slice(-4))
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '查询失败')
+    ElMessage.error(e instanceof Error ? e.message : '查询失败')
   } finally { loading.value = false }
 }
 
 const onReset = () => { result.value = null; form.phone = '' }
 
-const goBid = (inv: Record<string, unknown>) => {
+const goBid = (inv: Invitation) => {
   router.push(`/portal/tender/${inv.public_token}?supplier=${result.value?.supplier?.id}`)
 }
 </script>

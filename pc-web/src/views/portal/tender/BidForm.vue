@@ -166,9 +166,10 @@ const rules = {
 
 const canBid = computed(() => ['bidding', 'published'].includes(tender.value?.status || ''))
 const fmt = (s?: string) => s ? s.replace('T', ' ').slice(0, 16) : '-'
-const statusType = (s: string) => (({
+type TagType = 'success' | 'primary' | 'info' | 'warning' | 'danger'
+const statusType = (s: string): TagType => ({
   bidding: 'warning', published: 'warning', evaluating: 'primary', awarded: 'success', closed: 'info', cancelled: 'danger',
-} as Record<string, string>)[s] || 'info') as Record<string, unknown>
+}[s] as TagType | undefined) || 'info'
 const formatSize = (b?: number) => b ? (b / 1024).toFixed(1) + ' KB' : '-'
 
 const addItem = () => form.items.push({ name: '', spec: '', unit: '件', quantity: 1, unit_price: 0, total_price: 0 })
@@ -193,7 +194,7 @@ const loadAll = async () => {
         const b = await portalApi.myBid(token.value, supplierId.value)
         if (b) {
           existingBid.value = b
-          form.items = (b.items || []).map((it: Record<string, unknown>) => ({
+          form.items = (b.items || []).map((it) => ({
             name: it.name, spec: it.spec || '', unit: it.unit || '件',
             quantity: Number(it.quantity), unit_price: Number(it.unit_price), total_price: Number(it.total_price),
           }))
@@ -206,7 +207,7 @@ const loadAll = async () => {
     }
     if (form.items.length === 0) addItem()
   } catch (e: unknown) {
-    loadError.value = e?.message || '加载失败'
+    loadError.value = e instanceof Error ? e.message : '加载失败'
   } finally { loading.value = false }
 }
 
@@ -235,7 +236,7 @@ const onSubmit = async () => {
     ElMessage.success('投标已提交, 等待招标方审核')
     await loadAll()
   } catch (e: unknown) {
-    ElMessage.error(e?.message || '提交失败')
+    ElMessage.error(e instanceof Error ? e.message : '提交失败')
   } finally { saving.value = false }
 }
 
