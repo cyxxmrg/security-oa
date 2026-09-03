@@ -115,18 +115,18 @@ Route::prefix('inspections')->middleware(['auth:sanctum', 'ensure_business'])->g
 });
 
 // ========== 维修工单 ==========
-Route::prefix('work-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('work-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:service.view'])->group(function () {
     Route::get('stats', [WorkOrderController::class, 'stats']);
     Route::get('/', [WorkOrderController::class, 'index']);
-    Route::post('/', [WorkOrderController::class, 'store']);
+    Route::post('/', [WorkOrderController::class, 'store'])->middleware('permission:service.create');
     Route::get('{id}', [WorkOrderController::class, 'show'])->whereNumber('id');
-    Route::put('{id}', [WorkOrderController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [WorkOrderController::class, 'destroy'])->whereNumber('id');
-    Route::post('{id}/assign', [WorkOrderController::class, 'assign'])->whereNumber('id');
-    Route::post('{id}/start', [WorkOrderController::class, 'start'])->whereNumber('id');
-    Route::post('{id}/resolve', [WorkOrderController::class, 'resolve'])->whereNumber('id');
-    Route::post('{id}/cancel', [WorkOrderController::class, 'cancel'])->whereNumber('id');
-    Route::post('{id}/convert-to-repair', [WorkOrderController::class, 'convertToRepair'])->whereNumber('id');
+    Route::put('{id}', [WorkOrderController::class, 'update'])->whereNumber('id')->middleware('permission:service.edit');
+    Route::delete('{id}', [WorkOrderController::class, 'destroy'])->whereNumber('id')->middleware('permission:service.delete');
+    Route::post('{id}/assign', [WorkOrderController::class, 'assign'])->whereNumber('id')->middleware('permission:service.dispatch');
+    Route::post('{id}/start', [WorkOrderController::class, 'start'])->whereNumber('id')->middleware('permission:service.edit');
+    Route::post('{id}/resolve', [WorkOrderController::class, 'resolve'])->whereNumber('id')->middleware('permission:service.edit');
+    Route::post('{id}/cancel', [WorkOrderController::class, 'cancel'])->whereNumber('id')->middleware('permission:service.edit');
+    Route::post('{id}/convert-to-repair', [WorkOrderController::class, 'convertToRepair'])->whereNumber('id')->middleware('permission:service.repair');
 });
 
 // ========== 返修管理 ==========
