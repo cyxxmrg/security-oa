@@ -74,7 +74,7 @@ Route::prefix('dashboard/widget')->middleware(['auth:sanctum', 'ensure_business'
 // V1.2.9 BUG FIX: /system/employees 加 auth:sanctum, 同时 withoutMiddleware('ensure_business')
 // 之前 system 调这个会被 ensure_business 拦 403
 Route::get('system/employees', [EmployeeController::class, 'index'])
-    ->middleware(['auth:sanctum'])->withoutMiddleware('ensure_business');
+    ->middleware(['auth:sanctum', 'ensure_system'])->withoutMiddleware('ensure_business');
 Route::prefix('setup')->middleware(['auth:sanctum'])->group(function () {
     Route::get('summary', [SetupWizardController::class, 'summary'])->middleware('ensure_system')->withoutMiddleware('ensure_business');
     Route::post('step1', [SetupWizardController::class, 'step1'])->middleware('ensure_system')->withoutMiddleware('ensure_business');

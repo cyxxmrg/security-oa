@@ -175,6 +175,7 @@ class SystemSettingsController extends Controller
                     'email'      => 'system@local',
                     'phone'      => '13800000000',  // 必填
                     'is_system'  => true,
+                    'user_type'  => 'system',
                     'is_admin'   => false,
                     'password'   => null,
                     'status'     => 'active',
@@ -183,6 +184,7 @@ class SystemSettingsController extends Controller
             } else {
                 $systemUser->update([
                     'is_system' => true,
+                    'user_type' => 'system',
                     'name'      => '系统超级管理员',
                     'must_change_password' => true,
                 ]);

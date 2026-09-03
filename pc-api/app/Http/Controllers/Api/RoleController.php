@@ -16,6 +16,29 @@ use Illuminate\Support\Facades\Log;
 class RoleController extends Controller
 {
     /**
+     * 角色分配明细仅允许本人、system 账号或具备角色管理权限的用户查看。
+     */
+    private function canInspectUserRoles(Request $request, \App\Models\User $target): bool
+    {
+        $viewer = $request->user();
+        if (!$viewer) {
+            return false;
+        }
+        if ($viewer->id === $target->id || $viewer->is_system === true) {
+            return true;
+        }
+
+        try {
+            return $viewer->hasActiveRole('admin')
+                || $viewer->hasActiveRole('system_admin')
+                || $viewer->hasActivePermissionTo('system.role');
+        } catch (\Throwable $e) {
+            Log::warning('角色明细权限判定异常: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * 角色列表（分页 + 搜索）
      */
     public function index(Request $request): JsonResponse
@@ -782,6 +805,10 @@ class RoleController extends Controller
      */
     public function usersListRoles(Request $request, \App\Models\User $user): JsonResponse
     {
+        if (!$this->canInspectUserRoles($request, $user)) {
+            return response()->json(['code' => 403, 'message' => '无权查看其他用户的角色信息'], 403);
+        }
+
         $rows = $user->allRoleAssignments()
             ->get()
             ->map(function ($r) {
@@ -937,6 +964,10 @@ class RoleController extends Controller
      */
     public function usersActiveRoles(Request $request, \App\Models\User $user): JsonResponse
     {
+        if (!$this->canInspectUserRoles($request, $user)) {
+            return response()->json(['code' => 403, 'message' => '无权查看其他用户的角色信息'], 403);
+        }
+
         $roles = $user->activeRoles()
             ->get(['roles.id', 'roles.name', 'roles.description', 'roles.color', 'model_has_roles.expires_at', 'model_has_roles.reason'])
             ->map(fn ($r) => [
