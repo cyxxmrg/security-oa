@@ -266,7 +266,7 @@ Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_bu
 });
 
 // 质保期保证金
-Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business', 'permission:deposit.manage'])->group(function () {
     Route::get('/', [WarrantyDepositController::class, 'index']);
     Route::post('/', [WarrantyDepositController::class, 'store']);
     Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->where('id', '[0-9]+');

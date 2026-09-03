@@ -78,8 +78,9 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', '
     Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id');
     Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id');
     Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest']);
-    Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])->whereNumber('id');
-    Route::post('payments', [PurchaseFlowController::class, 'executePayment']);
+    Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])
+        ->whereNumber('id')->middleware('permission:finance.pay');
+    Route::post('payments', [PurchaseFlowController::class, 'executePayment'])->middleware('permission:finance.pay');
     Route::post('shipments', [PurchaseFlowController::class, 'createShipment']);
     Route::post('shipments/{id}/update-status', [PurchaseFlowController::class, 'updateShipmentStatus'])->whereNumber('id');
     Route::post('shipments/{id}/auto-inbound', [PurchaseFlowController::class, 'autoInbound'])->whereNumber('id');
@@ -126,14 +127,14 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::get('/', [PurchasePaymentRequestController::class, 'index']);
         Route::get('stats', [PurchasePaymentRequestController::class, 'stats']);
         Route::post('/', [PurchasePaymentRequestController::class, 'store']);
-        Route::post('{req}/approve', [PurchasePaymentRequestController::class, 'approve']);
+        Route::post('{req}/approve', [PurchasePaymentRequestController::class, 'approve'])->middleware('permission:finance.pay');
         Route::delete('{req}', [PurchasePaymentRequestController::class, 'destroy']);
     });
 
     Route::prefix('payments')->group(function () {
         Route::get('/', [PurchasePaymentController::class, 'index']);
         Route::get('stats', [PurchasePaymentController::class, 'stats']);
-        Route::post('/', [PurchasePaymentController::class, 'store']);
+        Route::post('/', [PurchasePaymentController::class, 'store'])->middleware('permission:finance.pay');
     });
 
     Route::prefix('shipments')->group(function () {
@@ -151,7 +152,7 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
     Route::prefix('approvals')->group(function () {
         Route::get('/', [PurchaseApprovalController::class, 'index']);
         Route::post('/', [PurchaseApprovalController::class, 'store']);
-        Route::post('{appr}/decide', [PurchaseApprovalController::class, 'decide']);
+        Route::post('{appr}/decide', [PurchaseApprovalController::class, 'decide'])->middleware('permission:finance.pay');
     });
 });
 
