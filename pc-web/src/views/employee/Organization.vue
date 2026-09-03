@@ -56,8 +56,8 @@
               :page="pagination.page"
               :page-size="pagination.pageSize"
               :total="pagination.total"
-              @edit="openEditEmployee"
-              @delete="handleDeleteEmployee"
+               @edit="handleEditEmployee"
+               @delete="handleDeleteEmployeeFromTable"
               @page-change="(p: number) => { pagination.page = p; loadEmployees() }"
               @size-change="(s: number) => { pagination.pageSize = s; pagination.page = 1; loadEmployees() }"
             />
@@ -105,6 +105,14 @@ const {
   employeeDialogVisible, editingEmployee, skillOptions, selectedSkillIds, loadingSkillOptions,
   openCreateEmployee, openEditEmployee, submitEmployee, handleDeleteEmployee,
 } = useOrganization()
+
+const handleEditEmployee = (row: Record<string, unknown>) => {
+  openEditEmployee(row as Parameters<typeof openEditEmployee>[0])
+}
+
+const handleDeleteEmployeeFromTable = (row: Record<string, unknown>) => {
+  handleDeleteEmployee(row as Parameters<typeof handleDeleteEmployee>[0])
+}
 </script>
 
 <style lang="scss" scoped>

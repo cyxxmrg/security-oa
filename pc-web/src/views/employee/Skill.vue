@@ -70,11 +70,11 @@
               size="small"
               class="skill-row-tag"
               closable
-              @close="handleRemoveEmpSkill(row, skill)"
+              @close="handleRemoveEmpSkill(row as unknown as EmployeeRow, skill)"
             >
               {{ skill.name }}
             </el-tag>
-            <el-button type="primary" link size="small" @click="handleAddEmpSkill(row)" v-if="skillTags.length > 0">
+            <el-button type="primary" link size="small" @click="handleAddEmpSkill(row as unknown as EmployeeRow)" v-if="skillTags.length > 0">
               <el-icon><Plus /></el-icon>
               添加
             </el-button>

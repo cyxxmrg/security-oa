@@ -9,12 +9,12 @@ import { unwrapPaginate } from '@/utils/response'
 import type { EmployeeForm } from '../orgTypes'
 
 // ===== 类型定义 =====
-interface NamedItem { id: number; name?: string; [k: string]: unknown }
+interface NamedItem { id: number; name: string; [k: string]: unknown }
 interface DepartmentItem extends NamedItem {}
-interface PositionItem extends NamedItem { department_id?: number }
+interface PositionItem extends NamedItem { department_id: number }
 interface UserItem { id: number; name?: string; username?: string; department_id?: number; position_id?: number; phone?: string; is_active?: boolean; [k: string]: unknown }
-interface RoleItem { id?: number; name?: string; display_name?: string; description?: string; [k: string]: unknown }
-interface SkillTag { id: number | string; [k: string]: unknown }
+interface RoleItem { id: number; name: string; display_name?: string; description?: string; [k: string]: unknown }
+interface SkillTag { id: number; name: string; [k: string]: unknown }
 interface OrgNode { id: string | number; type?: 'dept' | 'position' | string; label?: string; [k: string]: unknown }
 interface MemberItem { id: number; name?: string; username?: string; position?: string; phone?: string; is_active?: boolean }
 interface ApiResponse<T = unknown> { data?: T; [k: string]: unknown }
@@ -64,7 +64,7 @@ export function useOrganization() {
 
   const normalizeRole = (role: RoleItem) => ({
     ...role,
-    display_name: role?.display_name || roleNameMap[role?.name] || role?.description || role?.name,
+    display_name: role.display_name || roleNameMap[role.name] || role.description || role.name,
   })
 
   // ============== Tab 1: 员工列表 ==============
@@ -111,7 +111,7 @@ export function useOrganization() {
     loadEmployees()
   }
 
-  function onTreeRefresh(_payload: unknown) {
+  function onTreeRefresh() {
     loadEmployees()
   }
 
@@ -119,14 +119,17 @@ export function useOrganization() {
   const employeeDialogVisible = ref(false)
   const editingEmployee = ref<EmployeeRow | null>(null)
   const skillOptions = ref<SkillTag[]>([])
-  const selectedSkillIds = ref<(number | string)[]>([])
+  const selectedSkillIds = ref<number[]>([])
   const loadingSkillOptions = ref(false)
 
   async function loadSkillOptions() {
     loadingSkillOptions.value = true
     try {
       const { data } = await get('/employees/skills')
-      skillOptions.value = Array.isArray(data) ? data : data?.data || []
+      const items = Array.isArray(data) ? data : (data as { data?: unknown } | undefined)?.data
+      skillOptions.value = Array.isArray(items)
+        ? items.map((item) => ({ id: Number((item as Record<string, unknown>).id) || 0, name: String((item as Record<string, unknown>).name ?? '') }))
+        : []
     } catch {
       skillOptions.value = []
     } finally {
@@ -137,13 +140,16 @@ export function useOrganization() {
   async function loadEmployeeSkills(userId: number) {
     try {
       const { data } = await get(`/employees/${userId}/skills`)
-      selectedSkillIds.value = (Array.isArray(data) ? data : data?.data || []).map((tag: SkillTag) => tag.id)
+      const items = Array.isArray(data) ? data : (data as { data?: unknown } | undefined)?.data
+      selectedSkillIds.value = Array.isArray(items)
+        ? items.map((item) => Number((item as Record<string, unknown>).id) || 0)
+        : []
     } catch {
       selectedSkillIds.value = []
     }
   }
 
-  async function syncEmployeeSkills(userId: number, targetIds: (number | string)[]) {
+  async function syncEmployeeSkills(userId: number, targetIds: number[]) {
     const { data } = await get(`/employees/${userId}/skills`)
     const currentIds = new Set((Array.isArray(data) ? data : data?.data || []).map((tag: SkillTag) => Number(tag.id)))
     const idsToAttach = targetIds.map((id) => Number(id)).filter((id) => id && !currentIds.has(id))
@@ -189,7 +195,9 @@ export function useOrganization() {
       if (form.hire_date) payload.hire_date = form.hire_date
       let res: EmployeeSaveResult | null = null
       if (isEdit) {
-        res = await put(`/employees/${editingEmployee.value.id}`, payload)
+        const employeeId = editingEmployee.value?.id
+        if (!employeeId) return
+        res = await put(`/employees/${employeeId}`, payload)
         ElMessage.success('员工已更新')
       } else {
         payload.username = form.username
@@ -203,8 +211,9 @@ export function useOrganization() {
       }
       employeeDialogVisible.value = false
       loadEmployees()
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || e?.message || '保存失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || error?.message || '保存失败')
     } finally {
       submitting.value = false
     }
@@ -216,8 +225,9 @@ export function useOrganization() {
       ElMessage.success('员工已删除')
       if (tableData.value.length === 1 && pagination.page > 1) pagination.page -= 1
       loadEmployees()
-    } catch (e: ApiError) {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
+    } catch (e: unknown) {
+      const error = e as ApiError
+      ElMessage.error(error?.response?.data?.message || '删除失败')
     }
   }
 
@@ -286,9 +296,18 @@ export function useOrganization() {
       get('/employees/positions'),
       get('/employees', { per_page: 200 }),
     ])
-    deptList.value = (d as ApiResponse<{ data?: { data?: DepartmentItem[] } | DepartmentItem[] }>)?.data?.data || (d as ApiResponse<DepartmentItem[]>)?.data || []
-    posList.value = (p as ApiResponse<{ data?: { data?: PositionItem[] } | PositionItem[] }>)?.data?.data || (p as ApiResponse<PositionItem[]>)?.data || []
-    userList.value = (u as ApiResponse<{ data?: { data?: UserItem[] } }>)?.data?.data?.data || (u as ApiResponse<{ data?: UserItem[] }>)?.data?.data || []
+    const toList = <T>(response: unknown): Record<string, unknown>[] => {
+      let current: unknown = response
+      for (let depth = 0; depth < 3; depth += 1) {
+        if (Array.isArray(current)) return current as Record<string, unknown>[]
+        if (!current || typeof current !== 'object') return []
+        current = (current as Record<string, unknown>).data
+      }
+      return Array.isArray(current) ? current as Record<string, unknown>[] : []
+    }
+    deptList.value = toList(d).map((item) => ({ id: Number(item.id) || 0, name: String(item.name ?? '') }))
+    posList.value = toList(p).map((item) => ({ id: Number(item.id) || 0, name: String(item.name ?? ''), department_id: Number(item.department_id) || 0 }))
+    userList.value = toList(u) as UserItem[]
   }
 
   onMounted(async () => {
@@ -297,8 +316,15 @@ export function useOrganization() {
         loadAll(),
         loadEmployees(),
         (async () => {
-          const r: ApiResponse = await get('/roles').catch(() => null)
-          roles.value = ((r as ApiResponse<{ data?: { data?: RoleItem[] } }>)?.data?.data || []).map(normalizeRole)
+          const r = await get('/roles').catch(() => null)
+          const roleItems = Array.isArray(r) ? r : (r as ApiResponse<{ data?: unknown }> | null)?.data
+          const roleList = Array.isArray(roleItems) ? roleItems : (roleItems as { data?: unknown } | undefined)?.data
+          roles.value = (Array.isArray(roleList) ? roleList : []).map((item) => normalizeRole({
+            id: Number((item as Record<string, unknown>).id) || 0,
+            name: String((item as Record<string, unknown>).name ?? ''),
+            display_name: typeof (item as Record<string, unknown>).display_name === 'string' ? (item as Record<string, unknown>).display_name as string : undefined,
+            description: typeof (item as Record<string, unknown>).description === 'string' ? (item as Record<string, unknown>).description as string : undefined,
+          }))
         })(),
       ])
     } catch (e) {

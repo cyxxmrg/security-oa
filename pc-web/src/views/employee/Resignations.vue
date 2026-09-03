@@ -80,7 +80,8 @@ type ResignationItem = Resignation & Record<string, any>
 // 员工（用户列表项）
 interface EmployeeUser {
   id: number
-  name?: string
+  name: string
+  username?: string
   is_active?: boolean
   [key: string]: unknown
 }
@@ -451,7 +452,8 @@ async function loadUsers() {
     const u = await get('/employees', { per_page: 500 }) as PaginatedResponse<EmployeeUser>
     // V1.2.16 fix: API 返回 data.data[...] (paginator), 不是 data.items
     const pagData = u?.data as { data?: EmployeeUser[]; items?: EmployeeUser[] } | undefined
-    userList.value = pagData?.data ?? pagData?.items ?? []
+    const users = pagData?.data ?? pagData?.items ?? []
+    userList.value = users.map((user) => ({ ...user, name: user.name || user.username || '' }))
   } catch (e) {
     userList.value = []
   }

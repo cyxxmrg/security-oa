@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type UploadAjaxError, type UploadRequestOptions } from 'element-plus'
 import { get, post } from '@/utils/request'
 import { exportExcelLike } from '@/utils/exporter'
 import { onboardings } from '@/api/modules'
@@ -191,7 +191,7 @@ function exportList() {
     o.mentor?.name || o.mentor || '-',
     o.phone || '-',
   ])
-  exportExcelLike(headers, rows, '员工入职', { title: '员工入职档案' })
+  exportExcelLike(headers, rows as unknown as Record<string, unknown>[][], '员工入职', { title: '员工入职档案' })
 }
 
 async function handleArchive(row: Onboarding) {
@@ -243,7 +243,7 @@ function openRenewContract(row: Onboarding) {
   renewDialogVisible.value = true
 }
 
-async function handleRenewUpload(opt: UploadOpt) {
+async function handleRenewUpload(opt: UploadRequestOptions) {
   try {
     const fd = new FormData()
     fd.append('file', opt.file)
@@ -255,10 +255,10 @@ async function handleRenewUpload(opt: UploadOpt) {
       opt.onSuccess?.(res)
       ElMessage.success('合同已上传')
     } else {
-      opt.onError?.(new Error(res?.message || '上传失败'))
+      opt.onError?.(Object.assign(new Error(res?.message || '上传失败'), { status: 0 }) as UploadAjaxError)
     }
   } catch (e: unknown) {
-    opt.onError?.(e)
+    opt.onError?.(Object.assign(new Error((e as ApiError)?.message || '上传失败'), { status: 0 }) as UploadAjaxError)
     const error = e as ApiError
     ElMessage.error(error.response?.data?.message || error.message || '上传失败')
   }
