@@ -39,43 +39,43 @@ const routes: RouteRecordRaw[] = [
         path: 'analytics',
         name: 'Analytics',
         component: () => import('@/views/analytics/Index.vue'),
-        meta: { title: '老板看板', icon: 'DataBoard' }
+        meta: { title: '老板看板', icon: 'DataBoard', permission: 'analytics.view' }
       },
       {
         path: 'analytics/revenue',
         name: 'AnalyticsRevenue',
         component: () => import('@/views/analytics/Revenue.vue'),
-        meta: { title: '营收分析', parent: 'Analytics', hidden: true }
+        meta: { title: '营收分析', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       {
         path: 'analytics/funnel',
         name: 'AnalyticsFunnel',
         component: () => import('@/views/analytics/SalesFunnel.vue'),
-        meta: { title: '销售漏斗', parent: 'Analytics', hidden: true }
+        meta: { title: '销售漏斗', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       {
         path: 'analytics/projects',
         name: 'AnalyticsProjects',
         component: () => import('@/views/analytics/ProjectHealth.vue'),
-        meta: { title: '项目健康度', parent: 'Analytics', hidden: true }
+        meta: { title: '项目健康度', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       {
         path: 'analytics/rfm',
         name: 'AnalyticsRfm',
         component: () => import('@/views/analytics/CustomerRfm.vue'),
-        meta: { title: '客户 RFM', parent: 'Analytics', hidden: true }
+        meta: { title: '客户 RFM', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       {
         path: 'analytics/inventory',
         name: 'AnalyticsInventory',
         component: () => import('@/views/analytics/InventoryAging.vue'),
-        meta: { title: '库存周转', parent: 'Analytics', hidden: true }
+        meta: { title: '库存周转', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       {
         path: 'analytics/pnl',
         name: 'AnalyticsPnl',
         component: () => import('@/views/analytics/FinancePnl.vue'),
-        meta: { title: '财务利润表', parent: 'Analytics', hidden: true }
+        meta: { title: '财务利润表', parent: 'Analytics', hidden: true, permission: 'analytics.view' }
       },
       // ---- 考勤管理 ----
       {
@@ -472,7 +472,7 @@ const routes: RouteRecordRaw[] = [
         path: 'screen',
         name: 'Screen',
         component: () => import('@/views/screen/index.vue'),
-        meta: { title: '数据大屏', icon: 'DataAnalysis' }
+        meta: { title: '数据大屏', icon: 'DataAnalysis', permission: 'analytics.view' }
       },
       // ---- 消息中心 ----
       {

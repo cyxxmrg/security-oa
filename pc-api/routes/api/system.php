@@ -32,17 +32,17 @@ use Illuminate\Support\Facades\Route;
 // ========== 工作台 (V1.2.4t: system 也能看) ==========
 Route::prefix('dashboard')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
     Route::get('workbench', [DashboardController::class, 'workbench']);
-    Route::get('stats', [DashboardController::class, 'stats']);
-    Route::get('recent-projects', [DashboardController::class, 'recentProjects']);
-    Route::get('recent-service-orders', [DashboardController::class, 'recentServiceOrders']);
-    Route::get('project-progress', [DashboardController::class, 'projectProgress']);
-    Route::get('todo', [DashboardController::class, 'todo']);
-    Route::get('service-stats', [DashboardController::class, 'serviceStats']);
-    Route::get('revenue-trend', [DashboardController::class, 'revenueTrend']);
-    Route::get('screen', [DashboardController::class, 'screen']);
-    Route::get('overview', [DashboardController::class, 'overview']);
-    Route::get('warranty-stats', [DashboardController::class, 'warrantyStats']);
-    Route::get('maintenance-stats', [DashboardController::class, 'maintenanceStats']);
+    Route::get('stats', [DashboardController::class, 'stats'])->middleware('permission:analytics.view');
+    Route::get('recent-projects', [DashboardController::class, 'recentProjects'])->middleware('permission:analytics.view');
+    Route::get('recent-service-orders', [DashboardController::class, 'recentServiceOrders'])->middleware('permission:analytics.view');
+    Route::get('project-progress', [DashboardController::class, 'projectProgress'])->middleware('permission:analytics.view');
+    Route::get('todo', [DashboardController::class, 'todo'])->middleware('permission:analytics.view');
+    Route::get('service-stats', [DashboardController::class, 'serviceStats'])->middleware('permission:analytics.view');
+    Route::get('revenue-trend', [DashboardController::class, 'revenueTrend'])->middleware('permission:analytics.view');
+    Route::get('screen', [DashboardController::class, 'screen'])->middleware('permission:analytics.view');
+    Route::get('overview', [DashboardController::class, 'overview'])->middleware('permission:analytics.view');
+    Route::get('warranty-stats', [DashboardController::class, 'warrantyStats'])->middleware('permission:analytics.view');
+    Route::get('maintenance-stats', [DashboardController::class, 'maintenanceStats'])->middleware('permission:analytics.view');
 });
 
 // ========== 售后服务 ==========
@@ -61,7 +61,7 @@ Route::prefix('service')->middleware(['auth:sanctum', 'ensure_business', 'permis
 
 // ========== 系统管理 (V1.1: 仅 system 可写) ==========
 // ========== V0.5.7 块5 - Dashboard 多维度 widget ==========
-Route::prefix('dashboard/widget')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('dashboard/widget')->middleware(['auth:sanctum', 'ensure_business', 'permission:analytics.view'])->group(function () {
     Route::get('method-distribution', [DashboardWidgetController::class, 'methodDistribution']);
     Route::get('cycle-percentile', [DashboardWidgetController::class, 'cyclePercentile']);
     Route::get('fault-top', [DashboardWidgetController::class, 'faultTop']);
