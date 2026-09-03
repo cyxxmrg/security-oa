@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProcessSignature extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     const SIGNER_CONTRACTOR = 'contractor';
     const SIGNER_OWNER      = 'owner';

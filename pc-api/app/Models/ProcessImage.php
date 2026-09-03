@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProcessImage extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     const CATEGORY_BEFORE     = 'before';
     const CATEGORY_DURING     = 'during';

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProcessInspection extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     const TYPE_SELF       = 'self';
     const TYPE_MUTUAL     = 'mutual';

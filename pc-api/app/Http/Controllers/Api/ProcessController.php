@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * 深化施工上报 V1.1 - 工序验收 + 影像档案
@@ -191,9 +193,13 @@ class ProcessController extends Controller
             'description'            => 'nullable|string',
         ]);
 
+        $project = Project::findOrFail($data['project_id']);
+        if (!empty($data['parent_id'])) {
+            ProcessInstance::where('project_id', $project->id)->findOrFail($data['parent_id']);
+        }
+
         if (empty($data['code'])) {
-            $project = Project::find($data['project_id']);
-            $data['code'] = ($project?->code ?? 'P') . '-' . strtoupper(Str::random(4)) . '-' . date('ymd');
+            $data['code'] = ($project->code ?? 'P') . '-' . strtoupper(Str::random(4)) . '-' . date('ymd');
         }
         if (empty($data['planned_end_date']) && !empty($data['planned_start_date']) && !empty($data['planned_duration_days'])) {
             $data['planned_end_date'] = \Carbon\Carbon::parse($data['planned_start_date'])->addDays($data['planned_duration_days']);
@@ -296,6 +302,7 @@ class ProcessController extends Controller
             'inspection_id'  => 'nullable|integer|exists:process_inspections,id',
             'remark'         => 'nullable|string|max:500',
         ]);
+        $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
         $process->status      = ProcessInstance::STATUS_ACCEPTED;
         $process->progress    = 100;
         $process->accepted_at = now();
@@ -341,6 +348,7 @@ class ProcessController extends Controller
             'reason'         => 'required|string|max:500',
             'inspection_id'  => 'nullable|integer',
         ]);
+        $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
         $process->status = ProcessInstance::STATUS_REJECTED;
         $process->save();
 
@@ -420,10 +428,12 @@ class ProcessController extends Controller
             'remark'                 => 'nullable|string',
         ]);
 
+        $process = ProcessInstance::findOrFail($data['process_instance_id']);
+        $this->ensureImagesBelongToProcess($data['image_ids'] ?? [], $process);
         $ins = ProcessInspection::create($data);
 
         // 联动: pass → 工序进入 accepted, fail → rejected, partial 保持 in_progress
-        $proc = ProcessInstance::find($data['process_instance_id']);
+        $proc = $process;
         if ($proc) {
             if ($data['result'] === ProcessInspection::RESULT_PASS) {
                 $proc->status = ProcessInstance::STATUS_ACCEPTED;
@@ -463,6 +473,11 @@ class ProcessController extends Controller
             'image_ids'              => 'nullable|array',
             'remark'                 => 'nullable|string',
         ]);
+        $process = $inspection->processInstance;
+        if (!$process) {
+            return response()->json(['code' => 404, 'message' => '工序不存在'], 404);
+        }
+        $this->ensureImagesBelongToProcess($data['image_ids'] ?? [], $process);
         $inspection->update($data);
         return response()->json(['code' => 0, 'message' => '更新成功', 'data' => $inspection->fresh()]);
     }
@@ -496,7 +511,7 @@ class ProcessController extends Controller
      */
     public function uploadImages(Request $request, FileUploadService $uploader): JsonResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'process_instance_id' => 'required|integer|exists:process_instances,id',
             'inspection_id'       => 'nullable|integer',
             'category'            => 'required|string|in:before,during,after,issue,acceptance',
@@ -507,26 +522,33 @@ class ProcessController extends Controller
             'location'            => 'nullable|string|max:200',
         ]);
 
-        $uploaded = [];
+        $process = ProcessInstance::findOrFail($data['process_instance_id']);
+        $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
 
-        DB::transaction(function () use ($request, &$uploaded, $uploader) {
-            foreach ($request->file('files') as $idx => $file) {
+        $uploaded = [];
+        $storedPaths = [];
+
+        try {
+            DB::transaction(function () use ($request, $data, &$uploaded, &$storedPaths, $uploader) {
+                foreach ($request->file('files') as $file) {
                 // 逐文件构造 pseudo-Request 走统一服务 (P1 重构)
                 $fakeReq = Request::create('/', 'POST', [], [], ['file' => $file]);
                 $result = $uploader->store($fakeReq, 'file', [
-                    'subdir' => "process/{$request->process_instance_id}/" . date('Y/m'),
+                    'disk' => 'attachments',
+                    'subdir' => "process/{$data['process_instance_id']}/" . date('Y/m'),
                     'allowed_ext'  => ['jpg','jpeg','png','gif','webp','heic','heif','pdf','mp4','mov'],
                     'allowed_mime' => ['image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif',
                         'application/pdf','video/mp4','video/quicktime'],
                     'max_size' => 51200,
                 ]);
+                $storedPaths[] = $result['path'];
 
                 $fileType = str_starts_with($result['mime'], 'video/') ? 'video' : 'image';
 
                 $img = ProcessImage::create([
-                    'process_instance_id' => $request->process_instance_id,
-                    'inspection_id'       => $request->inspection_id,
-                    'category'            => $request->category,
+                    'process_instance_id' => $data['process_instance_id'],
+                    'inspection_id'       => $data['inspection_id'] ?? null,
+                    'category'            => $data['category'],
                     'file_type'           => $fileType,
                     'file_name'           => $result['original_name'],
                     'file_path'           => $result['path'],
@@ -534,13 +556,21 @@ class ProcessController extends Controller
                     'mime_type'           => $result['mime'],
                     'taken_at'            => now(),
                     'taken_by'            => $request->user()?->id,
-                    'description'         => $request->description,
-                    'tags'                => $request->tags,
-                    'location'            => $request->location,
+                    'description'         => $data['description'] ?? null,
+                    'tags'                => $data['tags'] ?? null,
+                    'location'            => $data['location'] ?? null,
                 ]);
                 $uploaded[] = $img;
+                }
             }
-        });
+            );
+        } catch (\Throwable $e) {
+            $disk = Storage::disk('attachments');
+            foreach ($storedPaths as $path) {
+                $disk->delete($path);
+            }
+            throw $e;
+        }
 
         return response()->json(['code' => 0, 'message' => '上传成功', 'data' => $uploaded]);
     }
@@ -548,14 +578,32 @@ class ProcessController extends Controller
     public function showImage(ProcessImage $image): JsonResponse
     {
         $image->load(['processInstance:id,name,code', 'inspection:id,inspection_type,result', 'takenByUser:id,name']);
-        $image->url = Storage::url($image->file_path);
+        $image->url = route('process.images.download', ['image' => $image->getKey()]);
         return response()->json(['code' => 0, 'data' => $image]);
+    }
+
+    public function downloadImage(ProcessImage $image): StreamedResponse|JsonResponse
+    {
+        $path = trim((string) $image->file_path, '/');
+        $disk = Storage::disk('attachments');
+
+        if (!$disk->exists($path)) {
+            $legacyDisk = Storage::disk('local');
+            if (!$legacyDisk->exists($path)) {
+                return response()->json(['code' => 404, 'message' => '影像文件不存在'], 404);
+            }
+            $disk = $legacyDisk;
+        }
+
+        return $disk->download($path, $image->file_name, [
+            'Content-Type' => $image->mime_type ?: 'application/octet-stream',
+        ]);
     }
 
     public function updateImageMeta(Request $request, ProcessImage $image): JsonResponse
     {
         $data = $request->validate([
-            'category'    => 'sometimes|string',
+            'category'    => 'sometimes|string|in:before,during,after,issue,acceptance',
             'description' => 'nullable|string|max:500',
             'tags'        => 'nullable|array',
             'location'    => 'nullable|string|max:200',
@@ -569,6 +617,36 @@ class ProcessController extends Controller
         // 软删除: 实际文件保留(防止误删关键档案),仅移除记录
         $image->delete();
         return response()->json(['code' => 0, 'message' => '影像已移除(物理文件保留)']);
+    }
+
+    private function ensureInspectionBelongsToProcess(?int $inspectionId, ProcessInstance $process): void
+    {
+        if ($inspectionId === null) {
+            return;
+        }
+
+        if (!$process->inspections()->whereKey($inspectionId)->exists()) {
+            throw ValidationException::withMessages([
+                'inspection_id' => '验收记录不属于当前工序',
+            ]);
+        }
+    }
+
+    private function ensureImagesBelongToProcess(array $imageIds, ProcessInstance $process): void
+    {
+        $imageIds = array_values(array_unique(array_map('intval', $imageIds)));
+        if ($imageIds === []) {
+            return;
+        }
+
+        $matched = ProcessImage::where('process_instance_id', $process->id)
+            ->whereIn('id', $imageIds)
+            ->count();
+        if ($matched !== count($imageIds)) {
+            throw ValidationException::withMessages([
+                'image_ids' => '影像记录不属于当前工序',
+            ]);
+        }
     }
 
     // ================== 签字 (signatures) ==================
@@ -604,6 +682,9 @@ class ProcessController extends Controller
             'signature_image_path'   => 'nullable|string|max:500',
             'expires_at'             => 'nullable|date',
         ]);
+
+        $process = ProcessInstance::findOrFail($data['process_instance_id']);
+        $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
 
         // 内部用户自动填 signer_id
         if (empty($data['signer_id']) && in_array($data['signer_type'], [ProcessSignature::SIGNER_CONTRACTOR, ProcessSignature::SIGNER_SUPERVISOR, ProcessSignature::SIGNER_INSPECTOR], true)) {

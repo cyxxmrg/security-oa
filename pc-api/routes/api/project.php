@@ -70,6 +70,7 @@ Route::prefix('process')->middleware(['auth:sanctum', 'ensure_business'])->group
     // 影像
     Route::get('images', [ProcessController::class, 'images']);
     Route::post('images/upload', [ProcessController::class, 'uploadImages'])->middleware('permission:process.create|process.edit');
+    Route::get('images/{image}/download', [ProcessController::class, 'downloadImage'])->name('process.images.download');
     Route::get('images/{image}', [ProcessController::class, 'showImage']);
     Route::put('images/{image}', [ProcessController::class, 'updateImageMeta'])->middleware('permission:process.create|process.edit');
     Route::delete('images/{image}', [ProcessController::class, 'destroyImage'])->middleware('permission:process.create|process.edit');

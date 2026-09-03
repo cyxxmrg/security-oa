@@ -101,6 +101,35 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'process_instances':
+                return [
+                    ['__raw__', $myProjects],
+                ];
+
+            case 'process_inspections':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM process_instances pi WHERE pi.id = process_inspections.process_instance_id AND EXISTS (SELECT 1 FROM projects p WHERE p.id = pi.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active')))))",
+                        $userId, $userId
+                    )],
+                ];
+
+            case 'process_images':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM process_instances pi WHERE pi.id = process_images.process_instance_id AND EXISTS (SELECT 1 FROM projects p WHERE p.id = pi.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active')))))",
+                        $userId, $userId
+                    )],
+                ];
+
+            case 'process_signatures':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM process_instances pi WHERE pi.id = process_signatures.process_instance_id AND EXISTS (SELECT 1 FROM projects p WHERE p.id = pi.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active')))))",
+                        $userId, $userId
+                    )],
+                ];
+
             case 'rectifications':
                 return [
                     ['created_by', '=', $userId],
