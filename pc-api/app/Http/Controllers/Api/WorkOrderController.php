@@ -111,7 +111,6 @@ class WorkOrderController extends Controller
             'remarks'            => 'nullable|string|max:1000',
         ]);
 
-        $data['code'] = $this->nextCode();
         $data['status'] = WorkOrderStatus::PENDING;
         $data['created_by'] = $request->user()?->id;
         $data['priority'] = $data['priority'] ?? 'medium';
@@ -134,7 +133,10 @@ class WorkOrderController extends Controller
             }
         }
 
-        $wo = WorkOrder::create($data);
+        $wo = DB::transaction(function () use ($data) {
+            $data['code'] = $this->nextCode();
+            return WorkOrder::create($data);
+        });
 
         Audit::write('work_order_created', "工单 {$wo->code} 创建", [
             'work_order_id' => $wo->id,
@@ -285,7 +287,11 @@ class WorkOrderController extends Controller
             return response()->json(['code' => 422, 'message' => "工单 {$wo->code} 已锁定"], 422);
         }
 
-        return DB::transaction(function () use ($wo, $data, $request) {
+        return DB::transaction(function () use ($id, $data, $request) {
+            $wo = WorkOrder::lockForUpdate()->findOrFail($id);
+            if ($wo->status !== WorkOrderStatus::IN_PROGRESS || $wo->is_locked || $wo->converted_repair_id) {
+                throw new \LogicException("工单 {$wo->code} 已被其他操作处理, 不可重复转返修");
+            }
             // 1) 工单状态变更
             $wo->status = WorkOrderStatus::CONVERTED_TO_REPAIR;
             $wo->result_notes = "[转返修] " . $data['reason'];
@@ -480,19 +486,24 @@ class WorkOrderController extends Controller
     private function nextCode(): string
     {
         $year = now()->format('Y');
-        // V0.5.5 修: 用 MAX(code) + 1 而非依赖 sequence, 避免 race condition
-        $lastSeq = (int) WorkOrder::where('code', 'like', "WO{$year}-%")
-            ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'WO[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
-            ->value('seq');
-        return sprintf('WO%s-%03d', $year, $lastSeq + 1);
+        $next = \App\Services\NumberSequenceService::next(
+            "work-order:{$year}",
+            fn () => (int) WorkOrder::where('code', 'like', "WO{$year}-%")
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'WO[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+        return sprintf('WO%s-%03d', $year, $next);
     }
 
     private function nextRepairCode(): string
     {
         $year = now()->format('Y');
-        $lastSeq = (int) \App\Models\RepairOrder::where('code', 'like', "RN{$year}-%")
-            ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RN[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
-            ->value('seq');
-        return sprintf('RN%s-%03d', $year, $lastSeq + 1);
+        $next = \App\Services\NumberSequenceService::next(
+            "repair-order:{$year}",
+            fn () => (int) \App\Models\RepairOrder::where('code', 'like', "RN{$year}-%")
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RN[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+        return sprintf('RN%s-%03d', $year, $next);
     }
 }

@@ -230,10 +230,12 @@ class AssetService
         if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
             throw new RuntimeException('期间格式应为 YYYY-MM');
         }
-        $assets = FixedAsset::where('status', '!=', 'scrapped')->get();
         $count = 0;
         $skipped = 0;
-        DB::transaction(function () use ($assets, $period, $request, &$count, &$skipped) {
+        DB::transaction(function () use ($period, $request, &$count, &$skipped) {
+            $assets = FixedAsset::where('status', '!=', 'scrapped')
+                ->lockForUpdate()
+                ->get();
             foreach ($assets as $asset) {
                 if ((float) $asset->net_book_value <= (float) $asset->net_residual_value + 0.001) { $skipped++; continue; }
                 if (AssetDepreciation::where('asset_id', $asset->id)->where('period', $period)->exists()) { $skipped++; continue; }
@@ -324,27 +326,35 @@ class AssetService
             'items.*.actual_qty'   => 'required|integer|min:0',
             'items.*.note'         => 'nullable|string|max:500',
         ]);
-        $inventory = AssetInventory::create([
-            'no'         => $this->nextInventoryNo(),
-            'date'       => $data['date'] ?? now()->toDateString(),
-            'status'     => 'pending',
-            'remark'     => $data['remark'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
-        foreach ($data['items'] as $it) {
-            $asset = FixedAsset::findOrFail($it['asset_id']);
-            $book = (int) $asset->quantity;
-            $actual = (int) $it['actual_qty'];
-            AssetInventoryItem::create([
-                'inventory_id' => $inventory->id,
-                'asset_id'     => $asset->id,
-                'book_qty'     => $book,
-                'actual_qty'   => $actual,
-                'difference'   => $actual - $book,
-                'note'         => $it['note'] ?? null,
+        return DB::transaction(function () use ($data, $request) {
+            $inventory = AssetInventory::create([
+                'no'         => $this->nextInventoryNo(),
+                'date'       => $data['date'] ?? now()->toDateString(),
+                'status'     => 'pending',
+                'remark'     => $data['remark'] ?? null,
+                'created_by' => $request->user()->id,
             ]);
-        }
-        return $inventory->fresh(['items.asset:id,asset_no,name']);
+            $seen = [];
+            foreach ($data['items'] as $it) {
+                $assetId = (int) $it['asset_id'];
+                if (isset($seen[$assetId])) {
+                    throw new RuntimeException("资产 #{$assetId} 在盘点单中重复");
+                }
+                $seen[$assetId] = true;
+                $asset = FixedAsset::lockForUpdate()->findOrFail($assetId);
+                $book = (int) $asset->quantity;
+                $actual = (int) $it['actual_qty'];
+                AssetInventoryItem::create([
+                    'inventory_id' => $inventory->id,
+                    'asset_id'     => $asset->id,
+                    'book_qty'     => $book,
+                    'actual_qty'   => $actual,
+                    'difference'   => $actual - $book,
+                    'note'         => $it['note'] ?? null,
+                ]);
+            }
+            return $inventory->fresh(['items.asset:id,asset_no,name']);
+        });
     }
 
     public function completeInventory(AssetInventory $inventory): AssetInventory
@@ -355,9 +365,15 @@ class AssetService
 
     private function nextInventoryNo(): string
     {
-        $prefix = 'PD-' . date('Ymd') . '-';
-        $cnt = AssetInventory::where('no', 'like', $prefix . '%')->count();
-        return $prefix . str_pad((string) ($cnt + 1), 4, '0', STR_PAD_LEFT);
+        $today = now()->format('Ymd');
+        $prefix = "PD-{$today}-";
+        $next = NumberSequenceService::next(
+            "asset-inventory:{$today}",
+            fn () => (int) AssetInventory::where('no', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(no FROM 'PD-[0-9]{8}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     // ============================================================
@@ -382,17 +398,23 @@ class AssetService
             'reason'     => 'nullable|string|max:1000',
             'remark'     => 'nullable|string|max:500',
         ]);
-        $disposal = AssetDisposal::create([
-            'asset_id'   => $data['asset_id'],
-            'date'       => $data['date'] ?? now()->toDateString(),
-            'method'     => $data['method'] ?? 'scrap',
-            'amount'     => $data['amount'] ?? 0,
-            'reason'     => $data['reason'] ?? null,
-            'handler_id' => $request->user()->id,
-            'remark'     => $data['remark'] ?? null,
-        ]);
-        FixedAsset::where('id', $data['asset_id'])->update(['status' => 'scrapped']);
-        return $disposal->fresh(['asset:id,asset_no,name']);
+        return DB::transaction(function () use ($data, $request) {
+            $asset = FixedAsset::lockForUpdate()->findOrFail($data['asset_id']);
+            if ($asset->status === 'scrapped') {
+                throw new RuntimeException('该资产已报废, 不可重复处置');
+            }
+            $disposal = AssetDisposal::create([
+                'asset_id'   => $asset->id,
+                'date'       => $data['date'] ?? now()->toDateString(),
+                'method'     => $data['method'] ?? 'scrap',
+                'amount'     => $data['amount'] ?? 0,
+                'reason'     => $data['reason'] ?? null,
+                'handler_id' => $request->user()->id,
+                'remark'     => $data['remark'] ?? null,
+            ]);
+            $asset->update(['status' => 'scrapped']);
+            return $disposal->fresh(['asset:id,asset_no,name']);
+        });
     }
 
     // ============================================================
@@ -418,22 +440,26 @@ class AssetService
             'to_keeper_id'    => 'nullable|integer|exists:users,id',
             'remark'          => 'nullable|string|max:500',
         ]);
-        $transfer = AssetTransfer::create([
-            'asset_id'       => $data['asset_id'],
-            'date'           => $data['date'] ?? now()->toDateString(),
-            'from_location'  => $data['from_location'] ?? null,
-            'to_location'    => $data['to_location'] ?? null,
-            'from_keeper_id' => $data['from_keeper_id'] ?? null,
-            'to_keeper_id'   => $data['to_keeper_id'] ?? null,
-            'remark'         => $data['remark'] ?? null,
-            'created_by'     => $request->user()->id,
-        ]);
-        // 调拨后更新资产存放地/保管人
-        $asset = FixedAsset::find($data['asset_id']);
-        $asset->update([
-            'location'  => $data['to_location'] ?? $asset->location,
-            'keeper_id' => $data['to_keeper_id'] ?? $asset->keeper_id,
-        ]);
-        return $transfer->fresh(['asset:id,asset_no,name']);
+        return DB::transaction(function () use ($data, $request) {
+            $asset = FixedAsset::lockForUpdate()->findOrFail($data['asset_id']);
+            if ($asset->status === 'scrapped') {
+                throw new RuntimeException('已报废资产不可调拨');
+            }
+            $transfer = AssetTransfer::create([
+                'asset_id'       => $asset->id,
+                'date'           => $data['date'] ?? now()->toDateString(),
+                'from_location'  => $data['from_location'] ?? $asset->location,
+                'to_location'    => $data['to_location'] ?? null,
+                'from_keeper_id' => $data['from_keeper_id'] ?? $asset->keeper_id,
+                'to_keeper_id'   => $data['to_keeper_id'] ?? null,
+                'remark'         => $data['remark'] ?? null,
+                'created_by'     => $request->user()->id,
+            ]);
+            $asset->update([
+                'location'  => $data['to_location'] ?? $asset->location,
+                'keeper_id' => $data['to_keeper_id'] ?? $asset->keeper_id,
+            ]);
+            return $transfer->fresh(['asset:id,asset_no,name']);
+        });
     }
 }

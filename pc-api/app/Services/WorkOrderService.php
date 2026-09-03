@@ -22,6 +22,8 @@ class WorkOrderService
         $this->ensureTransition($wo, WorkOrderStatus::ASSIGNED);
 
         return DB::transaction(function () use ($wo, $engineerId, $note) {
+            $wo = WorkOrder::lockForUpdate()->findOrFail($wo->id);
+            $this->ensureTransition($wo, WorkOrderStatus::ASSIGNED);
             $wo->assigned_to = $engineerId;
             $wo->status = WorkOrderStatus::ASSIGNED;
             $wo->save();
@@ -46,6 +48,8 @@ class WorkOrderService
         $this->ensureTransition($wo, WorkOrderStatus::IN_PROGRESS);
 
         return DB::transaction(function () use ($wo) {
+            $wo = WorkOrder::lockForUpdate()->findOrFail($wo->id);
+            $this->ensureTransition($wo, WorkOrderStatus::IN_PROGRESS);
             $wo->status = WorkOrderStatus::IN_PROGRESS;
             $wo->started_at = now();
             $wo->save();
@@ -66,6 +70,8 @@ class WorkOrderService
         $this->ensureTransition($wo, WorkOrderStatus::RESOLVED);
 
         return DB::transaction(function () use ($wo, $resultNotes, $serviceFee, $partsCost, $customerSignature) {
+            $wo = WorkOrder::lockForUpdate()->findOrFail($wo->id);
+            $this->ensureTransition($wo, WorkOrderStatus::RESOLVED);
             $wo->status = WorkOrderStatus::RESOLVED;
             $wo->completed_at = now();
             $wo->result_notes = $resultNotes;
@@ -104,6 +110,8 @@ class WorkOrderService
         $this->ensureTransition($wo, WorkOrderStatus::CANCELLED);
 
         return DB::transaction(function () use ($wo, $reason) {
+            $wo = WorkOrder::lockForUpdate()->findOrFail($wo->id);
+            $this->ensureTransition($wo, WorkOrderStatus::CANCELLED);
             $wo->status = WorkOrderStatus::CANCELLED;
             $wo->result_notes = "[取消] {$reason}";
             $wo->completed_at = now();

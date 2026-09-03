@@ -29,30 +29,30 @@ class RectificationService
      */
     public function createRectification(int $projectId, array $data, int $userId): array
     {
-        $code = $this->generateCode();
+        return DB::transaction(function () use ($projectId, $data, $userId) {
+            $rect = \App\Models\Rectification::create([
+                'project_id'            => $projectId,
+                'commencement_order_id' => $data['commencement_order_id'] ?? null,
+                'construction_log_id'   => $data['construction_log_id'] ?? null,
+                'code'                  => $this->generateCode(),
+                'source_type'           => $data['source_type'] ?? 'other',
+                'source_id'             => $data['source_id'] ?? null,
+                'title'                 => $data['title'] ?? '整改任务',
+                'description'           => $data['description'] ?? ($data['content'] ?? ''),
+                'severity'              => $data['severity'] ?? 'medium',
+                'responsible_id'        => $data['responsible_id'] ?? null,
+                'deadline'              => $data['deadline'] ?? null,
+                'status'                => \App\Models\Rectification::STATUS_PENDING,
+                'images'                => $data['images'] ?? null,
+                'created_by'            => $userId,
+            ]);
 
-        $rect = \App\Models\Rectification::create([
-            'project_id'           => $projectId,
-            'commencement_order_id'=> $data['commencement_order_id'] ?? null,
-            'construction_log_id'  => $data['construction_log_id']   ?? null,
-            'code'                 => $code,
-            'source_type'          => $data['source_type']   ?? 'other',
-            'source_id'            => $data['source_id']     ?? null,
-            'title'                => $data['title']         ?? '整改任务',
-            'description'          => $data['description']   ?? ($data['content'] ?? ''),
-            'severity'             => $data['severity']      ?? 'medium',
-            'responsible_id'       => $data['responsible_id']?? null,
-            'deadline'             => $data['deadline']      ?? null,
-            'status'               => \App\Models\Rectification::STATUS_PENDING,
-            'images'               => $data['images']        ?? null,
-            'created_by'           => $userId,
-        ]);
-
-        return [
-            'rect'       => $rect,
-            'placeholder' => false,
-            'message'    => '整改单已创建，待内部验收',
-        ];
+            return [
+                'rect'        => $rect,
+                'placeholder' => false,
+                'message'     => '整改单已创建，待内部验收',
+            ];
+        });
     }
 
     /**
@@ -60,14 +60,16 @@ class RectificationService
      */
     public function generateCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "RECT-{$year}-";
-        $latest = \App\Models\Rectification::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "rectification:{$year}",
+            fn () => (int) \App\Models\Rectification::withTrashed()
+                ->where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RECT-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -123,7 +125,7 @@ class RectificationService
     public function markOverdueAsRectification(int $requiredId, int $userId): RectificationDailyRequired
     {
         return DB::transaction(function () use ($requiredId, $userId) {
-            $req = RectificationDailyRequired::findOrFail($requiredId);
+            $req = RectificationDailyRequired::lockForUpdate()->findOrFail($requiredId);
             $req->update([
                 'is_required' => true,  // 保留 (V0.4.3: 用 is_required 标记)
                 'updated_at'  => now(),
@@ -138,7 +140,13 @@ class RectificationService
     public function completeRectification(int $id, array $data, int $userId): \App\Models\Rectification
     {
         return DB::transaction(function () use ($id, $data, $userId) {
-            $rect = \App\Models\Rectification::findOrFail($id);
+            $rect = \App\Models\Rectification::lockForUpdate()->findOrFail($id);
+            if (!in_array($rect->status, [
+                \App\Models\Rectification::STATUS_PENDING,
+                \App\Models\Rectification::STATUS_IN_PROGRESS,
+            ], true)) {
+                throw new \RuntimeException("当前整改状态 {$rect->status} 不可提交结果");
+            }
             $rect->update([
                 'status'          => \App\Models\Rectification::STATUS_COMPLETED,
                 'completed_by'    => $userId,
