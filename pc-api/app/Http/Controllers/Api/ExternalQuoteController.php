@@ -9,7 +9,9 @@ use App\Services\ExternalQuoteService;
 use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Validation\Rule;
 
@@ -92,10 +94,9 @@ class ExternalQuoteController extends Controller
         $request->validate([
             'file' => 'required|file|max:51200|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,zip,rar', // 50MB
         ]);
-        $req = \App\Models\ExternalQuoteRequest::findOrFail($id);
         $result = $uploader->store($request, 'file', [
             'disk'         => 'attachments',
-            'subdir'       => "external-quotes/{$req->id}/" . date('Ymd'),
+            'subdir'       => "external-quotes/{$id}/" . date('Ymd'),
             'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'dwg', 'zip', 'rar'],
             'allowed_mime' => [
                 'application/pdf', 'application/msword',
@@ -108,19 +109,35 @@ class ExternalQuoteController extends Controller
             'max_size'     => 51200,
         ]);
 
-        $files = $req->required_files ?? [];
-        $fileId = uniqid('f_');
-        $files[] = [
-            'id'        => $fileId,
-            'name'      => $result['original_name'],
-            'path'      => $result['path'],
-            'url'       => route('external-quotes.files.download', [$req->id, $fileId]),
-            'size'      => $result['size'],
-            'mime'      => $result['mime'],
-            'uploaded_at' => now()->toIso8601String(),
-        ];
-        $req->required_files = $files;
-        $req->save();
+        try {
+            [$req, $files] = DB::transaction(function () use ($id, $result) {
+                $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($id);
+                if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
+                    throw new \RuntimeException('只有征集中状态可上传报价资料');
+                }
+                if ($req->deadline && $req->deadline->isPast()) {
+                    throw new \RuntimeException('报价截止时间已过，不可上传资料');
+                }
+
+                $fileId = (string) Str::uuid();
+                $files = $req->required_files ?? [];
+                $files[] = [
+                    'id'          => $fileId,
+                    'name'        => $result['original_name'],
+                    'path'        => $result['path'],
+                    'url'         => route('external-quotes.files.download', [$req->id, $fileId]),
+                    'size'        => $result['size'],
+                    'mime'        => $result['mime'],
+                    'uploaded_at' => now()->toIso8601String(),
+                ];
+                $req->update(['required_files' => array_values($files)]);
+
+                return [$req->fresh(), $files];
+            });
+        } catch (\Throwable $e) {
+            Storage::disk('attachments')->delete($result['path']);
+            throw $e;
+        }
 
         return response()->json(['code' => 0, 'message' => '已上传', 'data' => $files]);
     }
@@ -131,22 +148,28 @@ class ExternalQuoteController extends Controller
         if (!$fileId) {
             return response()->json(['code' => 1001, 'message' => '缺少 file_id'], 422);
         }
-        $req = \App\Models\ExternalQuoteRequest::findOrFail($id);
-        $files = $req->required_files ?? [];
-        $kept = [];
-        $removed = null;
-        foreach ($files as $f) {
-            if (($f['id'] ?? null) === $fileId) {
-                $removed = $f;
-            } else {
-                $kept[] = $f;
+        [$removed, $kept] = DB::transaction(function () use ($id, $fileId) {
+            $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($id);
+            $files = $req->required_files ?? [];
+            $kept = [];
+            $removed = null;
+            foreach ($files as $file) {
+                if (($file['id'] ?? null) === $fileId) {
+                    $removed = $file;
+                } else {
+                    $kept[] = $file;
+                }
             }
-        }
-        if ($removed && !empty($removed['path'])) {
+            if (!$removed) {
+                throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException('文件不存在');
+            }
+            $req->update(['required_files' => $kept ?: null]);
+
+            return [$removed, $kept];
+        });
+        if (!empty($removed['path'])) {
             Storage::disk('attachments')->delete($removed['path']);
         }
-        $req->required_files = $kept ?: null;
-        $req->save();
         return response()->json(['code' => 0, 'message' => '已删除', 'data' => $kept]);
     }
 

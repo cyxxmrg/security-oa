@@ -26,15 +26,15 @@ class ExternalQuoteService
      */
     public function generateRequestCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "EQR-{$year}-";
-        $this->lockNumberGenerator('external-quote-request:' . $year);
-        $latest = ExternalQuoteRequest::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "external-quote-request:{$year}",
+            fn () => (int) ExternalQuoteRequest::where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'EQR-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -43,15 +43,15 @@ class ExternalQuoteService
      */
     public function generateQuoteCode(): string
     {
-        $year   = date('Y');
+        $year   = now()->format('Y');
         $prefix = "EQ-{$year}-";
-        $this->lockNumberGenerator('external-quote:' . $year);
-        $latest = ExternalQuote::where('code', 'like', $prefix . '%')
-            ->orderByDesc('id')->value('code');
-        $next = 1;
-        if ($latest && preg_match('/-(\d+)$/', $latest, $m)) {
-            $next = ((int) $m[1]) + 1;
-        }
+        $next = NumberSequenceService::next(
+            "external-quote:{$year}",
+            fn () => (int) ExternalQuote::where('code', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'EQ-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
+
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
@@ -262,18 +262,16 @@ class ExternalQuoteService
      */
     private function generatePoNo(): string
     {
-        $today = date('Ymd');
+        $today = now()->format('Ymd');
         $prefix = "PO-{$today}-";
-        $this->lockNumberGenerator('purchase-order:' . $today);
-        $count = PurchaseOrder::where('po_no', 'like', $prefix . '%')->count();
-        return $prefix . str_pad((string) ($count + 1), 3, '0', STR_PAD_LEFT);
-    }
+        $next = NumberSequenceService::next(
+            "purchase-order:{$today}",
+            fn () => (int) PurchaseOrder::where('po_no', 'like', $prefix . '%')
+                ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(po_no FROM 'PO-[0-9]{8}-([0-9]+)') AS INTEGER)), 0) as seq")
+                ->value('seq')
+        );
 
-    private function lockNumberGenerator(string $key): void
-    {
-        if (DB::connection()->getDriverName() === 'pgsql') {
-            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [$key]);
-        }
+        return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
     private function normalizeDraftFiles(mixed $files): array
