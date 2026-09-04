@@ -405,18 +405,17 @@ class AttendanceController extends Controller
             $code = \App\Services\ApprovalNumberService::next('OPS');
 
             $applicant = \App\Models\User::find(Auth::id());
+            if (!$applicant) {
+                throw new \RuntimeException('当前申请人不存在');
+            }
 
             // 按模板初始化审批流程
             $flowService = app(ApprovalFlowService::class);
             $template = $flowService->resolveTemplate('leave');
-            $flowData = $template
-                ? $flowService->initFlow($template, $applicant, '提交请假申请: ' . $data['reason'])
-                : ['current_approver_id' => 1, 'flow' => [[
-                    'operator' => $applicant?->name ?? '—',
-                    'action'   => 'submit',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => '提交请假申请: ' . $data['reason'],
-                ]]];
+            if (!$template) {
+                throw new \RuntimeException('未找到请假对应的启用审批流程');
+            }
+            $flowData = $flowService->initFlow($template, $applicant, '提交请假申请: ' . $data['reason']);
 
             \App\Models\ApprovalRecord::create([
                 'code'                => $code,
@@ -435,6 +434,7 @@ class AttendanceController extends Controller
                     'leave_type_label' => $typeLabel,
                     'days' => $data['days'],
                     'reason' => $data['reason'],
+                    '_approval_flow' => $flowData['definition'],
                 ],
                 'flow'                => $flowData['flow'],
             ]);
@@ -530,25 +530,22 @@ class AttendanceController extends Controller
         } else {
             $data['compensation_type'] = 'leave';
         }
-        $overtime = OvertimeRequest::create($data);
-
-        // V1.2.5: 同步创建审批中心记录 (operation/overtime)
-        try {
+        $overtime = DB::transaction(function () use ($data) {
             $compLabel = ['pay' => '加班费', 'leave' => '调休', 'default_pay' => '默认加班费'][$data['compensation_type']] ?? $data['compensation_type'];
             $code = \App\Services\ApprovalNumberService::next('OPS');
             $applicant = \App\Models\User::find(Auth::id());
+            if (!$applicant) {
+                throw new \RuntimeException('当前申请人不存在');
+            }
 
             // 按模板初始化审批流程
             $flowService = app(ApprovalFlowService::class);
             $template = $flowService->resolveTemplate('overtime');
-            $flowData = $template
-                ? $flowService->initFlow($template, $applicant, '提交加班申请: ' . $data['reason'])
-                : ['current_approver_id' => 1, 'flow' => [[
-                    'operator' => $applicant?->name ?? '—',
-                    'action'   => 'submit',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => '提交加班申请: ' . $data['reason'],
-                ]]];
+            if (!$template) {
+                throw new \RuntimeException('未找到加班对应的启用审批流程');
+            }
+            $flowData = $flowService->initFlow($template, $applicant, '提交加班申请: ' . $data['reason']);
+            $overtime = OvertimeRequest::create($data);
 
             \App\Models\ApprovalRecord::create([
                 'code'                => $code,
@@ -569,12 +566,12 @@ class AttendanceController extends Controller
                     'reason'            => $data['reason'],
                     'compensation_type' => $data['compensation_type'],
                     'compensation_label'=> $compLabel,
+                    '_approval_flow'   => $flowData['definition'],
                 ],
                 'flow'                => $flowData['flow'],
             ]);
-        } catch (\Throwable $e) {
-            \Log::error('storeOvertimeRequest sync to approval center failed', ['msg' => $e->getMessage()]);
-        }
+            return $overtime;
+        });
 
         return response()->json(['code' => 0, 'message' => '申请成功', 'data' => $overtime]);
     }
@@ -638,25 +635,81 @@ class AttendanceController extends Controller
 
     public function destroyLeaveRequest(LeaveRequest $leave): JsonResponse
     {
-        if ($leave->status !== 'pending') {
-            return response()->json(['code' => 1001, 'message' => '已审批的请假申请不允许撤销'], 422);
+        try {
+            DB::transaction(function () use ($leave) {
+                $leave = LeaveRequest::lockForUpdate()->findOrFail($leave->id);
+                if ($leave->status !== 'pending') {
+                    throw new \DomainException('已审批的请假申请不允许撤销');
+                }
+                if ((int) $leave->user_id !== (int) Auth::id()) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, '只能撤销自己的请假申请');
+                }
+                $approval = ApprovalRecord::where('type', 'operation')
+                    ->where('sub_type', 'leave')
+                    ->whereJsonContains('payload->leave_id', $leave->id)
+                    ->where('status', ApprovalRecord::STATUS_PENDING)
+                    ->lockForUpdate()
+                    ->first();
+                if ($approval) {
+                    $flow = is_array($approval->flow) ? $approval->flow : [];
+                    $flow[] = [
+                        'operator' => Auth::user()?->name ?? '—',
+                        'action' => 'cancel',
+                        'time' => now()->toDateTimeString(),
+                        'comment' => '申请人撤回请假申请',
+                    ];
+                    $approval->forceFill([
+                        'status' => ApprovalRecord::STATUS_CANCELLED,
+                        'current_approver_id' => null,
+                        'comment' => '申请人撤回请假申请',
+                        'flow' => $flow,
+                    ])->save();
+                }
+                $leave->delete();
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
         }
-        if ($leave->user_id !== Auth::id()) {
-            return response()->json(['code' => 1003, 'message' => '只能撤销自己的请假申请'], 403);
-        }
-        $leave->delete();
         return response()->json(['code' => 0, 'message' => '已撤销']);
     }
 
     public function destroyOvertimeRequest(OvertimeRequest $overtime): JsonResponse
     {
-        if ($overtime->status !== 'pending') {
-            return response()->json(['code' => 1001, 'message' => '已审批的加班申请不允许撤销'], 422);
+        try {
+            DB::transaction(function () use ($overtime) {
+                $overtime = OvertimeRequest::lockForUpdate()->findOrFail($overtime->id);
+                if ($overtime->status !== 'pending') {
+                    throw new \DomainException('已审批的加班申请不允许撤销');
+                }
+                if ((int) $overtime->user_id !== (int) Auth::id()) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, '只能撤回自己的加班申请');
+                }
+                $approval = ApprovalRecord::where('type', 'operation')
+                    ->where('sub_type', 'overtime')
+                    ->whereJsonContains('payload->overtime_id', $overtime->id)
+                    ->where('status', ApprovalRecord::STATUS_PENDING)
+                    ->lockForUpdate()
+                    ->first();
+                if ($approval) {
+                    $flow = is_array($approval->flow) ? $approval->flow : [];
+                    $flow[] = [
+                        'operator' => Auth::user()?->name ?? '—',
+                        'action' => 'cancel',
+                        'time' => now()->toDateTimeString(),
+                        'comment' => '申请人撤回加班申请',
+                    ];
+                    $approval->forceFill([
+                        'status' => ApprovalRecord::STATUS_CANCELLED,
+                        'current_approver_id' => null,
+                        'comment' => '申请人撤回加班申请',
+                        'flow' => $flow,
+                    ])->save();
+                }
+                $overtime->delete();
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
         }
-        if ($overtime->user_id !== Auth::id()) {
-            return response()->json(['code' => 1003, 'message' => '只能撤销自己的加班申请'], 403);
-        }
-        $overtime->delete();
         return response()->json(['code' => 0, 'message' => '已撤销']);
     }
 
