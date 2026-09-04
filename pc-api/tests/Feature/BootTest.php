@@ -64,7 +64,8 @@ class BootTest extends TestCase
                   'device_serial_numbers', 'repair_attachments', 'repair_methods',
                   'repair_progress_logs', 'repair_shipments', 'repair_step_photos',
                   'warranty_deposit_logs', 'inspection_plans', 'inspection_schedules',
-                  'inspection_tasks', 'inspection_records', 'inspection_issues'] as $t) {
+                  'inspection_tasks', 'inspection_records', 'inspection_issues',
+                  'maintenance_contracts'] as $t) {
             $clauses = \App\Scopes\DataScope::tableClauses($t, 86);
             $this->assertIsArray($clauses);
             $this->assertGreaterThan(0, count($clauses), "$t 至少 1 个 clause");

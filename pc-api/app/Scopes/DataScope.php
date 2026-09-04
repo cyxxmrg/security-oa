@@ -456,6 +456,11 @@ class DataScope implements Scope
                     ['__raw__', self::inspectionPlanAccessSql($userId, 'inspection_plans')],
                 ];
 
+            case 'maintenance_contracts':
+                return [
+                    ['__raw__', self::maintenanceContractAccessSql($userId, 'maintenance_contracts')],
+                ];
+
             case 'inspection_schedules':
                 return [
                     ['__raw__', self::inspectionPlanRelationSql($userId, 'inspection_schedules')],
@@ -652,6 +657,20 @@ class DataScope implements Scope
             self::inspectionPlanAccessSql($userId, 'ip'),
             $alias,
             self::inspectionPlanAccessSql($userId, 'ip2')
+        );
+    }
+
+    private static function maintenanceContractAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(EXISTS (SELECT 1 FROM customers c WHERE c.id = %s.customer_id AND c.assigned_user_id = %d) OR EXISTS (SELECT 1 FROM projects p WHERE p.customer_id = %s.customer_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))) OR EXISTS (SELECT 1 FROM inspection_plans ip WHERE ip.contract_id = %s.id AND %s))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId,
+            $alias,
+            self::inspectionPlanAccessSql($userId, 'ip')
         );
     }
 

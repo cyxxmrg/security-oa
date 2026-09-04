@@ -268,6 +268,17 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('inspection_schedules.plan_id', $clauses[0][1]);
     }
 
+    public function test_maintenance_contracts_follow_customer_project_or_plan_access(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('maintenance_contracts', 86);
+        $this->assertCount(1, $clauses);
+        $this->assertStringContainsString('FROM customers c', $clauses[0][1]);
+        $this->assertStringContainsString('c.assigned_user_id = 86', $clauses[0][1]);
+        $this->assertStringContainsString('FROM projects p', $clauses[0][1]);
+        $this->assertStringContainsString('FROM inspection_plans ip', $clauses[0][1]);
+        $this->assertStringContainsString('ip.contract_id = maintenance_contracts.id', $clauses[0][1]);
+    }
+
     public function test_warranty_service_orders_uses_warranty_subquery(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('warranty_service_orders', 86);
