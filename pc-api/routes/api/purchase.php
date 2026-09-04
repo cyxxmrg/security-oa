@@ -53,15 +53,15 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business'])-
     Route::post('requirements', [PurchaseFlowController::class, 'createRequirement'])->middleware('permission:purchase.requirement');
     Route::get('by-source/{type}/{id}', [PurchaseFlowController::class, 'bySource'])->middleware('permission:purchase.requirement');
     Route::post('requirements/{id}/submit', [PurchaseFlowController::class, 'submitRequirement'])->whereNumber('id')->middleware('permission:purchase.requirement');
-    Route::post('requirements/{id}/approve', [PurchaseFlowController::class, 'approveRequirement'])->whereNumber('id')->middleware('permission:purchase.requirement');
+    Route::post('requirements/{id}/approve', [PurchaseFlowController::class, 'approveRequirement'])->whereNumber('id')->middleware('permission:approval.mine');
     Route::post('{entityType}/{id}/cancel', [PurchaseFlowController::class, 'cancel'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('{entityType}/{id}/trace', [PurchaseFlowController::class, 'trace'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::post('plans', [PurchaseFlowController::class, 'createPlan'])->middleware('permission:purchase.order');
     Route::post('plans/{id}/submit', [PurchaseFlowController::class, 'submitPlan'])->whereNumber('id')->middleware('permission:purchase.order');
-    Route::post('plans/{id}/approve', [PurchaseFlowController::class, 'approvePlan'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('plans/{id}/approve', [PurchaseFlowController::class, 'approvePlan'])->whereNumber('id')->middleware('permission:approval.mine');
     Route::post('orders', [PurchaseFlowController::class, 'createOrder'])->middleware('permission:purchase.order');
     Route::post('orders/{id}/submit', [PurchaseFlowController::class, 'submitOrder'])->whereNumber('id')->middleware('permission:purchase.order');
-    Route::post('orders/{id}/approve', [PurchaseFlowController::class, 'approveOrder'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('orders/{id}/approve', [PurchaseFlowController::class, 'approveOrder'])->whereNumber('id')->middleware('permission:approval.mine');
     Route::post('contracts', [PurchaseFlowController::class, 'createContract'])->middleware('permission:purchase.detail');
     Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id')->middleware('permission:purchase.detail');
@@ -83,7 +83,7 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business'])-
         ->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download')->middleware('permission:purchase.detail');
     Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest'])->middleware('permission:purchase.detail');
     Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])
-        ->whereNumber('id')->middleware('permission:finance.pay');
+        ->whereNumber('id')->middleware('permission:approval.mine|finance.pay');
     Route::post('payments', [PurchaseFlowController::class, 'executePayment'])->middleware('permission:finance.pay');
     Route::post('shipments', [PurchaseFlowController::class, 'createShipment'])->middleware('permission:purchase.detail');
     Route::post('shipments/{id}/update-status', [PurchaseFlowController::class, 'updateShipmentStatus'])->whereNumber('id')->middleware('permission:purchase.detail');
@@ -112,7 +112,9 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business'])->grou
         Route::get('stats', [PurchasePlanController::class, 'stats']);
         Route::post('/', [PurchasePlanController::class, 'store']);
         Route::post('{plan}/submit', [PurchasePlanController::class, 'submit']);
-        Route::post('{plan}/approve', [PurchasePlanController::class, 'approve']);
+        Route::post('{plan}/approve', [PurchasePlanController::class, 'approve'])
+            ->withoutMiddleware('permission:purchase.order')
+            ->middleware('permission:approval.mine');
         Route::put('{plan}', [PurchasePlanController::class, 'update']);
         Route::delete('{plan}', [PurchasePlanController::class, 'destroy']);
     });
@@ -131,7 +133,9 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business'])->grou
         Route::get('/', [PurchasePaymentRequestController::class, 'index']);
         Route::get('stats', [PurchasePaymentRequestController::class, 'stats']);
         Route::post('/', [PurchasePaymentRequestController::class, 'store']);
-        Route::post('{req}/approve', [PurchasePaymentRequestController::class, 'approve'])->middleware('permission:finance.pay');
+        Route::post('{req}/approve', [PurchasePaymentRequestController::class, 'approve'])
+            ->withoutMiddleware('permission:purchase.detail')
+            ->middleware('permission:approval.mine|finance.pay');
         Route::delete('{req}', [PurchasePaymentRequestController::class, 'destroy']);
     });
 

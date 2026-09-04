@@ -299,14 +299,14 @@ Route::prefix('construction/teams')->middleware(['auth:sanctum', 'ensure_busines
 });
 
 // ========== 开工单 ==========
-Route::prefix('construction/commencement-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
-    Route::get('/', [CommencementOrderController::class, 'index']);
+Route::prefix('construction/commencement-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::get('/', [CommencementOrderController::class, 'index'])->middleware('permission:project.view');
     Route::post('/', [CommencementOrderController::class, 'store'])->middleware('permission:project.edit');
     Route::post('/{id}/submit', [CommencementOrderController::class, 'submitForApproval'])->where('id', '[0-9]+')->middleware('permission:project.edit');
-    Route::post('/{id}/approve', [CommencementOrderController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::post('/{id}/approve', [CommencementOrderController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:approval.mine');
     Route::post('/{id}/start', [CommencementOrderController::class, 'startWork'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::post('/{id}/complete', [CommencementOrderController::class, 'complete'])->where('id', '[0-9]+')->middleware('permission:project.edit');
-    Route::get('/{id}', [CommencementOrderController::class, 'show'])->where('id', '[0-9]+');
+    Route::get('/{id}', [CommencementOrderController::class, 'show'])->where('id', '[0-9]+')->middleware('permission:project.view');
     Route::put('/{id}', [CommencementOrderController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
 });
 

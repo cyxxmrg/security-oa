@@ -58,7 +58,9 @@ Route::prefix('employee-resignations')->middleware(['auth:sanctum', 'ensure_busi
     Route::get('{resignation}', [EmployeeResignationController::class, 'show']);
     Route::put('{resignation}', [EmployeeResignationController::class, 'update'])->middleware('permission:employee.create');
     Route::post('{resignation}/submit', [EmployeeResignationController::class, 'submit'])->middleware('permission:employee.create');
-    Route::post('{resignation}/approve', [EmployeeResignationController::class, 'approve'])->middleware('permission:employee.create');
+    Route::post('{resignation}/approve', [EmployeeResignationController::class, 'approve'])
+        ->withoutMiddleware('permission:employee.create')
+        ->middleware('permission:approval.mine');
     Route::post('{resignation}/cancel', [EmployeeResignationController::class, 'cancel'])->middleware('permission:employee.create');
     Route::post('{resignation}/complete', [EmployeeResignationController::class, 'complete'])->middleware('permission:employee.create');
 });
