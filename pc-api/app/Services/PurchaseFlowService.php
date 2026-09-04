@@ -1496,6 +1496,7 @@ class PurchaseFlowService
 
         $flow = is_array($approval->flow) ? $approval->flow : [];
         $flow[] = [
+            'operator_id' => $user?->id,
             'operator' => $user?->name ?? '系统',
             'action' => 'cancel',
             'time' => now()->toDateTimeString(),

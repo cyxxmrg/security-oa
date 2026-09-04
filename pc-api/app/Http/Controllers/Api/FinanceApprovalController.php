@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
+use App\Models\ExpenseClaim;
+use App\Models\PurchasePaymentRequest;
 use App\Models\ReferralSettlement;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
@@ -46,11 +48,12 @@ class FinanceApprovalController extends Controller
             'cc'           => 'nullable|array',
         ]);
 
-        $applicant = $request->user();
-        abort_unless($applicant, 401, '登录状态已失效');
+            $applicant = $request->user();
+            abort_unless($applicant, 401, '登录状态已失效');
 
         try {
             $record = \DB::transaction(function () use ($data, $applicant) {
+            $this->assertBusinessObjectBelongsToApplicant($data['sub_type'], $data['payload'] ?? [], $applicant->id);
             $flowService = app(ApprovalFlowService::class);
             $template = $flowService->resolveTemplate($data['sub_type'], 'finance');
             if (!$template) {
@@ -83,6 +86,61 @@ class FinanceApprovalController extends Controller
             'message' => '财务审批已提交',
             'data'    => ['id' => $record->id, 'code' => $record->code],
         ]);
+    }
+
+    private function assertBusinessObjectBelongsToApplicant(string $subType, array $payload, int $applicantId): void
+    {
+        $checks = [
+            'expense' => [
+                'key' => 'claim_id',
+                'model' => ExpenseClaim::class,
+                'owner' => 'user_id',
+                'status' => ['submitted'],
+                'label' => '报销单',
+            ],
+            'purchase_payment' => [
+                'key' => 'payment_request_id',
+                'model' => PurchasePaymentRequest::class,
+                'owner' => 'applicant_id',
+                'status' => ['pending'],
+                'label' => '付款申请',
+            ],
+            'referral_settlement' => [
+                'key' => 'settlement_id',
+                'model' => ReferralSettlement::class,
+                'owner' => 'created_by',
+                'status' => ['pending'],
+                'label' => '居间费结算单',
+            ],
+        ];
+
+        if (!isset($checks[$subType])) {
+            return;
+        }
+
+        $check = $checks[$subType];
+        $id = (int) ($payload[$check['key']] ?? 0);
+        if ($id < 1) {
+            throw new \DomainException("{$check['label']}标识不能为空");
+        }
+
+        $exists = $check['model']::query()
+            ->whereKey($id)
+            ->where($check['owner'], $applicantId)
+            ->whereIn('status', $check['status'])
+            ->exists();
+        if (!$exists) {
+            throw new \DomainException("无权为他人的{$check['label']}创建审批，或该单据当前状态不可提交审批");
+        }
+
+        if (ApprovalRecord::query()
+            ->where('type', 'finance')
+            ->where('sub_type', $subType)
+            ->whereIn('status', [ApprovalRecord::STATUS_PENDING, ApprovalRecord::STATUS_APPROVED])
+            ->where("payload->{$check['key']}", $id)
+            ->exists()) {
+            throw new \DomainException("该{$check['label']}已有进行中或已完成的审批记录");
+        }
     }
 
     public function show(ApprovalRecord $approval): JsonResponse

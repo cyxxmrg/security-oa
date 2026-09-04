@@ -346,10 +346,10 @@ class EmployeeResignationController extends Controller
                 $flow = is_array($approval->flow) ? $approval->flow : [];
                 $operatorName = User::find(Auth::id())?->name ?? '—';
                 if ($action === 'approve') {
-                    $flow[] = ['operator' => $operatorName, 'action' => 'approve', 'time' => now()->toDateTimeString(), 'comment' => '审批通过'];
+                    $flow[] = ['operator_id' => Auth::id(), 'operator' => $operatorName, 'action' => 'approve', 'time' => now()->toDateTimeString(), 'comment' => '审批通过'];
                     $approval->status = ApprovalRecord::STATUS_APPROVED;
                 } elseif ($action === 'cancel') {
-                    $flow[] = ['operator' => $operatorName, 'action' => 'cancel', 'time' => now()->toDateTimeString(), 'comment' => '撤销离职申请'];
+                    $flow[] = ['operator_id' => Auth::id(), 'operator' => $operatorName, 'action' => 'cancel', 'time' => now()->toDateTimeString(), 'comment' => '撤销离职申请'];
                     $approval->status = ApprovalRecord::STATUS_CANCELLED;
                 }
                 $approval->flow = $flow;

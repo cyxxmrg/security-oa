@@ -653,6 +653,7 @@ class AttendanceController extends Controller
                 if ($approval) {
                     $flow = is_array($approval->flow) ? $approval->flow : [];
                     $flow[] = [
+                        'operator_id' => Auth::id(),
                         'operator' => Auth::user()?->name ?? '—',
                         'action' => 'cancel',
                         'time' => now()->toDateTimeString(),
@@ -693,6 +694,7 @@ class AttendanceController extends Controller
                 if ($approval) {
                     $flow = is_array($approval->flow) ? $approval->flow : [];
                     $flow[] = [
+                        'operator_id' => Auth::id(),
                         'operator' => Auth::user()?->name ?? '—',
                         'action' => 'cancel',
                         'time' => now()->toDateTimeString(),

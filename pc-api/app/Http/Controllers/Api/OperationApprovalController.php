@@ -56,11 +56,12 @@ class OperationApprovalController extends Controller
             'cc'         => 'nullable|array',
         ]);
 
-        $applicant = $request->user();
-        abort_unless($applicant, 401, '登录状态已失效');
+            $applicant = $request->user();
+            abort_unless($applicant, 401, '登录状态已失效');
 
         try {
             $record = \DB::transaction(function () use ($data, $applicant) {
+            $this->assertBusinessObjectBelongsToApplicant($data['sub_type'], $data['payload'] ?? [], $applicant->id);
             $flowService = app(ApprovalFlowService::class);
             $template = $flowService->resolveTemplate($data['sub_type'], 'operation');
             if (!$template) {
@@ -273,6 +274,88 @@ class OperationApprovalController extends Controller
             'approver_id' => request()->user()?->id,
             'approved_at' => now(),
         ]);
+    }
+
+    private function assertBusinessObjectBelongsToApplicant(string $subType, array $payload, int $applicantId): void
+    {
+        $checks = [
+            'leave' => [
+                'key' => 'leave_id',
+                'model' => LeaveRequest::class,
+                'owner' => 'user_id',
+                'status' => ['pending'],
+                'label' => '请假申请',
+            ],
+            'overtime' => [
+                'key' => 'overtime_id',
+                'model' => OvertimeRequest::class,
+                'owner' => 'user_id',
+                'status' => ['pending'],
+                'label' => '加班申请',
+            ],
+            'resignation' => [
+                'key' => 'resignation_id',
+                'model' => EmployeeResignation::class,
+                'owner' => 'created_by',
+                'status' => ['pending'],
+                'label' => '离职申请',
+            ],
+            'purchase_requirement' => [
+                'key' => 'requirement_id',
+                'model' => \App\Models\PurchaseRequirement::class,
+                'owner' => 'created_by',
+                'status' => ['pending'],
+                'label' => '采购需求',
+            ],
+            'purchase_plan' => [
+                'key' => 'plan_id',
+                'model' => \App\Models\PurchasePlan::class,
+                'owner' => null,
+                'status' => ['submitted'],
+                'label' => '采购计划',
+            ],
+            'purchase_order' => [
+                'key' => 'purchase_order_id',
+                'model' => \App\Models\PurchaseOrder::class,
+                'owner' => 'created_by',
+                'status' => ['pending'],
+                'label' => '采购订单',
+            ],
+        ];
+
+        if (!isset($checks[$subType])) {
+            return;
+        }
+
+        $check = $checks[$subType];
+        $id = (int) ($payload[$check['key']] ?? 0);
+        if ($id < 1) {
+            throw new \DomainException("{$check['label']}标识不能为空");
+        }
+
+        $query = $check['model']::query()->whereKey($id);
+        if ($check['owner'] !== null) {
+            $query->where($check['owner'], $applicantId);
+        } else {
+            $query->where(function ($ownerQuery) use ($applicantId) {
+                $ownerQuery->where('created_by', $applicantId)
+                    ->orWhere('submitter_id', $applicantId);
+            });
+        }
+        $query->whereIn('status', $check['status']);
+
+        if (!$query->exists()) {
+            throw new \DomainException("无权为他人的{$check['label']}创建审批，或该单据当前状态不可提交审批");
+        }
+
+        if (ApprovalRecord::query()
+            ->where('type', 'operation')
+            ->where('sub_type', $subType)
+            ->whereIn('status', [ApprovalRecord::STATUS_PENDING, ApprovalRecord::STATUS_APPROVED])
+            ->where("payload->{$check['key']}", $id)
+            ->exists()) {
+            throw new \DomainException("该{$check['label']}已有进行中或已完成的审批记录");
+        }
     }
 
     private function syncLeaveStatus(ApprovalRecord $approval, string $status): void
