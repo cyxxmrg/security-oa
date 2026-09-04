@@ -71,9 +71,7 @@ class Supplier extends Model
 
     public function attachments(): HasMany
     {
-        // V0.9.2: SupplierAttachment Model 已删除 (表 supplier_attachments 0 行, 业务无引用)
-        // 保留关系声明以防后续业务接入, 实际查询会失败但不影响其他业务
-        return $this->hasMany(\App\Models\SupplierAttachment::class);
+        return $this->hasMany(SupplierAttachment::class);
     }
 
     public function payables(): HasMany
