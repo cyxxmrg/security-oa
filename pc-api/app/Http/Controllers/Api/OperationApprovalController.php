@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
+use App\Models\LeaveRequest;
 use App\Models\OvertimeRequest;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
@@ -170,6 +171,7 @@ class OperationApprovalController extends Controller
                     app(\App\Services\PurchaseFlowService::class)
                         ->syncApprovalBusinessState($approval, $user, 'approved', $comment);
                 }
+                $this->syncLeaveStatus($approval, 'approved');
                 $this->syncOvertimeStatus($approval, 'approved');
             }
 
@@ -209,6 +211,7 @@ class OperationApprovalController extends Controller
                 app(\App\Services\PurchaseFlowService::class)
                     ->syncApprovalBusinessState($approval, $request->user(), 'rejected', $comment);
             }
+            $this->syncLeaveStatus($approval, 'rejected');
             $this->syncOvertimeStatus($approval, 'rejected');
 
             return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
@@ -255,6 +258,25 @@ class OperationApprovalController extends Controller
             'status' => $status,
             'approver_id' => request()->user()?->id,
             'approved_at' => now(),
+        ]);
+    }
+
+    private function syncLeaveStatus(ApprovalRecord $approval, string $status): void
+    {
+        if ($approval->sub_type !== 'leave') {
+            return;
+        }
+
+        $leaveId = $approval->payload['leave_id'] ?? null;
+        if (!$leaveId) {
+            return;
+        }
+
+        LeaveRequest::whereKey($leaveId)->update([
+            'status' => $status,
+            'approver_id' => request()->user()?->id,
+            'approved_at' => now(),
+            'reject_reason' => $status === 'rejected' ? $approval->comment : null,
         ]);
     }
 }

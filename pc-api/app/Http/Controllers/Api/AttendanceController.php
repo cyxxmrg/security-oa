@@ -447,52 +447,59 @@ class AttendanceController extends Controller
 
     public function approveLeave(ApproveLeaveRequest $request, LeaveRequest $leave): JsonResponse
     {
-        // P1-8 修复: 禁止自审 + 校验审批权限
         if ($leave->user_id === Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的请假申请'], 403);
         }
         if (!Auth::user()->hasActivePermissionTo('attendance.leave')) {
             return response()->json(['code' => 1011, 'message' => '当前账号没有考勤审批权限'], 403);
         }
-        if ($leave->status !== 'pending') {
-            return response()->json(['code' => 1001, 'message' => '该请假申请已处理'], 409);
-        }
-
-        $isApproved = $request->action === 'approved';
-        $comment = $request->comment ?? ($isApproved ? '同意' : '驳回');
-
-        $leave->update([
-            'status' => $request->action, 'approver_id' => Auth::id(),
-            'approved_at' => now(), 'reject_reason' => !$isApproved ? $comment : null,
-        ]);
-
-        // V1.2.4v: 同步更新审批中心记录（按模板推进/驳回）
-        try {
-            $approval = \App\Models\ApprovalRecord::where('type', 'operation')
-                ->where('sub_type', 'leave')
-                ->where('payload->leave_id', $leave->id)
-                ->first();
-            if ($approval) {
-                $user = \App\Models\User::find(Auth::id());
-                $flowService = app(ApprovalFlowService::class);
-
-                if ($isApproved) {
-                    $result = $flowService->advanceFlow($approval, $user, $comment);
-                } else {
-                    $result = $flowService->rejectFlow($approval, $user, $comment);
-                }
-
-                $approval->flow = $result['flow'];
-                $approval->status = $result['status'];
-                $approval->current_approver_id = $result['current_approver_id'];
-                $approval->comment = $comment;
-                $approval->save();
+        return DB::transaction(function () use ($request, $leave) {
+            $leave = LeaveRequest::lockForUpdate()->findOrFail($leave->id);
+            if ($leave->status !== 'pending') {
+                return response()->json(['code' => 1001, 'message' => '该请假申请已处理'], 409);
             }
-        } catch (\Throwable $e) {
-            \Log::error('approveLeave sync to approval center failed', ['msg' => $e->getMessage()]);
-        }
 
-        return response()->json(['code' => 0, 'message' => $request->action === 'approved' ? '已批准' : '已驳回']);
+            $isApproved = $request->action === 'approved';
+            $comment = $request->comment ?? ($isApproved ? '同意' : '驳回');
+            $approval = ApprovalRecord::where('type', 'operation')
+                ->where('sub_type', 'leave')
+                ->whereJsonContains('payload->leave_id', $leave->id)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+            if (!$approval) {
+                return response()->json(['code' => 1001, 'message' => '未找到有效的审批中心记录'], 409);
+            }
+
+            $user = User::findOrFail(Auth::id());
+            $flowService = app(ApprovalFlowService::class);
+            $result = $isApproved
+                ? $flowService->advanceFlow($approval, $user, $comment)
+                : $flowService->rejectFlow($approval, $user, $comment);
+
+            $approval->forceFill([
+                'flow' => $result['flow'],
+                'status' => $result['status'],
+                'current_approver_id' => $result['current_approver_id'],
+                'comment' => $comment,
+            ])->save();
+
+            if (in_array($result['status'], [ApprovalRecord::STATUS_APPROVED, ApprovalRecord::STATUS_REJECTED], true)) {
+                $leave->update([
+                    'status' => $result['status'] === ApprovalRecord::STATUS_APPROVED ? 'approved' : 'rejected',
+                    'approver_id' => Auth::id(),
+                    'approved_at' => now(),
+                    'reject_reason' => $result['status'] === ApprovalRecord::STATUS_REJECTED ? $comment : null,
+                ]);
+            }
+
+            $message = match ($result['status']) {
+                ApprovalRecord::STATUS_APPROVED => '已批准',
+                ApprovalRecord::STATUS_REJECTED => '已驳回',
+                default => '已通过，已转交下一节点',
+            };
+            return response()->json(['code' => 0, 'message' => $message]);
+        });
     }
 
     public function overtimeRequests(Request $request): JsonResponse
@@ -575,51 +582,58 @@ class AttendanceController extends Controller
     public function approveOvertime(Request $request, OvertimeRequest $overtime): JsonResponse
     {
         $request->validate(['action' => 'required|in:approved,rejected', 'comment' => 'nullable|string']);
-        // P1-8 修复: 禁止自审 + 校验审批权限
         if ($overtime->user_id === Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的加班申请'], 403);
         }
         if (!Auth::user()->hasActivePermissionTo('attendance.overtime')) {
             return response()->json(['code' => 1011, 'message' => '当前账号没有考勤审批权限'], 403);
         }
-        if ($overtime->status !== 'pending') {
-            return response()->json(['code' => 1001, 'message' => '该加班申请已处理'], 409);
-        }
-        $overtime->update([
-            'status' => $request->action,
-            'approver_id' => Auth::id(),
-            'approved_at' => now(),
-        ]);
-
-        // V1.2.5: 同步更新审批中心记录（按模板推进/驳回）
-        try {
-            $approval = \App\Models\ApprovalRecord::where('type', 'operation')
-                ->where('sub_type', 'overtime')
-                ->where('payload->overtime_id', $overtime->id)
-                ->first();
-            if ($approval) {
-                $user = \App\Models\User::find(Auth::id());
-                $isApproved = $request->action === 'approved';
-                $comment = $request->comment ?? ($isApproved ? '同意' : '驳回');
-                $flowService = app(ApprovalFlowService::class);
-
-                if ($isApproved) {
-                    $result = $flowService->advanceFlow($approval, $user, $comment);
-                } else {
-                    $result = $flowService->rejectFlow($approval, $user, $comment);
-                }
-
-                $approval->flow = $result['flow'];
-                $approval->status = $result['status'];
-                $approval->current_approver_id = $result['current_approver_id'];
-                $approval->comment = $comment;
-                $approval->save();
+        return DB::transaction(function () use ($request, $overtime) {
+            $overtime = OvertimeRequest::lockForUpdate()->findOrFail($overtime->id);
+            if ($overtime->status !== 'pending') {
+                return response()->json(['code' => 1001, 'message' => '该加班申请已处理'], 409);
             }
-        } catch (\Throwable $e) {
-            \Log::error('approveOvertime sync approval failed', ['msg' => $e->getMessage()]);
-        }
 
-        return response()->json(['code' => 0, 'message' => $request->action === 'approved' ? '已批准' : '已驳回']);
+            $isApproved = $request->action === 'approved';
+            $comment = $request->comment ?? ($isApproved ? '同意' : '驳回');
+            $approval = ApprovalRecord::where('type', 'operation')
+                ->where('sub_type', 'overtime')
+                ->whereJsonContains('payload->overtime_id', $overtime->id)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+            if (!$approval) {
+                return response()->json(['code' => 1001, 'message' => '未找到有效的审批中心记录'], 409);
+            }
+
+            $user = User::findOrFail(Auth::id());
+            $flowService = app(ApprovalFlowService::class);
+            $result = $isApproved
+                ? $flowService->advanceFlow($approval, $user, $comment)
+                : $flowService->rejectFlow($approval, $user, $comment);
+
+            $approval->forceFill([
+                'flow' => $result['flow'],
+                'status' => $result['status'],
+                'current_approver_id' => $result['current_approver_id'],
+                'comment' => $comment,
+            ])->save();
+
+            if (in_array($result['status'], [ApprovalRecord::STATUS_APPROVED, ApprovalRecord::STATUS_REJECTED], true)) {
+                $overtime->update([
+                    'status' => $result['status'] === ApprovalRecord::STATUS_APPROVED ? 'approved' : 'rejected',
+                    'approver_id' => Auth::id(),
+                    'approved_at' => now(),
+                ]);
+            }
+
+            $message = match ($result['status']) {
+                ApprovalRecord::STATUS_APPROVED => '已批准',
+                ApprovalRecord::STATUS_REJECTED => '已驳回',
+                default => '已通过，已转交下一节点',
+            };
+            return response()->json(['code' => 0, 'message' => $message]);
+        });
     }
 
     public function destroyLeaveRequest(LeaveRequest $leave): JsonResponse
