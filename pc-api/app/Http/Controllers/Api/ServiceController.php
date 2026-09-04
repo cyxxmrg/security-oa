@@ -33,7 +33,13 @@ class ServiceController extends Controller
         }
 
         $query = ServiceOrder::with(['customer', 'assignedUser', 'device']);
-        if ($request->filled('keyword')) $query->where('order_no', 'like', "%{$request->keyword}%")->orWhere('fault_description', 'like', "%{$request->keyword}%");
+        if ($request->filled('keyword')) {
+            $keyword = "%{$request->keyword}%";
+            $query->where(function ($q) use ($keyword) {
+                $q->where('order_no', 'like', $keyword)
+                    ->orWhere('fault_description', 'like', $keyword);
+            });
+        }
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('urgency')) $query->where('urgency', $request->urgency);
         if ($request->filled('customer_id')) $query->where('customer_id', $request->customer_id);

@@ -160,6 +160,28 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('stock_records.project_id', $clauses[1][1]);
     }
 
+    public function test_service_and_device_clauses_follow_related_project_access(): void
+    {
+        $serviceOrders = \App\Scopes\DataScope::tableClauses('service_orders', 86);
+        $this->assertCount(3, $serviceOrders);
+        $this->assertSame(['created_by', '=', 86], $serviceOrders[0]);
+        $this->assertSame(['assigned_to', '=', 86], $serviceOrders[1]);
+        $this->assertStringContainsString('service_orders.project_id', $serviceOrders[2][1]);
+
+        foreach (['service_order_logs', 'service_order_parts'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertStringContainsString('FROM service_orders so', $clauses[0][1]);
+            $this->assertStringContainsString('so.project_id', $clauses[0][1]);
+        }
+
+        $devices = \App\Scopes\DataScope::tableClauses('customer_devices', 86);
+        $this->assertStringContainsString('customer_devices.project_id IS NULL', $devices[0][1]);
+
+        $serials = \App\Scopes\DataScope::tableClauses('device_serial_numbers', 86);
+        $this->assertStringContainsString('customer_device_id', $serials[0][1]);
+        $this->assertStringContainsString('FROM stock_records sr', $serials[0][1]);
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);

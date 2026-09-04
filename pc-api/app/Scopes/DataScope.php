@@ -214,6 +214,49 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'service_orders':
+                return [
+                    ['created_by', '=', $userId],
+                    ['assigned_to', '=', $userId],
+                    ['__raw__', $myProjects],
+                ];
+
+            case 'service_order_logs':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM service_orders so WHERE so.id = service_order_logs.service_order_id AND (%s)))",
+                        self::serviceOrderAccessSql($userId, 'so')
+                    )],
+                ];
+
+            case 'service_order_parts':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM service_orders so WHERE so.id = service_order_parts.service_order_id AND (%s)))",
+                        self::serviceOrderAccessSql($userId, 'so')
+                    )],
+                ];
+
+            case 'customer_devices':
+                // 未绑定项目的客户设备作为公共客户资产可见，项目设备按项目权限隔离
+                return [
+                    ['__raw__', sprintf(
+                        "(customer_devices.project_id IS NULL OR %s)",
+                        $myProjects
+                    )],
+                ];
+
+            case 'device_serial_numbers':
+                // 库存序列号共享可见；已安装到项目/客户设备的序列号按关联项目权限隔离
+                return [
+                    ['__raw__', sprintf(
+                        "(((device_serial_numbers.project_id IS NULL AND (device_serial_numbers.customer_device_id IS NULL OR %s) AND (device_serial_numbers.stock_record_id IS NULL OR %s))) OR %s)",
+                        self::customerDeviceAccessSql($userId, 'cd'),
+                        self::stockRecordAccessSql($userId, 'sr'),
+                        $myProjects
+                    )],
+                ];
+
             case 'tender_projects':
                 return [
                     ['created_by', '=', $userId],
@@ -584,6 +627,45 @@ class DataScope implements Scope
             "(%s.created_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
             $alias,
             $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function serviceOrderAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR %s.assigned_to = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function customerDeviceAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function stockRecordAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "EXISTS (SELECT 1 FROM stock_records %s WHERE %s.operator_id = %d OR %s.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $alias,
+            $userId,
+            $alias,
             $alias,
             $userId,
             $userId

@@ -6,6 +6,7 @@ use App\Enums\ProjectStage;
 use App\Models\ApprovalRecord;
 use App\Models\AttendanceRecord;
 use App\Models\Certificate;
+use App\Models\DeviceSerialNumber;
 use App\Models\ConstructionLog;
 use App\Models\EmployeeProfile;
 use App\Models\ExpenseClaim;
@@ -763,7 +764,7 @@ class DashboardService
      */
     private function overviewDeviceStatus(): array
     {
-        $rows = DB::table('device_serial_numbers')
+        $rows = DeviceSerialNumber::query()
             ->select('status', DB::raw('count(*) as cnt'))
             ->groupBy('status')
             ->pluck('cnt', 'status')

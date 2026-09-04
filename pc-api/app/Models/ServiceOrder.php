@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class ServiceOrder extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = [
         'order_no', 'customer_id', 'project_id', 'customer_device_id',
@@ -32,7 +33,7 @@ class ServiceOrder extends Model
             if (empty($order->order_no)) {
                 $today = date('Ymd');
                 $count = \App\Services\NumberSequenceService::next("service-order:{$today}", static function () use ($today): int {
-                    return ServiceOrder::where('order_no', 'like', "SO-{$today}-%")
+                    return ServiceOrder::allData()->where('order_no', 'like', "SO-{$today}-%")
                         ->pluck('order_no')
                         ->map(static function (string $number): int {
                             $parts = explode('-', $number);

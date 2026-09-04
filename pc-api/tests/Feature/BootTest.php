@@ -53,10 +53,12 @@ class BootTest extends TestCase
 
     public function test_data_scope_table_clauses_all_tables(): void
     {
-        // 走遍所有 9 张表的 scope 分支, 拉覆盖率
+        // 走遍已注册的 scope 分支, 拉覆盖率
         foreach (['projects', 'customer_receivables', 'purchase_orders', 'construction_logs',
                   'rectifications', 'warranties', 'warranty_service_orders', 'warranty_deposits',
-                  'receivables', 'payables'] as $t) {
+                  'receivables', 'payables', 'stock_records', 'service_orders',
+                  'service_order_logs', 'service_order_parts', 'customer_devices',
+                  'device_serial_numbers'] as $t) {
             $clauses = \App\Scopes\DataScope::tableClauses($t, 86);
             $this->assertIsArray($clauses);
             $this->assertGreaterThan(0, count($clauses), "$t 至少 1 个 clause");

@@ -177,6 +177,9 @@ class WarrantyServiceOrderService
                 }
             }
             if (array_key_exists('project_id', $data)) {
+                if ($data['project_id'] !== null) {
+                    \App\Models\Project::findOrFail((int) $data['project_id']);
+                }
                 $updates['project_id'] = $data['project_id'] !== null ? (int) $data['project_id'] : null;
             }
             $order->update($updates);
@@ -302,7 +305,7 @@ class WarrantyServiceOrderService
         $prefix = "WS-{$today}-";
         $next = NumberSequenceService::next(
             "warranty-service-order:{$today}",
-            fn () => (int) WarrantyServiceOrder::withTrashed()
+            fn () => (int) WarrantyServiceOrder::allData()->withTrashed()
                 ->where('order_no', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(order_no FROM 'WS-[0-9]{8}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
