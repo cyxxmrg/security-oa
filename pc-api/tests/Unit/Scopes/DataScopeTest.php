@@ -150,6 +150,29 @@ class DataScopeTest extends TestCase
         }
     }
 
+    public function test_purchase_children_follow_parent_access(): void
+    {
+        $items = \App\Scopes\DataScope::tableClauses('purchase_items', 86);
+        $this->assertStringContainsString('FROM purchase_orders po', $items[0][1]);
+        $this->assertStringContainsString('po.project_id', $items[0][1]);
+
+        foreach (['purchase_contract_items', 'purchase_contract_files', 'purchase_shipping_plans'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertStringContainsString('FROM purchase_contracts pc', $clauses[0][1]);
+            $this->assertStringContainsString("{$table}.contract_id", $clauses[0][1]);
+        }
+
+        foreach (['purchase_shipment_items', 'purchase_logistics'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertStringContainsString('FROM purchase_shipments ps', $clauses[0][1]);
+            $this->assertStringContainsString("{$table}.shipment_id", $clauses[0][1]);
+        }
+
+        $nodes = \App\Scopes\DataScope::tableClauses('contract_payment_nodes', 86);
+        $this->assertStringContainsString('FROM project_contracts pc', $nodes[0][1]);
+        $this->assertStringContainsString('contract_payment_nodes.contract_id', $nodes[0][1]);
+    }
+
     public function test_stock_records_keep_shared_and_operator_records_visible(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('stock_records', 86);

@@ -55,6 +55,9 @@ class BootTest extends TestCase
     {
         // 走遍已注册的 scope 分支, 拉覆盖率
         foreach (['projects', 'customer_receivables', 'purchase_orders', 'construction_logs',
+                  'purchase_items', 'purchase_contract_items', 'purchase_contract_files',
+                  'purchase_shipping_plans', 'purchase_shipment_items', 'purchase_logistics',
+                  'contract_payment_nodes',
                   'rectifications', 'warranties', 'warranty_service_orders', 'warranty_deposits',
                   'receivables', 'payables', 'stock_records', 'service_orders',
                   'service_order_logs', 'service_order_parts', 'customer_devices',

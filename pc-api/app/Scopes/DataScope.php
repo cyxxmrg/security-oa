@@ -54,6 +54,14 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'purchase_items':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_orders po WHERE po.id = purchase_items.purchase_order_id AND (%s)))",
+                        self::purchaseOrderAccessSql($userId, 'po')
+                    )],
+                ];
+
             case 'purchase_plans':
                 // V0.6.3: 采购计划 — 自己创建 OR 关联项目可访问
                 return [
@@ -73,6 +81,17 @@ class DataScope implements Scope
                 return [
                     ['signer_id', '=', $userId],
                     ['__raw__', $myProjects],
+                ];
+
+            case 'purchase_contract_items':
+            case 'purchase_contract_files':
+            case 'purchase_shipping_plans':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = %s.contract_id AND (%s)))",
+                        $table,
+                        self::purchaseContractAccessSql($userId, 'pc')
+                    )],
                 ];
 
             case 'purchase_payment_requests':
@@ -98,6 +117,24 @@ class DataScope implements Scope
                     ['__raw__', sprintf(
                         "(EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = purchase_shipments.contract_id AND (pc.signer_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = pc.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))))",
                         $userId, $userId, $userId
+                    )],
+                ];
+
+            case 'purchase_shipment_items':
+            case 'purchase_logistics':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM purchase_shipments ps WHERE ps.id = %s.shipment_id AND (%s)))",
+                        $table,
+                        self::purchaseShipmentAccessSql($userId, 'ps')
+                    )],
+                ];
+
+            case 'contract_payment_nodes':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM project_contracts pc WHERE pc.id = contract_payment_nodes.contract_id AND (%s)))",
+                        self::projectContractAccessSql($userId, 'pc')
                     )],
                 ];
 
@@ -763,6 +800,49 @@ class DataScope implements Scope
             $userId,
             $alias,
             $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function purchaseOrderAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.approved_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function purchaseContractAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.signer_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function purchaseShipmentAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "EXISTS (SELECT 1 FROM purchase_contracts pc WHERE pc.id = %s.contract_id AND (%s))",
+            $alias,
+            self::purchaseContractAccessSql($userId, 'pc')
+        );
+    }
+
+    private static function projectContractAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active')))" ,
             $alias,
             $userId,
             $userId

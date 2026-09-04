@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ContractPaymentNode extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = ['contract_id', 'name', 'percentage', 'amount', 'planned_date', 'actual_date', 'status', 'paid_amount', 'notes'];
 

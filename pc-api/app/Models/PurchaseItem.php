@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PurchaseItem extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = ['purchase_order_id', 'item_name', 'specification', 'quantity', 'unit', 'unit_price', 'total_price', 'received_quantity', 'notes'];
 

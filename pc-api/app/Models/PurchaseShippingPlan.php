@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class PurchaseShippingPlan extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $table = 'purchase_shipping_plans';
 
