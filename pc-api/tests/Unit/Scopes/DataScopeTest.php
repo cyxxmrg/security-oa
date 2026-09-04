@@ -59,6 +59,15 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('FROM payables pbl', $clauses[2][1]);
     }
 
+    public function test_inspection_records_follow_task_and_plan_access(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('inspection_records', 86);
+        $this->assertCount(2, $clauses);
+        $this->assertSame(['user_id', '=', 86], $clauses[0]);
+        $this->assertStringContainsString('FROM inspection_tasks it', $clauses[1][1]);
+        $this->assertStringContainsString('FROM inspection_plans ip', $clauses[1][1]);
+    }
+
     public function test_warranty_service_orders_uses_warranty_subquery(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('warranty_service_orders', 86);

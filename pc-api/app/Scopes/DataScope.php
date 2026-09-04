@@ -167,6 +167,29 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'inspection_plans':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', self::inspectionPlanAccessSql($userId, 'inspection_plans')],
+                ];
+
+            case 'inspection_tasks':
+                return [
+                    ['assigned_to', '=', $userId],
+                    ['__raw__', self::inspectionPlanRelationSql($userId, 'inspection_tasks')],
+                ];
+
+            case 'inspection_records':
+                return [
+                    ['user_id', '=', $userId],
+                    ['__raw__', self::inspectionTaskRelationSql($userId, 'inspection_records')],
+                ];
+
+            case 'inspection_issues':
+                return [
+                    ['__raw__', self::inspectionPlanRelationSql($userId, 'inspection_issues')],
+                ];
+
             case 'process_instances':
                 return [
                     ['__raw__', $myProjects],
@@ -308,5 +331,39 @@ class DataScope implements Scope
             // 审计失败不抛, 避免影响主流程
             \Log::warning('data_scope_denied log failed: ' . $e->getMessage());
         }
+    }
+
+    private static function inspectionPlanAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by::text = '%d' OR COALESCE(%s.assigned_to, '[]')::jsonb @> '[%d]'::jsonb OR COALESCE(%s.assigned_to, '[]')::jsonb @> '[\"%d\"]'::jsonb)",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $alias,
+            $userId
+        );
+    }
+
+    private static function inspectionPlanRelationSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(EXISTS (SELECT 1 FROM inspection_plans ip WHERE ip.id = %s.plan_id AND %s))",
+            $alias,
+            self::inspectionPlanAccessSql($userId, 'ip')
+        );
+    }
+
+    private static function inspectionTaskRelationSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(EXISTS (SELECT 1 FROM inspection_tasks it JOIN inspection_plans ip ON ip.id = it.plan_id WHERE it.id = %s.task_id AND (it.assigned_to = %d OR %s)) OR EXISTS (SELECT 1 FROM inspection_plans ip2 WHERE ip2.id = %s.plan_id AND %s))",
+            $alias,
+            $userId,
+            self::inspectionPlanAccessSql($userId, 'ip'),
+            $alias,
+            self::inspectionPlanAccessSql($userId, 'ip2')
+        );
     }
 }
