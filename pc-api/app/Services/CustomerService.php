@@ -334,15 +334,15 @@ class CustomerService
             ->pluck('last_at', 'customer_id');
 
         // 合同总额
-        $contractMap = DB::table('project_contracts as pc')
-            ->join('projects as p', 'p.id', '=', 'pc.project_id')
-            ->selectRaw('p.customer_id, COALESCE(SUM(pc.contract_amount), 0) as total')
+        $contractMap = ProjectContract::query()
+            ->join('projects as p', 'p.id', '=', 'project_contracts.project_id')
+            ->selectRaw('p.customer_id, COALESCE(SUM(project_contracts.contract_amount), 0) as total')
             ->whereIn('p.customer_id', $ids)
             ->groupBy('p.customer_id')
             ->pluck('total', 'customer_id');
 
         // 应收
-        $receivableMap = DB::table('receivables')
+        $receivableMap = Receivable::query()
             ->selectRaw('customer_id, COALESCE(SUM(amount), 0) as total, COALESCE(SUM(received_amount), 0) as received')
             ->whereIn('customer_id', $ids)
             ->groupBy('customer_id')
@@ -350,7 +350,7 @@ class CustomerService
             ->keyBy('customer_id');
 
         // 活跃项目
-        $activeProjectMap = DB::table('projects')
+        $activeProjectMap = Project::query()
             ->selectRaw('customer_id, COUNT(*) as cnt')
             ->whereIn('customer_id', $ids)
             ->whereNotIn('status', ['completed', 'cancelled', 'done'])
