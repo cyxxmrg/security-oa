@@ -107,6 +107,15 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'work_processes':
+                // 通用工序 (project_id 为空) 对所有业务用户可见，项目工序按项目权限隔离
+                return [
+                    ['__raw__', sprintf(
+                        "(work_processes.project_id IS NULL OR %s)",
+                        $myProjects
+                    )],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],

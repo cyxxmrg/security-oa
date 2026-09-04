@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Construction;
 
 use App\Http\Controllers\Controller;
+use App\Models\Project;
 use App\Models\WorkProcess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,6 +67,9 @@ class WorkProcessController extends Controller
         ]);
 
         try {
+            if (!empty($validated['project_id'])) {
+                Project::findOrFail((int) $validated['project_id']);
+            }
             $validated['status'] = $validated['status'] ?? 'active';
             $proc = WorkProcess::create($validated);
             return response()->json(['code' => 0, 'data' => $proc, 'message' => '创建成功'], 201);
