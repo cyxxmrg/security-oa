@@ -89,6 +89,10 @@ class ApprovalFlowService
     {
         $approvalSteps = $this->getApprovalSteps($template);
         $approverIds = $this->configuredApproverIds($approvalSteps, $template->name);
+        if (!(($applicant->is_system ?? false) === true || ($applicant->user_type ?? null) === 'system')
+            && in_array((int) $applicant->id, $approverIds, true)) {
+            throw new DomainException(\"审批模板「{$template->name}」不能将申请人配置为审批人\");
+        }
         $firstApprover = $approverIds[0];
         $flow = [];
 
