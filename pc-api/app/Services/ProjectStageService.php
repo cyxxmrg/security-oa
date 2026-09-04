@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\ProjectStageLog;
 use App\Models\ProcessInstance;
+use App\Models\ConstructionLog;
+use App\Models\ProjectSettlement;
+use App\Models\Warranty;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -89,7 +92,7 @@ class ProjectStageService
      */
     public function onFirstConstructionLog(int $projectId, ?int $userId = null): bool
     {
-        $count = DB::table('construction_logs')->where('project_id', $projectId)->count();
+        $count = ConstructionLog::query()->where('project_id', $projectId)->count();
         if ($count !== 1) return false;  // 必须是第一条
         $project = Project::allData()->find($projectId);
         return $project ? $this->advance($project, 'construction', '自动推进: 创建了第一条施工日志', $userId) : false;
@@ -101,9 +104,9 @@ class ProjectStageService
      */
     public function onAllProcessInspectionsPassed(int $projectId, ?int $userId = null): bool
     {
-        $total = DB::table('process_instances')->where('project_id', $projectId)->count();
+        $total = ProcessInstance::query()->where('project_id', $projectId)->count();
         if ($total === 0) return false;
-        $passed = DB::table('process_instances')
+        $passed = ProcessInstance::query()
             ->where('project_id', $projectId)
             ->where('status', ProcessInstance::STATUS_ACCEPTED)
             ->count();
@@ -120,7 +123,7 @@ class ProjectStageService
     {
         $project = Project::allData()->find($projectId);
         if (!$project) return false;
-        $settled = (float) DB::table('project_settlements')->where('project_id', $projectId)->sum('total_income');
+        $settled = (float) ProjectSettlement::query()->where('project_id', $projectId)->sum('total_income');
         $contract = (float) $project->getAttribute('contract_amount');  // accessor 已算合同总额
         if ($contract > 0 && $settled >= $contract) {
             return $this->advance($project, 'settlement', "自动推进: 结算金额 ¥{$settled} ≥ 合同金额 ¥{$contract}", $userId);
@@ -144,9 +147,9 @@ class ProjectStageService
      */
     public function onAllWarrantyClosed(int $projectId, ?int $userId = null): bool
     {
-        $total = DB::table('warranties')->where('project_id', $projectId)->count();
+        $total = Warranty::query()->where('project_id', $projectId)->count();
         if ($total === 0) return false;
-        $closed = DB::table('warranties')
+        $closed = Warranty::query()
             ->where('project_id', $projectId)
             ->whereIn('status', ['terminated', 'expired', 'closed'])
             ->count();
