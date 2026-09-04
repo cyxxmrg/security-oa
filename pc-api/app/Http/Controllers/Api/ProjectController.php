@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectStageRequest;
 use App\Models\{Project, ProjectContract, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
+use App\Services\CacheHelper;
 use App\Services\ProjectApprovalBusinessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -135,7 +136,7 @@ class ProjectController extends Controller
             app(ProjectApprovalBusinessService::class)->createProjectCreateApproval($project, $request->user());
             return $project;
         });
-        Cache::forget('projects:dashboard_summary');
+        CacheHelper::flushTag('projects');
         $this->clearListCache('projects:index');
 
         return response()->json(['code' => 0, 'message' => '项目已创建，等待审批', 'data' => $project->load('customer', 'manager')]);
@@ -152,7 +153,7 @@ class ProjectController extends Controller
         ]);
 
         $project->update($data);
-        Cache::forget('projects:dashboard_summary');
+        CacheHelper::flushTag('projects');
         $this->clearListCache('projects:index');
         return response()->json(['code' => 0, 'message' => '更新成功', 'data' => $project]);
     }
@@ -178,7 +179,7 @@ class ProjectController extends Controller
         if (!$changed) {
             return response()->json(['code' => 1001, 'message' => '项目阶段已变化，请刷新后重试'], 422);
         }
-        Cache::forget('projects:dashboard_summary');
+        CacheHelper::flushTag('projects');
         $this->clearListCache('projects:index');
         return response()->json(['code' => 0, 'message' => '阶段更新成功']);
     }
@@ -249,7 +250,7 @@ class ProjectController extends Controller
         if (\App\Models\ProjectContract::where('project_id', $project->id)->exists()) {
             return response()->json(['code' => 1002, 'message' => '项目已关联合同，不允许删除'], 422);
         }
-        Cache::forget('projects:dashboard_summary');
+        CacheHelper::flushTag('projects');
         DB::table('project_members')->where('project_id', $project->id)->delete();
         $project->delete();
         return response()->json(['code' => 0, 'message' => '项目已删除']);
@@ -672,7 +673,9 @@ class ProjectController extends Controller
      */
     public function dashboardSummary(): JsonResponse
     {
-        $data = Cache::remember('projects:dashboard_summary', 300, function () {
+        $userId = (int) (request()->user()?->id ?? 0);
+        $cacheKey = 'projects:dashboard_summary:' . $userId;
+        $data = CacheHelper::remember($cacheKey, 300, ['projects'], function () {
             $now = now();
             $stageOrder = ['mobilization', 'construction', 'acceptance', 'settlement', 'warranty', 'closed'];
             $stageLabels = ['mobilization' => '进场准备', 'construction' => '现场施工', 'acceptance' => '验收交付', 'settlement' => '项目结算', 'warranty' => '售后质保', 'closed' => '已关闭'];
