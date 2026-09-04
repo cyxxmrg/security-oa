@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectBudgetItem extends Model
 {
+    use HasDataScope;
+
     protected $table = 'project_budget_items';
 
     protected $fillable = [

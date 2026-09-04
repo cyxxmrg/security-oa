@@ -85,6 +85,23 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('ecw.project_id', $clauses[1][1]);
     }
 
+    public function test_construction_child_clauses_follow_parent_access(): void
+    {
+        $teamMembers = \App\Scopes\DataScope::tableClauses('construction_team_members', 86);
+        $this->assertStringContainsString('FROM construction_teams ct', $teamMembers[0][1]);
+        $this->assertStringContainsString('ct.project_id', $teamMembers[0][1]);
+
+        $budgetItems = \App\Scopes\DataScope::tableClauses('project_budget_items', 86);
+        $this->assertStringContainsString('FROM project_budgets pb', $budgetItems[0][1]);
+        $this->assertStringContainsString('pb.project_id', $budgetItems[0][1]);
+
+        $dailyRequired = \App\Scopes\DataScope::tableClauses('rectification_daily_required', 86);
+        $this->assertStringContainsString('rectification_daily_required.project_id', $dailyRequired[0][1]);
+
+        $progress = \App\Scopes\DataScope::tableClauses('work_process_progress', 86);
+        $this->assertStringContainsString('work_process_progress.project_id', $progress[0][1]);
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);

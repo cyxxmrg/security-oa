@@ -153,6 +153,32 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'construction_team_members':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM construction_teams ct WHERE ct.id = construction_team_members.team_id AND (%s)))",
+                        self::constructionTeamAccessSql($userId, 'ct')
+                    )],
+                ];
+
+            case 'project_budget_items':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM project_budgets pb WHERE pb.id = project_budget_items.budget_id AND (%s)))",
+                        self::projectBudgetAccessSql($userId, 'pb')
+                    )],
+                ];
+
+            case 'rectification_daily_required':
+                return [
+                    ['__raw__', $myProjects],
+                ];
+
+            case 'work_process_progress':
+                return [
+                    ['__raw__', $myProjects],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],
@@ -414,6 +440,31 @@ class DataScope implements Scope
     }
 
     private static function externalConstructionWorkAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function constructionTeamAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR %s.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function projectBudgetAccessSql(int $userId, string $alias): string
     {
         return sprintf(
             "(%s.created_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",

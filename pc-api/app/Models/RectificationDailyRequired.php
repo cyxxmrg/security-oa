@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class RectificationDailyRequired extends Model
 {
+    use HasDataScope;
+
     protected $table = 'rectification_daily_required';
 
     public $timestamps = true;
