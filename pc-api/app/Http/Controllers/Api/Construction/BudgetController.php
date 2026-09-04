@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Construction;
 
 use App\Http\Controllers\Controller;
+use App\Models\Project;
 use App\Models\ProjectBudget;
 use App\Services\ProjectBudgetService;
 use Illuminate\Http\JsonResponse;
@@ -34,6 +35,8 @@ class BudgetController extends Controller
     // 2. 项目预算汇总
     public function summary(int $projectId): JsonResponse
     {
+        Project::findOrFail($projectId);
+
         return response()->json([
             'code' => 0,
             'data' => $this->service->getSummary($projectId),
@@ -58,6 +61,7 @@ class BudgetController extends Controller
             'items.*.sort_order' => ['nullable', 'integer'],
             'remark' => ['nullable', 'string', 'max:1000'],
         ]);
+        Project::findOrFail((int) $validated['project_id']);
         $this->ensureMaterialItemsFromInventory($validated['items']);
 
         $budget = $this->service->createBudget(

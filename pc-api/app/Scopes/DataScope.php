@@ -116,6 +116,12 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'project_budgets':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', $myProjects],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],

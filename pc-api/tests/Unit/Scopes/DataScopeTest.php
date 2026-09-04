@@ -39,6 +39,15 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('work_processes.project_id', $clauses[0][1]);
     }
 
+    public function test_project_budget_clauses_cover_creator_and_project_access(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('project_budgets', 86);
+        $this->assertCount(2, $clauses);
+        $this->assertSame(['created_by', '=', 86], $clauses[0]);
+        $this->assertSame('__raw__', $clauses[1][0]);
+        $this->assertStringContainsString('project_budgets.project_id', $clauses[1][1]);
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);
