@@ -842,8 +842,9 @@ class SalesService
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
 
-    public function showReferralSettlement(ReferralSettlement $settlement): ReferralSettlement
+    public function showReferralSettlement(ReferralSettlement $settlement, User $user): ReferralSettlement
     {
+        $this->assertSettlementView($settlement, $user);
         return $settlement->load(['referrer', 'opportunity', 'approver']);
     }
 
@@ -1010,6 +1011,27 @@ class SalesService
         }
         $opportunity = $settlement->opportunity ?: Opportunity::findOrFail($settlement->opportunity_id);
         $this->assertOpportunityAccess($opportunity, $user);
+    }
+
+    private function assertSettlementView(ReferralSettlement $settlement, User $user): void
+    {
+        if ($this->canViewTeam($user)
+            || (method_exists($user, 'hasRole') && $user->hasRole('finance'))) {
+            return;
+        }
+
+        $opportunity = $settlement->relationLoaded('opportunity')
+            ? $settlement->opportunity
+            : $settlement->load('opportunity')->opportunity;
+        if (!$opportunity) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('结算单关联的商机不存在');
+        }
+
+        try {
+            $this->assertOpportunityAccess($opportunity, $user);
+        } catch (RuntimeException $e) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('无权查看其他销售负责的结算单', previous: $e);
+        }
     }
 
     /**

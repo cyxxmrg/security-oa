@@ -336,9 +336,9 @@ class SalesController extends Controller
         return response()->json(['code' => 0, 'data' => $this->svc->paginateReferralSettlements($request, $request->user())]);
     }
 
-    public function referralSettlementsShow(ReferralSettlement $settlement): JsonResponse
+    public function referralSettlementsShow(Request $request, ReferralSettlement $settlement): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->showReferralSettlement($settlement)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->showReferralSettlement($settlement, $request->user())]);
     }
 
     public function referralSettlementsApprove(Request $request, ReferralSettlement $settlement): JsonResponse
