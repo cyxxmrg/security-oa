@@ -122,6 +122,16 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'construction_teams':
+                // 通用团队 (project_id 为空) 可复用，项目团队按项目权限隔离
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(construction_teams.project_id IS NULL OR %s)",
+                        $myProjects
+                    )],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ConstructionLog;
 use App\Models\ConstructionTeam;
 use App\Models\ConstructionTeamMember;
+use App\Models\Project;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,6 +27,10 @@ class ConstructionTeamService
     public function createTeam(?int $projectId, array $data, int $userId): ConstructionTeam
     {
         return DB::transaction(function () use ($projectId, $data, $userId) {
+            if ($projectId !== null) {
+                Project::findOrFail($projectId);
+            }
+
             $team = ConstructionTeam::create([
                 'project_id'      => $projectId,
                 'team_name'       => $data['team_name'],
@@ -54,6 +59,9 @@ class ConstructionTeamService
     public function updateTeam(int $id, array $data): ConstructionTeam
     {
         $team = ConstructionTeam::findOrFail($id);
+        if (array_key_exists('project_id', $data) && $data['project_id'] !== null) {
+            Project::findOrFail((int) $data['project_id']);
+        }
         $team->update($data);
         return $team->fresh();
     }

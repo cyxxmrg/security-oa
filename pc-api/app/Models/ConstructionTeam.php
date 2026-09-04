@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ConstructionTeam extends Model
 {
-    use SoftDeletes;
+    use HasDataScope, SoftDeletes;
 
     protected $table = 'construction_teams';
 
