@@ -815,6 +815,12 @@ class SystemSettingsController extends Controller
                 'message' => '未登录',
             ], 401);
         }
+        if (!($user->must_change_password ?? false)) {
+            return response()->json([
+                'code'    => 403,
+                'message' => '当前账号不处于首次登录强制改密状态，请使用修改密码功能',
+            ], 403);
+        }
 
         $user->update([
             'password'              => \Hash::make($data['new_password']),
