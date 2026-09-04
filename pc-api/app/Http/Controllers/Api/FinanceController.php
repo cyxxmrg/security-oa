@@ -683,7 +683,7 @@ class FinanceController extends Controller
     public function internalTransfers(Request $request): JsonResponse
     {
         $perPage = max(1, min((int)($request->integer('per_page') ?: EnforcePaginationLimit::maxPerPage()), 200));
-        $query = DB::table('finance_payments')
+        $query = FinancePayment::query()
             ->where('is_internal_transfer', true)
             ->whereNotNull('transfer_group_id');
         if ($kw = $request->query('keyword')) {
@@ -716,7 +716,7 @@ class FinanceController extends Controller
 
         // 加载源/目标账户 (一笔转账两条记录, 一正一负, 负数是源)
         $allGroupIds = collect($rows->items())->pluck('transfer_group_id')->all();
-        $groupPayments = $allGroupIds ? DB::table('finance_payments')
+        $groupPayments = $allGroupIds ? FinancePayment::query()
             ->whereIn('transfer_group_id', $allGroupIds)
             ->orderBy('id')
             ->get()
@@ -748,8 +748,8 @@ class FinanceController extends Controller
 
         // 统计
         $stats = [
-            'count'       => DB::table('finance_payments')->where('is_internal_transfer', true)->distinct()->count('transfer_group_id'),
-            'total_amount'=> (float)DB::table('finance_payments')->where('is_internal_transfer', true)->where('amount', '>', 0)->sum('amount'),
+            'count'       => FinancePayment::query()->where('is_internal_transfer', true)->distinct()->count('transfer_group_id'),
+            'total_amount'=> (float) FinancePayment::query()->where('is_internal_transfer', true)->where('amount', '>', 0)->sum('amount'),
         ];
 
         return response()->json([
