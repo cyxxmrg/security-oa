@@ -229,9 +229,9 @@ Route::prefix('approvals')->middleware(['auth:sanctum'])->withoutMiddleware(['en
     Route::prefix('project')->middleware('permission:approval.mine|project.view')->group(function () {
         Route::get('/', [ProjectApprovalController::class, 'index']);
         Route::post('/', [ProjectApprovalController::class, 'store']);
-        Route::post('{approval}/approve', [ProjectApprovalController::class, 'approve'])->middleware('permission:project.edit');
-        Route::post('{approval}/reject', [ProjectApprovalController::class, 'reject'])->middleware('permission:project.edit');
-        Route::post('{approval}/forward', [ProjectApprovalController::class, 'forward'])->middleware('permission:project.edit');
+        Route::post('{approval}/approve', [ProjectApprovalController::class, 'approve'])->middleware('permission:approval.mine');
+        Route::post('{approval}/reject', [ProjectApprovalController::class, 'reject'])->middleware('permission:approval.mine');
+        Route::post('{approval}/forward', [ProjectApprovalController::class, 'forward'])->middleware('permission:approval.mine');
         Route::get('{approval}', [ProjectApprovalController::class, 'show']);
     });
 });
