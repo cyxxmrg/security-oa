@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectActualCost extends Model
 {
+    use HasDataScope;
+
     protected $table = 'project_actual_costs';
 
     protected $fillable = [

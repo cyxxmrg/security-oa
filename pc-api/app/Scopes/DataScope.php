@@ -179,6 +179,11 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'project_actual_costs':
+                return [
+                    ['__raw__', $myProjects],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],

@@ -100,6 +100,9 @@ class DataScopeTest extends TestCase
 
         $progress = \App\Scopes\DataScope::tableClauses('work_process_progress', 86);
         $this->assertStringContainsString('work_process_progress.project_id', $progress[0][1]);
+
+        $actualCosts = \App\Scopes\DataScope::tableClauses('project_actual_costs', 86);
+        $this->assertStringContainsString('project_actual_costs.project_id', $actualCosts[0][1]);
     }
 
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
