@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ExternalConstructionBid;
 use App\Models\ExternalConstructionWork;
+use App\Models\Project;
 use App\Models\ProjectActualCost;
 use App\Models\Supplier;
 use App\Models\SupplierPayable;
@@ -34,7 +35,7 @@ class ExternalConstructionService
         $prefix = "ECW-{$year}-";
         $next = NumberSequenceService::next(
             "external-construction-work:{$year}",
-            fn () => (int) ExternalConstructionWork::where('code', 'like', $prefix . '%')
+            fn () => (int) ExternalConstructionWork::allData()->where('code', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'ECW-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
         );
@@ -50,7 +51,7 @@ class ExternalConstructionService
         $prefix = "ECWB-{$year}-";
         $next = NumberSequenceService::next(
             "external-construction-bid:{$year}",
-            fn () => (int) ExternalConstructionBid::withTrashed()
+            fn () => (int) ExternalConstructionBid::allData()->withTrashed()
                 ->where('code', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'ECWB-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
@@ -64,6 +65,8 @@ class ExternalConstructionService
     public function publishWork(int $projectId, array $data, int $userId): ExternalConstructionWork
     {
         return DB::transaction(function () use ($projectId, $data, $userId) {
+            Project::findOrFail($projectId);
+
             return ExternalConstructionWork::create([
                 'project_id'        => $projectId,
                 'code'              => $this->generateWorkCode(),
@@ -392,6 +395,8 @@ class ExternalConstructionService
      */
     public function listBids(int $workId, array $filters = []): array
     {
+        ExternalConstructionWork::findOrFail($workId);
+
         $q = ExternalConstructionBid::with(['supplier:id,name,code,rating', 'bidder:id,name', 'reviewer:id,name'])
             ->where('work_id', $workId);
 

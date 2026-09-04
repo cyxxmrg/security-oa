@@ -138,6 +138,21 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'external_construction_works':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', $myProjects],
+                ];
+
+            case 'external_construction_bids':
+                return [
+                    ['bidder_user_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM external_construction_works ecw WHERE ecw.id = external_construction_bids.work_id AND (%s)))",
+                        self::externalConstructionWorkAccessSql($userId, 'ecw')
+                    )],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],
@@ -395,6 +410,18 @@ class DataScope implements Scope
             self::inspectionPlanAccessSql($userId, 'ip'),
             $alias,
             self::inspectionPlanAccessSql($userId, 'ip2')
+        );
+    }
+
+    private static function externalConstructionWorkAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
         );
     }
 }
