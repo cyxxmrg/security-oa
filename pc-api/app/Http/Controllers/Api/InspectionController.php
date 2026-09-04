@@ -7,6 +7,7 @@ use App\Models\InspectionPlan;
 use App\Models\InspectionTask;
 use App\Models\InspectionRecord;
 use App\Models\InspectionIssue;
+use App\Models\Customer;
 use App\Models\MaintenanceContract;
 use App\Services\InspectionService;
 use Illuminate\Http\JsonResponse;
@@ -393,6 +394,7 @@ class InspectionController extends Controller
             'contract_file_name'    => 'nullable|string|max:255',
         ]);
         $data['status'] = $data['status'] ?? 'active';
+        Customer::findOrFail($data['customer_id']);
         $contract = MaintenanceContract::create($data);
         return response()->json(['code' => 0, 'data' => $contract], 201);
     }
