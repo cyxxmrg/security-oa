@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\RepairStepPhoto;
+use App\Models\RepairOrder;
+use App\Models\WorkOrder;
 use App\Services\FileUploadService;
+use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +29,7 @@ class RepairStepPhotoController extends Controller
             'target_type' => 'required|in:work_order,repair_order',
             'target_id'   => 'required|integer',
         ]);
+        $this->assertTargetAccessible($request->target_type, (int) $request->target_id);
         $rows = RepairStepPhoto::where('target_type', $request->target_type)
             ->where('target_id', $request->target_id)
             ->orderByDesc('id')
@@ -77,15 +81,8 @@ class RepairStepPhotoController extends Controller
         ]);
 
         // 校验 target 存在
-        if ($data['target_type'] === 'work_order') {
-            $wo = \App\Models\WorkOrder::find($data['target_id']);
-            if (!$wo) return response()->json(['code' => 404, 'message' => '工单不存在'], 404);
-            $code = $wo->code;
-        } else {
-            $ro = \App\Models\RepairOrder::find($data['target_id']);
-            if (!$ro) return response()->json(['code' => 404, 'message' => '返修单不存在'], 404);
-            $code = $ro->code;
-        }
+        $target = $this->assertTargetAccessible($data['target_type'], (int) $data['target_id']);
+        $code = $target->code;
 
         $file = $request->file('file');
         $dir = "repair-photos/{$data['target_type']}/{$code}/" . date('Ymd');
@@ -126,6 +123,7 @@ class RepairStepPhotoController extends Controller
     {
         // V1.2.10 修复 IDOR: 校验 uploaded_by (owner 或 admin 可删)
         $photo = RepairStepPhoto::findOrFail($id);
+        $this->assertTargetAccessible($photo->target_type, (int) $photo->target_id);
         $user = $request->user();
         if ($photo->uploaded_by !== $user?->id && !$this->isAdmin($user)) {
             return response()->json(['code' => 403, 'message' => '只能删除自己上传的照片'], 403);
@@ -138,6 +136,7 @@ class RepairStepPhotoController extends Controller
     public function download(int $id): StreamedResponse|JsonResponse
     {
         $photo = RepairStepPhoto::findOrFail($id);
+        $this->assertTargetAccessible($photo->target_type, (int) $photo->target_id);
         $disk = Storage::disk('attachments');
         if (!$disk->exists($photo->file_path)) {
             return response()->json(['code' => 1004, 'message' => '文件已丢失'], 404);
@@ -158,5 +157,45 @@ class RepairStepPhotoController extends Controller
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    private function assertTargetAccessible(string $targetType, int $targetId): WorkOrder|RepairOrder
+    {
+        $user = request()->user();
+        abort_unless($user, 401, '登录状态已失效');
+
+        $target = $targetType === 'work_order'
+            ? WorkOrder::query()->findOrFail($targetId)
+            : RepairOrder::query()->findOrFail($targetId);
+
+        if (AuthScope::isUnrestricted($user)
+            || ($user->is_system ?? false) === true
+            || ($user->user_type ?? null) === 'system') {
+            return $target;
+        }
+
+        $userId = (int) $user->id;
+        $isOwner = (int) ($target->created_by ?? 0) === $userId
+            || (int) ($target->received_by ?? 0) === $userId
+            || (int) ($target->assigned_to ?? 0) === $userId;
+        $hasProjectAccess = false;
+        if (!empty($target->project_id)) {
+            $hasProjectAccess = \App\Models\Project::query()
+                ->whereKey($target->project_id)
+                ->where(function ($query) use ($userId) {
+                    $query->where('manager_id', $userId)
+                        ->orWhereExists(function ($memberQuery) use ($userId) {
+                            $memberQuery->selectRaw('1')
+                                ->from('project_members')
+                                ->whereColumn('project_members.project_id', 'projects.id')
+                                ->where('project_members.user_id', $userId)
+                                ->where('project_members.status', 'active');
+                        });
+                })
+                ->exists();
+        }
+
+        abort_unless($isOwner || $hasProjectAccess, 403, '无权访问该工单的过程照片');
+        return $target;
     }
 }
