@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use App\Enums\RepairMethodType;
 use App\Enums\RepairOrderStatus;
 use App\Enums\RepairSourceType;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class RepairOrder extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasDataScope, SoftDeletes;
 
     protected $table = 'repair_orders';
 

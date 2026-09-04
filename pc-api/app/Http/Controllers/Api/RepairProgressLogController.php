@@ -53,6 +53,7 @@ class RepairProgressLogController extends Controller
      */
     public function destroy(Request $request, int $repairOrderId, int $id): JsonResponse
     {
+        RepairOrder::findOrFail($repairOrderId);
         $l = RepairProgressLog::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $user = $request->user();
         if ($l->action_by !== $user?->id && !$this->isAdmin($user)) {

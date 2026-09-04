@@ -108,15 +108,13 @@ class RepairOrderController extends Controller
 
         // V0.5.7 块1 — 返修单也校验项目阶段
         if (!empty($data['project_id'])) {
-            $project = \App\Models\Project::find($data['project_id']);
-            if ($project) {
-                $stage = is_object($project->stage) ? $project->stage->value : $project->stage;
-                if (!in_array($stage, ['settlement', 'warranty'], true)) {
-                    return response()->json([
-                        'code' => 422,
-                        'message' => "项目 #{$project->id} 当前阶段为「{$stage}」, 需进入「结算」或「质保」阶段后才能创建返修单",
-                    ], 422);
-                }
+            $project = \App\Models\Project::findOrFail($data['project_id']);
+            $stage = is_object($project->stage) ? $project->stage->value : $project->stage;
+            if (!in_array($stage, ['settlement', 'warranty'], true)) {
+                return response()->json([
+                    'code' => 422,
+                    'message' => "项目 #{$project->id} 当前阶段为「{$stage}」, 需进入「结算」或「质保」阶段后才能创建返修单",
+                ], 422);
             }
         }
 
@@ -608,7 +606,8 @@ class RepairOrderController extends Controller
 
     public function listAttachments(int $repairOrderId): JsonResponse
     {
-        $rows = \App\Models\RepairAttachment::where('repair_order_id', $repairOrderId)
+        RepairOrder::findOrFail($repairOrderId);
+        $rows = RepairAttachment::where('repair_order_id', $repairOrderId)
             ->orderByDesc('id')
             ->get()
             ->map(fn ($a) => [
@@ -657,6 +656,7 @@ class RepairOrderController extends Controller
 
     public function downloadAttachment(Request $request, int $repairOrderId, int $id): StreamedResponse|JsonResponse
     {
+        RepairOrder::findOrFail($repairOrderId);
         $att = RepairAttachment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $disk = Storage::disk('attachments');
         if (!$disk->exists($att->file_path)) {
@@ -672,7 +672,8 @@ class RepairOrderController extends Controller
      */
     public function deleteAttachment(Request $request, int $repairOrderId, int $id): JsonResponse
     {
-        $att = \App\Models\RepairAttachment::where('repair_order_id', $repairOrderId)->findOrFail($id);
+        RepairOrder::findOrFail($repairOrderId);
+        $att = RepairAttachment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $user = $request->user();
         if ($att->uploaded_by !== $user?->id && !$this->isAdmin($user)) {
             return response()->json(['code' => 403, 'message' => '只能删除自己上传的附件'], 403);

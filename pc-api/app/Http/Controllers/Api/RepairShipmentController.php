@@ -28,6 +28,7 @@ class RepairShipmentController extends Controller
      */
     public function store(Request $request, int $repairOrderId): JsonResponse
     {
+        RepairOrder::findOrFail($repairOrderId);
         $data = $request->validate([
             'direction'          => 'required|in:outbound,inbound',
             'carrier'            => 'required|string|max:32',
@@ -56,6 +57,7 @@ class RepairShipmentController extends Controller
      */
     public function update(Request $request, int $repairOrderId, int $id): JsonResponse
     {
+        RepairOrder::findOrFail($repairOrderId);
         $s = RepairShipment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $data = $request->validate([
             'delivery_status'    => 'sometimes|in:pending,in_transit,delivered,exception',
@@ -71,6 +73,7 @@ class RepairShipmentController extends Controller
 
     public function destroy(int $repairOrderId, int $id): JsonResponse
     {
+        RepairOrder::findOrFail($repairOrderId);
         $s = RepairShipment::where('repair_order_id', $repairOrderId)->findOrFail($id);
         $s->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
