@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Concerns;
 
 use App\Models\ApprovalRecord;
+use App\Models\Project;
 use App\Models\User;
 use App\Services\ApprovalNumberService;
 use Illuminate\Http\Request;
@@ -112,7 +113,7 @@ trait HandlesApproval
         // V1.2.14p: 关联 project (审批单里只有 project_id)
         $projectName = null;
         if (($r->payload['project_id'] ?? null) && $r->sub_type === 'material-request') {
-            $project = \DB::table('projects')->where('id', $r->payload['project_id'])->select('id', 'name')->first();
+            $project = Project::query()->find($r->payload['project_id']);
             if ($project) $projectName = $project->name;
         }
         // V1.2.14p: 把 quantity 提取到顶层 (方便列表显示申领总数)
