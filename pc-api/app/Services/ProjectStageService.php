@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\ProjectStageLog;
+use App\Models\ProcessInstance;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -95,15 +96,11 @@ class ProjectStageService
      */
     public function onAllProcessInspectionsPassed(int $projectId, ?int $userId = null): bool
     {
-        $total = DB::table('process_inspections as pi')
-            ->join('process_instances as pin', 'pi.process_instance_id', '=', 'pin.id')
-            ->where('pin.project_id', $projectId)
-            ->count();
+        $total = DB::table('process_instances')->where('project_id', $projectId)->count();
         if ($total === 0) return false;
-        $passed = DB::table('process_inspections as pi')
-            ->join('process_instances as pin', 'pi.process_instance_id', '=', 'pin.id')
-            ->where('pin.project_id', $projectId)
-            ->whereIn('pi.result', ['pass', 'partial'])  // pass + partial 都算过
+        $passed = DB::table('process_instances')
+            ->where('project_id', $projectId)
+            ->where('status', ProcessInstance::STATUS_ACCEPTED)
             ->count();
         if ($passed < $total) return false;
         $project = Project::find($projectId);

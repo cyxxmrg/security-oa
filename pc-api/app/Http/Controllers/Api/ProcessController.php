@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\{ProcessImage, ProcessInspection, ProcessInstance, ProcessSignature, ProcessTemplate, Project, ApprovalRecord};
 use App\Services\FileUploadService;
-use App\Services\ProjectStageService;
+use App\Services\ProcessAcceptanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -234,6 +234,9 @@ class ProcessController extends Controller
 
     public function updateInstance(Request $request, ProcessInstance $process): JsonResponse
     {
+        if ($process->status === ProcessInstance::STATUS_ACCEPTED) {
+            return response()->json(['code' => 1001, 'message' => '已验收工序不可修改'], 422);
+        }
         $data = $request->validate([
             'name'                   => 'sometimes|string|max:100',
             'sequence'               => 'nullable|integer',
@@ -264,6 +267,9 @@ class ProcessController extends Controller
     /** 更新进度 + 状态联动 */
     public function updateProgress(Request $request, ProcessInstance $process): JsonResponse
     {
+        if ($process->status === ProcessInstance::STATUS_ACCEPTED) {
+            return response()->json(['code' => 1001, 'message' => '已验收工序不可修改进度'], 422);
+        }
         $data = $request->validate([
             'progress'         => 'required|integer|min:0|max:100',
             'status'           => 'nullable|string|in:pending,in_progress,completed,blocked',
@@ -300,45 +306,20 @@ class ProcessController extends Controller
     {
         $data = $request->validate([
             'inspection_id'  => 'nullable|integer|exists:process_inspections,id',
-            'remark'         => 'nullable|string|max:500',
+            'comment'        => 'required|string|max:500',
         ]);
         $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
-        $process->status      = ProcessInstance::STATUS_ACCEPTED;
-        $process->progress    = 100;
-        $process->accepted_at = now();
-        $process->accepted_by = $request->user()?->id;
-        $process->actual_end_date = $process->actual_end_date ?? today();
-        $process->save();
-
-        // 同步审批中心
         try {
-            $projectName = $process->project?->name ?? '未知项目';
-            $approval = ApprovalRecord::where('type', 'project')
-                ->where('sub_type', 'process_acceptance')
-                ->whereRaw("payload->>'process_id' = ?", [(string) $process->id])
-                ->first();
-            if (!$approval) {
-                $code = \App\Services\ApprovalNumberService::next('PRJ');
-                ApprovalRecord::create([
-                    'code'                => $code,
-                    'type'                => 'project',
-                    'sub_type'            => 'process_acceptance',
-                    'title'               => "工序验收通过 - {$process->name} ({$projectName})",
-                    'status'              => ApprovalRecord::STATUS_APPROVED,
-                    'applicant_id'        => $process->foreman_id ?? $request->user()->id,
-                    'current_approver_id' => $request->user()->id,
-                    'payload'             => ['process_id' => $process->id, 'project_id' => $process->project_id],
-                ]);
-            } else {
-                $approval->status = ApprovalRecord::STATUS_APPROVED;
-                $approval->current_approver_id = $request->user()->id;
-                $approval->save();
-            }
-        } catch (\Exception $e) {
-            \Log::warning('工序验收审批同步失败', ['process_id' => $process->id, 'action' => 'accept', 'error' => $e->getMessage()]);
+            $process = app(ProcessAcceptanceService::class)->approve(
+                $process,
+                $request->user(),
+                $data['inspection_id'] ?? null,
+                $data['comment']
+            );
+            return response()->json(['code' => 0, 'message' => '验收审批已处理', 'data' => $process]);
+        } catch (\Throwable $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
         }
-
-        return response()->json(['code' => 0, 'message' => '验收已通过', 'data' => $process->fresh()]);
     }
 
     /** 验收不通过 */
@@ -347,40 +328,20 @@ class ProcessController extends Controller
         $data = $request->validate([
             'reason'         => 'required|string|max:500',
             'inspection_id'  => 'nullable|integer',
+            'comment'        => 'nullable|string|max:500',
         ]);
         $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
-        $process->status = ProcessInstance::STATUS_REJECTED;
-        $process->save();
-
-        // 同步审批中心（记录驳回）
         try {
-            $projectName = $process->project?->name ?? '未知项目';
-            $approval = ApprovalRecord::where('type', 'project')
-                ->where('sub_type', 'process_acceptance')
-                ->whereRaw("payload->>'process_id' = ?", [(string) $process->id])
-                ->first();
-            if (!$approval) {
-                $code = \App\Services\ApprovalNumberService::next('PRJ');
-                ApprovalRecord::create([
-                    'code'                => $code,
-                    'type'                => 'project',
-                    'sub_type'            => 'process_acceptance',
-                    'title'               => "工序验收驳回 - {$process->name} ({$projectName})",
-                    'status'              => ApprovalRecord::STATUS_REJECTED,
-                    'applicant_id'        => $process->foreman_id ?? $request->user()->id,
-                    'current_approver_id' => $request->user()->id,
-                    'payload'             => ['process_id' => $process->id, 'project_id' => $process->project_id],
-                ]);
-            } else {
-                $approval->status = ApprovalRecord::STATUS_REJECTED;
-                $approval->current_approver_id = $request->user()->id;
-                $approval->save();
-            }
-        } catch (\Exception $e) {
-            \Log::warning('工序验收审批同步失败', ['process_id' => $process->id, 'action' => 'reject', 'error' => $e->getMessage()]);
+            $process = app(ProcessAcceptanceService::class)->reject(
+                $process,
+                $request->user(),
+                $data['inspection_id'] ?? null,
+                $data['reason'] . (empty($data['comment']) ? '' : '：' . $data['comment'])
+            );
+            return response()->json(['code' => 0, 'message' => '验收已驳回', 'data' => $process]);
+        } catch (\Throwable $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
         }
-
-        return response()->json(['code' => 0, 'message' => '已退回整改', 'data' => $process->fresh()]);
     }
 
     // ================== 验收记录 (inspections) ==================
@@ -430,26 +391,8 @@ class ProcessController extends Controller
 
         $process = ProcessInstance::findOrFail($data['process_instance_id']);
         $this->ensureImagesBelongToProcess($data['image_ids'] ?? [], $process);
+        $data['inspector_id'] = $data['inspector_id'] ?? $request->user()->id;
         $ins = ProcessInspection::create($data);
-
-        // 联动: pass → 工序进入 accepted, fail → rejected, partial 保持 in_progress
-        $proc = $process;
-        if ($proc) {
-            if ($data['result'] === ProcessInspection::RESULT_PASS) {
-                $proc->status = ProcessInstance::STATUS_ACCEPTED;
-                $proc->progress = 100;
-                $proc->accepted_at = now();
-                $proc->accepted_by = $request->user()?->id;
-            } elseif ($data['result'] === ProcessInspection::RESULT_FAIL) {
-                $proc->status = ProcessInstance::STATUS_REJECTED;
-            }
-            $proc->save();
-        }
-
-        // V1.2.12m: 工序验收全部通过 → 推进项目阶段
-        if ($proc && $proc->project_id) {
-            (new ProjectStageService())->onAllProcessInspectionsPassed((int) $proc->project_id, $request->user()?->id);
-        }
 
         return response()->json(['code' => 0, 'message' => '验收记录已创建', 'data' => $ins]);
     }
@@ -462,6 +405,7 @@ class ProcessController extends Controller
 
     public function updateInspection(Request $request, ProcessInspection $inspection): JsonResponse
     {
+        $this->ensureInspectionMutable($inspection);
         $data = $request->validate([
             'inspection_type'        => 'sometimes|string',
             'result'                 => 'sometimes|string',
@@ -484,6 +428,7 @@ class ProcessController extends Controller
 
     public function destroyInspection(ProcessInspection $inspection): JsonResponse
     {
+        $this->ensureInspectionMutable($inspection);
         $inspection->delete();
         return response()->json(['code' => 0, 'message' => '删除成功']);
     }
@@ -645,6 +590,20 @@ class ProcessController extends Controller
         if ($matched !== count($imageIds)) {
             throw ValidationException::withMessages([
                 'image_ids' => '影像记录不属于当前工序',
+            ]);
+        }
+    }
+
+    private function ensureInspectionMutable(ProcessInspection $inspection): void
+    {
+        $isReferenced = ApprovalRecord::where('type', 'project')
+            ->where('sub_type', 'process_acceptance')
+            ->whereJsonContains('payload->inspection_id', $inspection->id)
+            ->whereIn('status', [ApprovalRecord::STATUS_PENDING, ApprovalRecord::STATUS_APPROVED])
+            ->exists();
+        if ($isReferenced) {
+            throw ValidationException::withMessages([
+                'inspection' => '该验收记录已进入审批流程，不能修改或删除',
             ]);
         }
     }

@@ -313,7 +313,7 @@ const submitAction = async () => {
   try {
     if (actionDialog.kind === 'accept') {
       await processApi.instanceAccept(actionDialog.target.id, { comment: actionDialog.form.comment })
-      ElMessage.success('已接受')
+      ElMessage.success('验收审批已处理')
     } else {
       await processApi.instanceReject(actionDialog.target.id, {
         reason: actionDialog.form.reason,

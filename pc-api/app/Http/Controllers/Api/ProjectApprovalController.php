@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
 use App\Services\ApprovalFlowService;
 use App\Services\CommencementOrderService;
+use App\Services\ProcessAcceptanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -122,6 +123,14 @@ class ProjectApprovalController extends Controller
                     ApprovalRecord::STATUS_APPROVED
                 );
             }
+            if ($result['status'] === ApprovalRecord::STATUS_APPROVED
+                && $approval->sub_type === 'process_acceptance') {
+                app(ProcessAcceptanceService::class)->syncBusinessState(
+                    $approval,
+                    $request->user(),
+                    ApprovalRecord::STATUS_APPROVED
+                );
+            }
 
             $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部节点已完成）' : '已通过，已转交下一节点';
             return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status]]);
@@ -156,6 +165,13 @@ class ProjectApprovalController extends Controller
 
                 if ($approval->sub_type === 'commencement') {
                     app(CommencementOrderService::class)->syncApprovalBusinessState(
+                        $approval,
+                        $request->user(),
+                        ApprovalRecord::STATUS_REJECTED
+                    );
+                }
+                if ($approval->sub_type === 'process_acceptance') {
+                    app(ProcessAcceptanceService::class)->syncBusinessState(
                         $approval,
                         $request->user(),
                         ApprovalRecord::STATUS_REJECTED
