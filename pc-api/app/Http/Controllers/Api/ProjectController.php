@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\ProjectStage;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
@@ -158,8 +157,25 @@ class ProjectController extends Controller
     public function updateStage(UpdateProjectStageRequest $request, Project $project): JsonResponse
     {
         $data = $request->validated();
+        $currentStage = $project->stage instanceof \BackedEnum
+            ? $project->stage->value
+            : (string) $project->stage;
+        $currentOrder = \App\Services\ProjectStageService::STAGE_ORDER[$currentStage] ?? 0;
+        $targetOrder = \App\Services\ProjectStageService::STAGE_ORDER[$data['stage']] ?? 0;
+        if ($currentOrder === 0 || $targetOrder !== $currentOrder + 1) {
+            return response()->json(['code' => 1001, 'message' => '项目阶段只能推进到紧邻的下一阶段'], 422);
+        }
+
+        $changed = app(\App\Services\ProjectStageService::class)->advance(
+            $project,
+            $data['stage'],
+            '手动推进项目阶段',
+            $request->user()->id
+        );
+        if (!$changed) {
+            return response()->json(['code' => 1001, 'message' => '项目阶段已变化，请刷新后重试'], 422);
+        }
         Cache::forget('projects:dashboard_summary');
-        $project->update(['stage' => $data['stage']]);
         $this->clearListCache('projects:index');
         return response()->json(['code' => 0, 'message' => '阶段更新成功']);
     }

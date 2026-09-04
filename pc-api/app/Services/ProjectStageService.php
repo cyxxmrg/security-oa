@@ -44,37 +44,42 @@ class ProjectStageService
     public function advance(Project $project, string $targetStage, ?string $note = null, ?int $userId = null): bool
     {
         try {
-            $current = $project->stage instanceof \BackedEnum ? $project->stage->value : (string) $project->stage;
-            $currentOrder = self::STAGE_ORDER[$current] ?? 0;
-            $targetOrder  = self::STAGE_ORDER[$targetStage] ?? 0;
+            return DB::transaction(function () use ($project, $targetStage, $note, $userId) {
+                $lockedProject = Project::allData()->lockForUpdate()->find($project->id);
+                if (!$lockedProject) {
+                    return false;
+                }
 
-            // 目标非法/已经超过/相等 → 跳过
-            if ($targetOrder === 0) {
-                Log::warning("ProjectStageService::advance invalid target", ['project' => $project->id, 'target' => $targetStage]);
-                return false;
-            }
-            if ($targetOrder <= $currentOrder) {
-                return false;  // 不回退、不重复
-            }
+                $current = $lockedProject->stage instanceof \BackedEnum
+                    ? $lockedProject->stage->value
+                    : (string) $lockedProject->stage;
+                $currentOrder = self::STAGE_ORDER[$current] ?? 0;
+                $targetOrder = self::STAGE_ORDER[$targetStage] ?? 0;
 
-            DB::transaction(function () use ($project, $current, $targetStage, $note, $userId) {
-                $project->update(['stage' => $targetStage]);
+                if ($targetOrder === 0) {
+                    Log::warning("ProjectStageService::advance invalid target", ['project' => $lockedProject->id, 'target' => $targetStage]);
+                    return false;
+                }
+                if ($targetOrder <= $currentOrder) {
+                    return false;
+                }
+
+                $lockedProject->update(['stage' => $targetStage]);
                 ProjectStageLog::create([
-                    'project_id'  => $project->id,
+                    'project_id'  => $lockedProject->id,
                     'stage_key'   => $targetStage,
                     'action'      => 'enter',
                     'note'        => $note ?: "自动从 [$current] 推进到 [$targetStage]",
                     'entered_by'  => $userId,
                     'created_at'  => now(),
                 ]);
+                return true;
             });
-
-            return true;
         } catch (\Throwable $e) {
             Log::error("ProjectStageService::advance failed: " . $e->getMessage(), [
                 'project' => $project->id, 'target' => $targetStage, 'note' => $note,
             ]);
-            return false;
+            throw $e;
         }
     }
 
@@ -86,7 +91,7 @@ class ProjectStageService
     {
         $count = DB::table('construction_logs')->where('project_id', $projectId)->count();
         if ($count !== 1) return false;  // 必须是第一条
-        $project = Project::find($projectId);
+        $project = Project::allData()->find($projectId);
         return $project ? $this->advance($project, 'construction', '自动推进: 创建了第一条施工日志', $userId) : false;
     }
 
@@ -103,7 +108,7 @@ class ProjectStageService
             ->where('status', ProcessInstance::STATUS_ACCEPTED)
             ->count();
         if ($passed < $total) return false;
-        $project = Project::find($projectId);
+        $project = Project::allData()->find($projectId);
         return $project ? $this->advance($project, 'acceptance', "自动推进: 工序验收全部通过 ($passed/$total)", $userId) : false;
     }
 
@@ -113,7 +118,7 @@ class ProjectStageService
      */
     public function onSettlementReachedContract(int $projectId, ?int $userId = null): bool
     {
-        $project = Project::find($projectId);
+        $project = Project::allData()->find($projectId);
         if (!$project) return false;
         $settled = (float) DB::table('project_settlements')->where('project_id', $projectId)->sum('total_income');
         $contract = (float) $project->getAttribute('contract_amount');  // accessor 已算合同总额
@@ -129,7 +134,7 @@ class ProjectStageService
      */
     public function onWarrantyCreated(int $projectId, ?int $userId = null): bool
     {
-        $project = Project::find($projectId);
+        $project = Project::allData()->find($projectId);
         return $project ? $this->advance($project, 'warranty', '自动推进: 创建了质保期', $userId) : false;
     }
 
@@ -146,7 +151,7 @@ class ProjectStageService
             ->whereIn('status', ['terminated', 'expired', 'closed'])
             ->count();
         if ($closed < $total) return false;
-        $project = Project::find($projectId);
+        $project = Project::allData()->find($projectId);
         return $project ? $this->advance($project, 'closed', "自动推进: 质保期全部关闭 ($closed/$total)", $userId) : false;
     }
 }
