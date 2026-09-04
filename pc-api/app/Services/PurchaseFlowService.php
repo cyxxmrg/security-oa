@@ -113,6 +113,9 @@ class PurchaseFlowService
             if ((float) ($data['quantity'] ?? 0) <= 0) {
                 throw new \DomainException('采购需求数量必须大于 0');
             }
+            if (!empty($data['project_id'])) {
+                Project::findOrFail((int) $data['project_id']);
+            }
             $req = PurchaseRequirement::create([
                 'name'        => $data['name'] ?? null,
                 'project_id'  => $data['project_id'] ?? null,

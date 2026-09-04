@@ -167,10 +167,16 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business'])->grou
 Route::prefix('external-quotes')->middleware(['auth:sanctum', 'ensure_business', 'permission:sales.external_quote'])->group(function () {
     Route::get('requests', [ExternalQuoteController::class, 'indexRequests']);
     Route::post('requests', [ExternalQuoteController::class, 'storeRequest']);
+    Route::post('requests/{id}/close', [ExternalQuoteController::class, 'closeRequest'])->whereNumber('id');
+    Route::post('requests/{id}/cancel', [ExternalQuoteController::class, 'cancelRequest'])->whereNumber('id');
     Route::post('requests/{id}/files', [ExternalQuoteController::class, 'uploadRequiredFile'])->whereNumber('id');
     Route::get('requests/{id}/files/{fileId}/download', [ExternalQuoteController::class, 'downloadRequiredFile'])
         ->whereNumber('id')->name('external-quotes.files.download');
     Route::delete('requests/{id}/files', [ExternalQuoteController::class, 'deleteRequiredFile'])->whereNumber('id');
+    Route::get('requests/{id}/quotes', [ExternalQuoteController::class, 'listQuotes'])->whereNumber('id');
     Route::get('requests/{id}', [ExternalQuoteController::class, 'showRequest']);
     Route::post('upload-attachment', [ExternalQuoteController::class, 'uploadAttachment']);
+    Route::post('{quoteId}/shortlist', [ExternalQuoteController::class, 'shortlistQuote'])->whereNumber('quoteId');
+    Route::post('{quoteId}/reject', [ExternalQuoteController::class, 'rejectQuote'])->whereNumber('quoteId');
+    Route::post('{quoteId}/award', [ExternalQuoteController::class, 'awardQuote'])->whereNumber('quoteId');
 });

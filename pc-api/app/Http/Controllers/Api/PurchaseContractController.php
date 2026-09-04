@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Project;
 use App\Models\PurchaseContract;
+use App\Models\PurchasePlan;
 use App\Models\PurchaseShipment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * 采购合同 (Contract) — 7 端点
@@ -84,6 +87,11 @@ class PurchaseContractController extends Controller
             'remark'            => 'nullable|string',
         ]);
 
+        if (empty($data['project_id']) && !empty($data['plan_id'])) {
+            $data['project_id'] = PurchasePlan::findOrFail((int) $data['plan_id'])->project_id;
+        }
+        $this->assertContractLinks($data);
+
         $data['status']    = 'draft';
         $data['signer_id'] = $request->user()->id;
         $data['signed_at'] = $data['signed_at'] ?? now()->toDateString();
@@ -95,11 +103,7 @@ class PurchaseContractController extends Controller
     public function update(Request $request, PurchaseContract $contract): JsonResponse
     {
         $data = $request->validate([
-            'plan_id'           => 'nullable|integer|exists:purchase_plans,id',
-            'project_id'        => 'nullable|integer|exists:projects,id',
-            'supplier_id'       => 'sometimes|integer|exists:suppliers,id',
             'title'             => 'sometimes|string|max:200',
-            'total_amount'      => 'sometimes|numeric|min:0',
             'signed_at'         => 'nullable|date',
             'start_date'        => 'nullable|date',
             'end_date'          => 'nullable|date|after_or_equal:start_date',
@@ -121,6 +125,29 @@ class PurchaseContractController extends Controller
             return response()->json(['code' => 1, 'message' => '已开始发货/已完成的合同不可编辑'], 409);
         }
         return response()->json(['code' => 0, 'data' => $updated]);
+    }
+
+    private function assertContractLinks(array $data): void
+    {
+        $projectId = $data['project_id'] ?? null;
+        if ($projectId) {
+            Project::findOrFail((int) $projectId);
+        }
+        if (empty($data['plan_id'])) {
+            return;
+        }
+        $plan = PurchasePlan::findOrFail((int) $data['plan_id']);
+        if (!in_array($plan->status, ['approved', 'fulfilled'], true)) {
+            throw ValidationException::withMessages(['plan_id' => '只有已审批的采购计划可以生成合同']);
+        }
+        if ($projectId && $plan->project_id && (int) $projectId !== (int) $plan->project_id) {
+            throw ValidationException::withMessages(['project_id' => '合同项目与采购计划项目不匹配']);
+        }
+        if (array_key_exists('total_amount', $data)
+            && (float) $plan->total_amount > 0
+            && abs((float) $data['total_amount'] - (float) $plan->total_amount) > 0.0001) {
+            throw ValidationException::withMessages(['total_amount' => '合同金额必须与采购计划金额一致']);
+        }
     }
 
     public function destroy(PurchaseContract $contract): JsonResponse

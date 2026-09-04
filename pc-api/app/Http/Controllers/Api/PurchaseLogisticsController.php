@@ -33,12 +33,13 @@ class PurchaseLogisticsController extends Controller
         $data['shipment_id'] = $shipment->id;
         $data['tracking_no'] = $data['tracking_no'] ?? $shipment->tracking_no;
         $data['event_at']    = $data['event_at']    ?? now();
+        $data['operator']    = $request->user()?->name;
 
         $log = PurchaseLogistics::create($data);
 
         // 推进 shipment 状态
         $inferred = $this->inferShipmentStatus($log->status, $log->description, $shipment);
-        if ($inferred && $inferred !== $shipment->status) {
+        if ($inferred && $this->canAdvanceShipment($shipment->status, $inferred)) {
             $update = ['status' => $inferred];
             if ($inferred === 'arrived') $update['arrived_at'] = $log->event_at;
             $shipment->update($update);
@@ -107,6 +108,16 @@ class PurchaseLogisticsController extends Controller
             return 'in_transit';
         }
         return null;
+    }
+
+    private function canAdvanceShipment(string $current, string $target): bool
+    {
+        return match ($current) {
+            'pending' => in_array($target, ['in_transit', 'arrived'], true),
+            'shipped' => in_array($target, ['in_transit', 'arrived'], true),
+            'in_transit' => $target === 'arrived',
+            default => false,
+        };
     }
 
     /**

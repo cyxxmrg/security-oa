@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Project;
+use App\Models\PurchaseRequirement;
 use App\Models\PurchasePlan;
 use App\Http\Requests\Purchase\StorePurchasePlanRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * 采购计划 (Plan) — 7 端点
@@ -64,6 +67,10 @@ class PurchasePlanController extends Controller
     public function store(StorePurchasePlanRequest $request): JsonResponse
     {
         $data = $request->validated();
+        if (empty($data['project_id']) && !empty($data['requirement_id'])) {
+            $data['project_id'] = PurchaseRequirement::findOrFail((int) $data['requirement_id'])->project_id;
+        }
+        $this->assertPlanLinks($data);
 
         $data['priority']     = $data['priority'] ?? 'medium';
         $data['total_amount'] = $data['total_amount'] ?? 0;
@@ -81,6 +88,7 @@ class PurchasePlanController extends Controller
         }
 
         $data = $request->validated();
+        $this->assertPlanLinks($data, $plan);
         $updated = DB::transaction(function () use ($plan, $data) {
             $locked = PurchasePlan::lockForUpdate()->findOrFail($plan->id);
             if (in_array($locked->status, ['approved', 'submitted'])) {
@@ -166,6 +174,27 @@ class PurchasePlanController extends Controller
             return response()->json(['code' => 0, 'data' => $result]);
         } catch (\DomainException|\RuntimeException|\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    private function assertPlanLinks(array $data, ?PurchasePlan $current = null): void
+    {
+        $projectId = array_key_exists('project_id', $data)
+            ? $data['project_id']
+            : $current?->project_id;
+        if ($projectId) {
+            Project::findOrFail((int) $projectId);
+        }
+
+        if (!array_key_exists('requirement_id', $data) || !$data['requirement_id']) {
+            return;
+        }
+        $requirement = PurchaseRequirement::findOrFail((int) $data['requirement_id']);
+        if ($requirement->status !== 'approved') {
+            throw ValidationException::withMessages(['requirement_id' => '只有已审批的采购需求可以关联计划']);
+        }
+        if ($projectId && $requirement->project_id && (int) $projectId !== (int) $requirement->project_id) {
+            throw ValidationException::withMessages(['project_id' => '采购计划项目与需求项目不匹配']);
         }
     }
 }
