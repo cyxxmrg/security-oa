@@ -180,10 +180,11 @@ trait HandlesApproval
     {
         $flow = is_array($r->flow) ? $r->flow : [];
         $flow[] = [
-            'operator' => $operatorName ?? (request()->user()?->name ?? '—'),
-            'action'   => $action,
-            'time'     => now()->toDateTimeString(),
-            'comment'  => $comment,
+            'operator_id' => request()->user()?->id ? (int) request()->user()->id : null,
+            'operator'    => $operatorName ?? (request()->user()?->name ?? '—'),
+            'action'      => $action,
+            'time'        => now()->toDateTimeString(),
+            'comment'     => $comment,
         ];
         // V1.2.7 P2-4 fix: 直接用 setAttribute 避免 array cast 的 overloaded property 修改问题
         $r->setAttribute('flow', $flow);
@@ -219,17 +220,29 @@ trait HandlesApproval
         $target = trim($target);
         $targetUser = User::query()
             ->where('status', 'active')
-            ->where(function ($query) use ($target) {
-                $query->where('username', $target)->orWhere('name', $target);
-            })
-            ->orderBy('id')
+            ->where('username', $target)
             ->first();
+
+        if (!$targetUser) {
+            $nameMatches = User::query()
+                ->where('status', 'active')
+                ->where('name', $target)
+                ->limit(2)
+                ->get();
+            if ($nameMatches->count() > 1) {
+                abort(422, '转交目标显示名重复，请使用用户名');
+            }
+            $targetUser = $nameMatches->first();
+        }
 
         if (!$targetUser) {
             abort(422, '未找到可用的转交目标用户');
         }
         if ((int) $targetUser->id === (int) $approval->applicant_id) {
             abort(422, '不能将审批转交给申请人');
+        }
+        if ((int) $targetUser->id === (int) $approval->current_approver_id) {
+            abort(422, '不能将审批转交给当前审批人');
         }
 
         return $targetUser;

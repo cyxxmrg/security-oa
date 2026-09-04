@@ -82,14 +82,14 @@ class ApprovalCenterController extends Controller
             $myInitiated = ApprovalRecord::where('applicant_id', $userId)->count();
         }
 
-        // 我已审批（当前用户出现在 flow 节点里的 approve/reject 动作）
+        // 我已审批（按用户 ID 判断，避免同名用户串线）
         $myHandled = 0;
         if ($userId) {
             $myHandled = ApprovalRecord::whereIn('status', [
                 ApprovalRecord::STATUS_APPROVED,
                 ApprovalRecord::STATUS_REJECTED,
                 ApprovalRecord::STATUS_TRANSFERRED,
-            ])->whereJsonContains('flow', ['operator' => $request->user()?->name])->count();
+            ])->whereJsonContains('flow', ['operator_id' => (int) $userId])->count();
         }
 
         // 本月金额（财务类已通过的金额合计）

@@ -101,21 +101,23 @@ class ApprovalFlowService
 
         // 记录提交动作
         $flow[] = [
-            'operator' => $applicant->name,
-            'action'   => 'submit',
-            'time'     => now()->toDateTimeString(),
-            'comment'  => $comment,
+            'operator_id' => (int) $applicant->id,
+            'operator'    => $applicant->name,
+            'action'      => 'submit',
+            'time'        => now()->toDateTimeString(),
+            'comment'     => $comment,
         ];
 
         // 设置第一个审批节点
         $firstStep = $approvalSteps[0];
         $flow[] = [
-            'operator'   => $firstStep['name'] ?? '审批节点',
-            'action'     => 'pending',
-            'time'       => now()->toDateTimeString(),
-            'comment'    => '等待审批: ' . ($firstStep['desc'] ?? ''),
-            'step_index' => 0,
-            'step_name'  => $firstStep['name'] ?? '',
+            'operator_id' => $firstApprover,
+            'operator'    => $firstStep['name'] ?? '审批节点',
+            'action'      => 'pending',
+            'time'        => now()->toDateTimeString(),
+            'comment'     => '等待审批: ' . ($firstStep['desc'] ?? ''),
+            'step_index'  => 0,
+            'step_name'   => $firstStep['name'] ?? '',
         ];
 
         return [
@@ -147,6 +149,7 @@ class ApprovalFlowService
         foreach ($flow as $i => $step) {
             if (($step['action'] ?? '') === 'pending' && ($step['step_index'] ?? -1) === $currentStepIndex) {
                 $flow[$i]['action'] = 'approved';
+                $flow[$i]['operator_id'] = (int) $operator->id;
                 $flow[$i]['operator'] = $operator->name;
                 $flow[$i]['time'] = now()->toDateTimeString();
                 $flow[$i]['comment'] = $comment ?: '已通过';
@@ -164,12 +167,13 @@ class ApprovalFlowService
             $nextStep = $approvalSteps[$nextStepIndex];
             $nextApprover = $approverIds[$nextStepIndex];
             $flow[] = [
-                'operator'   => $nextStep['name'] ?? '审批节点',
-                'action'     => 'pending',
-                'time'       => now()->toDateTimeString(),
-                'comment'    => '等待审批: ' . ($nextStep['desc'] ?? ''),
-                'step_index' => $nextStepIndex,
-                'step_name'  => $nextStep['name'] ?? '',
+                'operator_id' => $nextApprover,
+                'operator'    => $nextStep['name'] ?? '审批节点',
+                'action'      => 'pending',
+                'time'        => now()->toDateTimeString(),
+                'comment'     => '等待审批: ' . ($nextStep['desc'] ?? ''),
+                'step_index'  => $nextStepIndex,
+                'step_name'   => $nextStep['name'] ?? '',
             ];
             return [
                 'status'              => ApprovalRecord::STATUS_PENDING,
@@ -179,10 +183,11 @@ class ApprovalFlowService
         } else {
             // 所有节点通过，流程结束
             $flow[] = [
-                'operator' => $operator->name,
-                'action'   => 'complete',
-                'time'     => now()->toDateTimeString(),
-                'comment'  => '审批流程完成',
+                'operator_id' => (int) $operator->id,
+                'operator'    => $operator->name,
+                'action'      => 'complete',
+                'time'        => now()->toDateTimeString(),
+                'comment'     => '审批流程完成',
             ];
             return [
                 'status'              => ApprovalRecord::STATUS_APPROVED,
@@ -273,6 +278,7 @@ class ApprovalFlowService
         foreach ($flow as $i => $step) {
             if (($step['action'] ?? '') === 'pending') {
                 $flow[$i]['action'] = 'rejected';
+                $flow[$i]['operator_id'] = (int) $operator->id;
                 $flow[$i]['operator'] = $operator->name;
                 $flow[$i]['time'] = now()->toDateTimeString();
                 $flow[$i]['comment'] = $reason ?: '已驳回';
@@ -281,10 +287,11 @@ class ApprovalFlowService
         }
 
         $flow[] = [
-            'operator' => $operator->name,
-            'action'   => 'reject',
-            'time'     => now()->toDateTimeString(),
-            'comment'  => $reason ?: '已驳回',
+            'operator_id' => (int) $operator->id,
+            'operator'    => $operator->name,
+            'action'      => 'reject',
+            'time'        => now()->toDateTimeString(),
+            'comment'     => $reason ?: '已驳回',
         ];
 
         return [
