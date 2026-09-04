@@ -105,6 +105,8 @@ class CustomerService
             'contact'      => 'nullable|string|max:100',
             'phone'        => 'nullable|string|max:20',
         ]);
+        $data['assigned_user_id'] = $data['assigned_to'] ?? $request->user()->id;
+        unset($data['assigned_to']);
         $data['created_by'] = $request->user()->id;
         $data['category']   = $data['category'] ?? 'normal';
 
@@ -147,6 +149,10 @@ class CustomerService
             'remark'       => 'nullable|string',
             'contact'      => 'nullable|string|max:100',
         ]);
+        if (array_key_exists('assigned_to', $data)) {
+            $data['assigned_user_id'] = $data['assigned_to'];
+            unset($data['assigned_to']);
+        }
         $customer->update($data);
         return $customer->fresh();
     }
