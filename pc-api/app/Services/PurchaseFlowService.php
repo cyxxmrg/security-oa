@@ -181,9 +181,31 @@ class PurchaseFlowService
     public function createPlan(array $data, ?User $user = null, array $requirementIds = []): PurchasePlan
     {
         return DB::transaction(function () use ($data, $user, $requirementIds) {
+            $requirements = collect();
+            foreach (array_values(array_unique(array_map('intval', $requirementIds))) as $requirementId) {
+                $requirement = PurchaseRequirement::lockForUpdate()->findOrFail($requirementId);
+                if ($requirement->status !== self::STATUS_REQ_APPROVED) {
+                    throw new \RuntimeException("需求 {$requirement->id} 当前状态 {$requirement->status} 不可加入采购计划");
+                }
+                $requirements->push($requirement);
+            }
+
+            $projectId = $data['project_id'] ?? null;
+            if ($projectId) {
+                Project::findOrFail($projectId);
+            }
+            $requirementProjectIds = $requirements->pluck('project_id')->filter()->unique()->values();
+            if ($projectId && $requirementProjectIds->contains(fn ($id) => (int) $id !== (int) $projectId)) {
+                throw new \RuntimeException('采购计划项目与需求项目不匹配');
+            }
+            if (!$projectId && $requirementProjectIds->count() > 1) {
+                throw new \RuntimeException('同一采购计划不能合并多个项目的需求');
+            }
+            $projectId ??= $requirementProjectIds->first();
+
             $plan = PurchasePlan::create([
-                'requirement_id' => $requirementIds[0] ?? null,
-                'project_id'     => $data['project_id'] ?? null,
+                'requirement_id' => $requirements->first()?->id,
+                'project_id'     => $projectId,
                 'title'          => $data['title'],
                 'total_amount'   => $data['total_amount'] ?? 0,
                 'plan_date'      => $data['plan_date'] ?? today(),
@@ -194,20 +216,14 @@ class PurchaseFlowService
                 'remark'         => $data['remark'] ?? null,
             ]);
             // 关联多个需求 (用 merge_plan_id)
-            if (!empty($requirementIds)) {
-                foreach ($requirementIds as $rid) {
-                    $requirement = PurchaseRequirement::lockForUpdate()->findOrFail($rid);
-                    if ($requirement->status !== self::STATUS_REQ_APPROVED) {
-                        throw new \RuntimeException("需求 {$requirement->id} 当前状态 {$requirement->status} 不可加入采购计划");
-                    }
+            foreach ($requirements as $requirement) {
                     $requirement->update([
                         'status'        => self::STATUS_REQ_MERGED,
                         'merged_plan_id'=> $plan->id,
                         'merged_at'     => now(),
                     ]);
-                }
             }
-            $this->log(self::ENTITY_PLAN, $plan->id, null, self::STATUS_PLAN_DRAFT, 'create', $user, "聚合 " . count($requirementIds) . " 个需求");
+            $this->log(self::ENTITY_PLAN, $plan->id, null, self::STATUS_PLAN_DRAFT, 'create', $user, "聚合 {$requirements->count()} 个需求");
             return $plan;
         });
     }
@@ -304,6 +320,10 @@ class PurchaseFlowService
             if ($plan->status !== self::STATUS_PLAN_APPROVED) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可生成采购单");
             }
+            $totalAmount = (float) $data['total_amount'];
+            if ($totalAmount <= 0 || ((float) $plan->total_amount > 0 && $totalAmount - (float) $plan->total_amount > 0.0001)) {
+                throw new \RuntimeException('采购单金额超过采购计划金额');
+            }
             $supplierId = (int) $data['supplier_id'];
             $tenderId = $data['tender_id'] ?? null;
             $quoteId = $data['quote_id'] ?? null;
@@ -320,7 +340,9 @@ class PurchaseFlowService
                 if ($quote->status !== ExternalQuote::STATUS_AWARDED
                     || $quote->request?->status !== \App\Models\ExternalQuoteRequest::STATUS_AWARDED
                     || (int) $quote->request?->awarded_quote_id !== (int) $quote->id
-                    || (int) $quote->supplier_id !== $supplierId) {
+                    || (int) $quote->supplier_id !== $supplierId
+                    || ($plan->project_id && $quote->request?->project_id && (int) $plan->project_id !== (int) $quote->request->project_id)
+                    || abs($totalAmount - (float) $quote->total_amount) > 0.0001) {
                     throw new \RuntimeException('报价单未定标或与供应商不匹配');
                 }
             }
@@ -333,7 +355,9 @@ class PurchaseFlowService
                 if (!in_array($tender->status, [TenderProject::STATUS_CLOSED, 'awarded'], true)
                     || !$tender->awarded_bid_id
                     || (int) $tender->awarded_supplier_id !== $supplierId
-                    || ($plan->project_id && $tender->project_id && (int) $plan->project_id !== (int) $tender->project_id)) {
+                    || ($plan->project_id && $tender->project_id && (int) $plan->project_id !== (int) $tender->project_id)
+                    || !$tender->awardedBid
+                    || abs($totalAmount - (float) $tender->awardedBid->total_amount) > 0.0001) {
                     throw new \RuntimeException('招标项目未定标或与计划/供应商不匹配');
                 }
             }
@@ -346,7 +370,7 @@ class PurchaseFlowService
                 'po_no'                => $data['po_no'] ?? null,
                 'code'                 => $data['code'] ?? null,
                 'title'                => $data['title'] ?? $plan->title,
-                'total_amount'         => $data['total_amount'],
+                'total_amount'         => $totalAmount,
                 'tender_id'            => $tenderId,
                 'path'                 => $path,
                 'quote_id'             => $quoteId,
@@ -461,6 +485,10 @@ class PurchaseFlowService
             $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
             if ($po->status !== self::STATUS_ORDER_APPROVED) {
                 throw new \RuntimeException("采购单当前状态 {$po->status} 不可生成合同");
+            }
+            if (array_key_exists('total_amount', $data)
+                && abs((float) $data['total_amount'] - (float) $po->total_amount) > 0.0001) {
+                throw new \RuntimeException('合同金额必须与采购单金额一致');
             }
             $c = PurchaseContract::create([
                 'plan_id'           => $po->plan_id,

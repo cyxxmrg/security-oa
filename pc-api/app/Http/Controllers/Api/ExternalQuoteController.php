@@ -37,7 +37,7 @@ class ExternalQuoteController extends Controller
     public function indexRequests(Request $request): JsonResponse
     {
         $filters = $request->only(['keyword', 'status', 'project_id', 'page', 'per_page']);
-        $result  = $this->service->listRequests($filters);
+        $result  = $this->service->listRequests($filters, $request->user());
         return response()->json([
             'code' => 0,
             'data' => [
@@ -65,32 +65,28 @@ class ExternalQuoteController extends Controller
     /** 3. 详情 */
     public function showRequest(int $id): JsonResponse
     {
-        $req = ExternalQuoteRequest::with([
-            'project:id,name,project_no',
-            'creator:id,name',
-            'awardedSupplier:id,name,code',
-            'quotes.supplier:id,name,code',
-        ])->findOrFail($id);
+        $req = $this->service->findRequest($id, request()->user());
         return response()->json(['code' => 0, 'data' => $req]);
     }
 
     /** 4. 关闭 */
     public function closeRequest(int $id): JsonResponse
     {
-        $req = $this->service->closeRequest($id);
+        $req = $this->service->closeRequest($id, request()->user());
         return response()->json(['code' => 0, 'data' => $req]);
     }
 
     /** 5. 取消 */
     public function cancelRequest(int $id): JsonResponse
     {
-        $req = $this->service->cancelRequest($id);
+        $req = $this->service->cancelRequest($id, request()->user());
         return response()->json(['code' => 0, 'data' => $req]);
     }
 
     // v0.5.8.10 对外报价附件 (required_files: 招标文件/图纸/技术规格 等)
     public function uploadRequiredFile(Request $request, int $id, FileUploadService $uploader): JsonResponse
     {
+        $this->service->findRequest($id, $request->user());
         $request->validate([
             'file' => 'required|file|max:51200|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,zip,rar', // 50MB
         ]);
@@ -110,8 +106,9 @@ class ExternalQuoteController extends Controller
         ]);
 
         try {
-            [$req, $files] = DB::transaction(function () use ($id, $result) {
+            [$req, $files] = DB::transaction(function () use ($id, $result, $request) {
                 $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($id);
+                $this->service->assertRequestAccess($req, $request->user());
                 if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
                     throw new \RuntimeException('只有征集中状态可上传报价资料');
                 }
@@ -148,8 +145,9 @@ class ExternalQuoteController extends Controller
         if (!$fileId) {
             return response()->json(['code' => 1001, 'message' => '缺少 file_id'], 422);
         }
-        [$removed, $kept] = DB::transaction(function () use ($id, $fileId) {
+        [$removed, $kept] = DB::transaction(function () use ($id, $fileId, $request) {
             $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($id);
+            $this->service->assertRequestAccess($req, $request->user());
             $files = $req->required_files ?? [];
             $kept = [];
             $removed = null;
@@ -175,7 +173,7 @@ class ExternalQuoteController extends Controller
 
     public function downloadRequiredFile(int $id, string $fileId): StreamedResponse|JsonResponse
     {
-        $req = ExternalQuoteRequest::findOrFail($id);
+        $req = $this->service->findRequest($id, request()->user());
         $file = collect($req->required_files ?? [])->firstWhere('id', $fileId);
         if (!$file || empty($file['path'])) {
             return response()->json(['code' => 404, 'message' => '文件不存在'], 404);
@@ -225,6 +223,7 @@ class ExternalQuoteController extends Controller
     /** 6. 该请求下的所有报价 */
     public function listQuotes(int $id, Request $request): JsonResponse
     {
+        $this->service->findRequest($id, $request->user());
         $query = ExternalQuote::where('request_id', $id)
             ->with(['supplier:id,name,code', 'submitter:id,name']);
 

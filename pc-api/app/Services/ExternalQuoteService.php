@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Models\ExternalQuote;
 use App\Models\ExternalQuoteRequest;
+use App\Models\Project;
 use App\Models\ProjectBudget;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierPayable;
+use App\Models\User;
+use App\Support\AuthScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -61,6 +64,9 @@ class ExternalQuoteService
     public function createRequest(array $data, int $userId): ExternalQuoteRequest
     {
         return DB::transaction(function () use ($data, $userId) {
+            $user = User::findOrFail($userId);
+            $this->assertProjectAccess($data['project_id'] ?? null, $user);
+
             return ExternalQuoteRequest::create([
                 'project_id'     => $data['project_id'] ?? null,
                 'code'           => $this->generateRequestCode(),
@@ -87,6 +93,9 @@ class ExternalQuoteService
             $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
             if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
                 throw new \RuntimeException('该报价请求已截止/取消，不可再提交');
+            }
+            if ($req->deadline && $req->deadline->isPast()) {
+                throw new \RuntimeException('报价截止时间已过，不可再提交');
             }
 
             // 防重：同一 supplier 同一 request 不允许多次
@@ -121,7 +130,8 @@ class ExternalQuoteService
     public function shortlistQuote(int $quoteId, int $userId): ExternalQuote
     {
         return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
+            $quote = ExternalQuote::with('request')->lockForUpdate()->findOrFail($quoteId);
+            $this->assertRequestAccess($quote->request, User::findOrFail($userId));
             if (!in_array($quote->status, [ExternalQuote::STATUS_SUBMITTED, ExternalQuote::STATUS_SHORTLISTED], true)) {
                 throw new \RuntimeException('当前状态不可入围');
             }
@@ -139,8 +149,9 @@ class ExternalQuoteService
      */
     public function rejectQuote(int $quoteId, int $userId, ?string $reason = null): ExternalQuote
     {
-        return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
+        return DB::transaction(function () use ($quoteId, $userId, $reason) {
+            $quote = ExternalQuote::with('request')->lockForUpdate()->findOrFail($quoteId);
+            $this->assertRequestAccess($quote->request, User::findOrFail($userId));
             if (in_array($quote->status, [ExternalQuote::STATUS_AWARDED, ExternalQuote::STATUS_REJECTED], true)) {
                 throw new \RuntimeException('当前报价状态不可驳回');
             }
@@ -165,7 +176,8 @@ class ExternalQuoteService
     public function awardQuote(int $quoteId, int $userId): array
     {
         return DB::transaction(function () use ($quoteId, $userId) {
-            $quote = ExternalQuote::lockForUpdate()->findOrFail($quoteId);
+            $quote = ExternalQuote::with('request')->lockForUpdate()->findOrFail($quoteId);
+            $this->assertRequestAccess($quote->request, User::findOrFail($userId));
             if ($quote->status === ExternalQuote::STATUS_AWARDED) {
                 throw new \RuntimeException('该报价已中标');
             }
@@ -201,6 +213,7 @@ class ExternalQuoteService
                 'po_no'        => $this->generatePoNo(),
                 'total_amount' => $quote->total_amount,
                 'status'       => 'draft',
+                'created_by'   => $userId,
                 'notes'        => "来源: ExternalQuote #{$quote->code} / Request #{$request->code}",
             ]);
 
@@ -230,10 +243,11 @@ class ExternalQuoteService
     /**
      * 关闭报价请求（不再接受报价）
      */
-    public function closeRequest(int $requestId): ExternalQuoteRequest
+    public function closeRequest(int $requestId, ?User $user = null): ExternalQuoteRequest
     {
-        return DB::transaction(function () use ($requestId) {
+        return DB::transaction(function () use ($requestId, $user) {
             $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
+            $this->assertRequestAccess($req, $user);
             if ($req->status !== ExternalQuoteRequest::STATUS_OPEN) {
                 throw new \RuntimeException('只有征集中状态可关闭');
             }
@@ -245,10 +259,11 @@ class ExternalQuoteService
     /**
      * 取消报价请求
      */
-    public function cancelRequest(int $requestId): ExternalQuoteRequest
+    public function cancelRequest(int $requestId, ?User $user = null): ExternalQuoteRequest
     {
-        return DB::transaction(function () use ($requestId) {
+        return DB::transaction(function () use ($requestId, $user) {
             $req = ExternalQuoteRequest::lockForUpdate()->findOrFail($requestId);
+            $this->assertRequestAccess($req, $user);
             if (in_array($req->status, [ExternalQuoteRequest::STATUS_AWARDED, ExternalQuoteRequest::STATUS_CANCELLED], true)) {
                 throw new \RuntimeException('已定标/已取消不可再操作');
             }
@@ -301,10 +316,17 @@ class ExternalQuoteService
     /**
      * 报价请求列表（含聚合 quote 数）
      */
-    public function listRequests(array $filters = []): array
+    public function listRequests(array $filters = [], ?User $user = null): array
     {
         $q = ExternalQuoteRequest::withCount('quotes')
             ->with(['project:id,name,project_no', 'creator:id,name', 'awardedSupplier:id,name,code']);
+
+        if ($user && !AuthScope::isUnrestricted($user)) {
+            $q->where(function ($scope) use ($user) {
+                $scope->where('created_by', $user->id)
+                    ->orWhereIn('project_id', Project::query()->select('id'));
+            });
+        }
 
         if (!empty($filters['keyword'])) {
             $kw = $filters['keyword'];
@@ -326,5 +348,45 @@ class ExternalQuoteService
         $items = $q->orderByDesc('id')->skip(($page - 1) * $size)->take($size)->get();
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    public function findRequest(int $requestId, ?User $user = null): ExternalQuoteRequest
+    {
+        $request = ExternalQuoteRequest::with([
+            'project:id,name,project_no',
+            'creator:id,name',
+            'awardedSupplier:id,name,code',
+            'quotes.supplier:id,name,code',
+        ])->findOrFail($requestId);
+
+        if ($user) {
+            $this->assertRequestAccess($request, $user);
+        }
+
+        return $request;
+    }
+
+    public function assertRequestAccess(?ExternalQuoteRequest $request, ?User $user): void
+    {
+        if (!$request || !$user) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('无权访问该报价请求');
+        }
+        if (AuthScope::isUnrestricted($user) || (int) $request->created_by === (int) $user->id) {
+            return;
+        }
+        if ($request->project_id && Project::query()->whereKey($request->project_id)->exists()) {
+            return;
+        }
+        throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('无权访问该报价请求');
+    }
+
+    private function assertProjectAccess(?int $projectId, User $user): void
+    {
+        if (!$projectId || AuthScope::isUnrestricted($user)) {
+            return;
+        }
+        if (!Project::query()->whereKey($projectId)->exists()) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('无权使用该项目发起报价');
+        }
     }
 }

@@ -14,7 +14,9 @@ use App\Models\PurchaseContractFile;
 use App\Models\PurchasePaymentVoucher;
 use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
+use App\Models\Project;
 use App\Services\PurchaseFlowService;
+use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -592,6 +594,7 @@ class PurchaseFlowController extends Controller
     public function fromWorkOrder(int $workOrderId, Request $request): JsonResponse
     {
         $wo = WorkOrder::findOrFail($workOrderId);
+        $this->assertSourceAccess($wo->project_id, [$wo->created_by, $wo->assigned_to], $request->user());
         if ($wo->status !== 'completed') {
             return response()->json(['code' => 1, 'message' => "工单状态 {$wo->status}, 仅 completed 可发起采购"], 422);
         }
@@ -620,6 +623,7 @@ class PurchaseFlowController extends Controller
     public function fromExternalWork(int $workId, Request $request): JsonResponse
     {
         $w = ExternalConstructionWork::findOrFail($workId);
+        $this->assertSourceAccess($w->project_id, [$w->created_by], $request->user());
         $data = $request->validate([
             'material' => 'required|string|max:200',
             'quantity' => 'required|numeric|min:0.01',
@@ -636,5 +640,19 @@ class PurchaseFlowController extends Controller
             'source_id'   => $w->id,
         ]), $request->user());
         return response()->json(['code' => 0, 'data' => $req, 'message' => '采购需求已创建']);
+    }
+
+    private function assertSourceAccess(?int $projectId, array $ownerIds, $user): void
+    {
+        if (!$user || AuthScope::isUnrestricted($user)) {
+            return;
+        }
+        if (in_array((int) $user->id, array_map('intval', array_filter($ownerIds)), true)) {
+            return;
+        }
+        if ($projectId && Project::query()->whereKey($projectId)->exists()) {
+            return;
+        }
+        abort(403, '无权从该来源发起采购');
     }
 }
