@@ -260,6 +260,28 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('FROM inspection_plans ip', $clauses[1][1]);
     }
 
+    public function test_customer_records_follow_customer_access(): void
+    {
+        $customers = \App\Scopes\DataScope::tableClauses('customers', 86);
+        $this->assertCount(2, $customers);
+        $this->assertSame(['assigned_user_id', '=', 86], $customers[0]);
+        $this->assertStringContainsString('FROM projects p', $customers[1][1]);
+        $this->assertStringContainsString('FROM opportunities o', $customers[1][1]);
+        $this->assertStringContainsString('FROM inspection_plans ip', $customers[1][1]);
+        $this->assertStringContainsString('FROM follow_up_records fur', $customers[1][1]);
+
+        foreach (['customer_contacts', 'customer_invoice_infos'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertCount(1, $clauses);
+            $this->assertStringContainsString('FROM customers c', $clauses[0][1]);
+        }
+
+        $followUps = \App\Scopes\DataScope::tableClauses('follow_up_records', 86);
+        $this->assertCount(2, $followUps);
+        $this->assertSame(['user_id', '=', 86], $followUps[0]);
+        $this->assertStringContainsString('follow_up_records.customer_id', $followUps[1][1]);
+    }
+
     public function test_inspection_schedules_follow_plan_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('inspection_schedules', 86);

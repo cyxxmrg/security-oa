@@ -42,6 +42,31 @@ class DataScope implements Scope
                     )],
                 ];
 
+            case 'customers':
+                return [
+                    ['assigned_user_id', '=', $userId],
+                    ['__raw__', self::customerAccessSql($userId, 'customers')],
+                ];
+
+            case 'customer_contacts':
+            case 'customer_invoice_infos':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM customers c WHERE c.id = %s.customer_id AND (%s)))",
+                        $table,
+                        self::customerAccessSql($userId, 'c')
+                    )],
+                ];
+
+            case 'follow_up_records':
+                return [
+                    ['user_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM customers c WHERE c.id = follow_up_records.customer_id AND (%s)))",
+                        self::customerAccessSql($userId, 'c')
+                    )],
+                ];
+
             case 'customer_receivables':
                 return [
                     ['created_by', '=', $userId],
@@ -635,6 +660,30 @@ class DataScope implements Scope
             $alias,
             $userId,
             $alias,
+            $userId
+        );
+    }
+
+    private static function customerAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.assigned_user_id = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.customer_id = %s.id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))) OR EXISTS (SELECT 1 FROM opportunities o WHERE o.customer_id = %s.id AND (o.sales_id = %d OR o.presale_id = %d)) OR EXISTS (SELECT 1 FROM inspection_plans ip WHERE ip.customer_id = %s.id AND %s) OR EXISTS (SELECT 1 FROM follow_up_records fur WHERE fur.customer_id = %s.id AND fur.user_id = %d) OR EXISTS (SELECT 1 FROM service_orders so WHERE so.customer_id = %s.id AND (so.created_by = %d OR so.assigned_to = %d)))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId,
+            $alias,
+            $userId,
+            $userId,
+            $alias,
+            self::inspectionPlanAccessSql($userId, 'ip'),
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $alias,
+            $userId,
             $userId
         );
     }

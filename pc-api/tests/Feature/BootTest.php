@@ -54,7 +54,8 @@ class BootTest extends TestCase
     public function test_data_scope_table_clauses_all_tables(): void
     {
         // 走遍已注册的 scope 分支, 拉覆盖率
-        foreach (['projects', 'customer_receivables', 'purchase_orders', 'construction_logs',
+        foreach (['projects', 'customers', 'customer_contacts', 'customer_invoice_infos',
+                  'follow_up_records', 'customer_receivables', 'purchase_orders', 'construction_logs',
                   'purchase_items', 'purchase_contract_items', 'purchase_contract_files',
                   'purchase_shipping_plans', 'purchase_shipment_items', 'purchase_logistics',
                   'contract_payment_nodes',
