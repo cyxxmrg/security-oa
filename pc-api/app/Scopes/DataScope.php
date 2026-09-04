@@ -121,6 +121,52 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'customer_receipts':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', $myProjects],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM customer_receivables cr WHERE cr.id IN (SELECT (item->>'receivable_id')::bigint FROM jsonb_array_elements(COALESCE(customer_receipts.allocations, '[]'::jsonb)) AS item WHERE (item->>'receivable_id') ~ '^[0-9]+$') AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'cr')
+                    )],
+                ];
+
+            case 'supplier_payments':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM supplier_payables sp WHERE sp.id IN (SELECT (item->>'payable_id')::bigint FROM jsonb_array_elements(COALESCE(supplier_payments.allocations, '[]'::jsonb)) AS item WHERE (item->>'payable_id') ~ '^[0-9]+$') AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'sp')
+                    )],
+                ];
+
+            case 'finance_payments':
+                return [
+                    ['__raw__', $myProjects],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM receivables r WHERE r.id = finance_payments.receivable_id AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'r')
+                    )],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM payables pbl WHERE pbl.id = finance_payments.payable_id AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'pbl')
+                    )],
+                ];
+
+            case 'finance_invoices':
+                return [
+                    ['applicant_id', '=', $userId],
+                    ['__raw__', $myProjects],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM receivables r WHERE r.id = finance_invoices.receivable_id AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'r')
+                    )],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM project_contracts pc WHERE pc.id = finance_invoices.contract_id AND %s))",
+                        AuthScope::myProjectsByProjectIdSubquery($userId, 'pc')
+                    )],
+                ];
+
             case 'process_instances':
                 return [
                     ['__raw__', $myProjects],

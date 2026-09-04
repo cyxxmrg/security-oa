@@ -83,6 +83,7 @@ class FinanceController extends Controller
             'supplier_id'  => 'nullable|integer|exists:suppliers,id',
             'contract_id'  => 'nullable|integer|exists:purchase_contracts,id',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? null);
 
         $payment = DB::transaction(function () use ($data, $request) {
             $payment = \App\Models\FinancePayment::create([
@@ -221,6 +222,7 @@ class FinanceController extends Controller
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? null);
         $data['received_amount'] = $data['received_amount'] ?? 0;
         $data['remaining_amount'] = $data['amount'] - $data['received_amount'];
         if ($data['remaining_amount'] <= 0) {
@@ -303,6 +305,7 @@ class FinanceController extends Controller
             'payment_term' => 'nullable|string',
             'notes' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? null);
         $data['paid_amount'] = $data['paid_amount'] ?? 0;
         $data['remaining_amount'] = $data['amount'] - $data['paid_amount'];
         if ($data['remaining_amount'] <= 0) {
@@ -567,6 +570,13 @@ class FinanceController extends Controller
         return FinanceAccount::where('status', 'active')
             ->lockForUpdate()
             ->findOrFail($accountId);
+    }
+
+    private function assertProjectAccessible(?int $projectId): void
+    {
+        if ($projectId !== null) {
+            \App\Models\Project::findOrFail($projectId);
+        }
     }
 
     // ===== 资金账户 =====
@@ -915,6 +925,7 @@ class FinanceController extends Controller
             'status' => ['nullable', Rule::in(['draft', 'requested', 'pending_approval', 'issued', 'delivered', 'cancelled'])],
             'remark' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? null);
         // 自动生成发票号
         $data['invoice_no'] = $data['invoice_no'] ?? 'INV' . date('YmdHis') . rand(100, 999);
         $amount = (float)($data['amount'] ?? 0);
@@ -956,6 +967,7 @@ class FinanceController extends Controller
             'status' => ['sometimes', Rule::in(['draft', 'requested', 'pending_approval', 'issued', 'delivered', 'cancelled'])],
             'remark' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? $invoice->project_id);
         // 重新算税与合计
         if (isset($data['amount']) || isset($data['tax_rate']) || isset($data['tax_amount'])) {
             $amount = (float)($data['amount'] ?? $invoice->amount);

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FinanceInvoice extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = ['invoice_no', 'direction', 'invoice_type', 'customer_id', 'supplier_id', 'project_id', 'receivable_id', 'contract_id', 'applicant_id', 'amount', 'tax_rate', 'tax_amount', 'total_amount', 'issue_date', 'delivery_date', 'status', 'remark'];
 

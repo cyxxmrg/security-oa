@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FinancePayment extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = ['receivable_id', 'payable_id', 'supplier_id', 'project_id', 'account_id', 'amount', 'payment_date', 'method', 'voucher_no', 'payee', 'transfer_group_id', 'is_internal_transfer', 'operator', 'remark', 'type'];
 

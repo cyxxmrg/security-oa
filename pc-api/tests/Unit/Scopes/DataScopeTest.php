@@ -50,6 +50,15 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('work_orders.project_id', $clauses[2][1]);
     }
 
+    public function test_finance_payment_clauses_require_project_or_related_project_access(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('finance_payments', 86);
+        $this->assertCount(3, $clauses);
+        $this->assertStringContainsString('finance_payments.project_id', $clauses[0][1]);
+        $this->assertStringContainsString('FROM receivables r', $clauses[1][1]);
+        $this->assertStringContainsString('FROM payables pbl', $clauses[2][1]);
+    }
+
     public function test_warranty_service_orders_uses_warranty_subquery(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('warranty_service_orders', 86);
