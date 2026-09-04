@@ -28,7 +28,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -174,7 +173,7 @@ class DashboardController extends Controller
             // V0.4.8 A3: 改真实 PG 查 (待办数 = pending_approvals + open_service_orders + pending_rectifications)
             $pendingTodos = (int) (ApprovalRecord::where('status', ApprovalRecord::STATUS_PENDING)->count()
                 + ServiceOrder::whereIn('status', ['pending', 'assigned'])->count()
-                + DB::table('rectifications')->where('status', 'pending')->count());
+                + Rectification::where('status', 'pending')->count());
             $activeProjects = Project::where('status', 'in_progress')->count();
             $pendingServiceOrders = ServiceOrder::whereIn('status', ['pending', 'assigned'])->count();
             $monthlyRevenue = Receivable::whereMonth('received_date', $month = now()->month)->whereYear('received_date', now()->year)->sum('received_amount');
@@ -277,7 +276,7 @@ class DashboardController extends Controller
     //   GET /api/dashboard/warranty-stats  — 质保单专项统计
     //
     // 适配说明（与 V0.4.5 任务书的差异已在实现里修正）：
-    //  - Warranty 没有 Eloquent Model   → 走 DB::table('warranties')
+    //  - Warranty 通过模型查询并自动套用数据权限
     //  - CustomerReceivable 无 received_date → 月营收用 Receivable(老表)
     //  - ApprovalInstance 不存在           → pending 审批走 ApprovalRecord
     //  - Notification 是 morphTo 形态     → 收件人用 notifiable_id + notifiable_type=User::class
