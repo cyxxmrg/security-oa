@@ -26,7 +26,8 @@ class DashboardWidgetController extends Controller
     public function methodDistribution(Request $request): JsonResponse
     {
         $days = $this->parseDays($request);
-        $data = Cache::remember("dashboard:widget:method:{$days}", 300, fn () => $this->widget->methodDistribution($days));
+        $userId = (int) ($request->user()?->id ?? 0);
+        $data = Cache::remember("dashboard:widget:method:{$userId}:{$days}", 300, fn () => $this->widget->methodDistribution($days));
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -34,7 +35,8 @@ class DashboardWidgetController extends Controller
     public function cyclePercentile(Request $request): JsonResponse
     {
         $days = $this->parseDays($request);
-        $data = Cache::remember("dashboard:widget:cycle:{$days}", 300, fn () => $this->widget->cycleTimePercentile($days));
+        $userId = (int) ($request->user()?->id ?? 0);
+        $data = Cache::remember("dashboard:widget:cycle:{$userId}:{$days}", 300, fn () => $this->widget->cycleTimePercentile($days));
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -43,7 +45,8 @@ class DashboardWidgetController extends Controller
     {
         $days = $this->parseDays($request, 30);
         $limit = max(1, min(20, (int) $request->query('limit', 5)));
-        $data = Cache::remember("dashboard:widget:fault:{$days}:{$limit}", 300, fn () => $this->widget->faultTypeTop($days, $limit));
+        $userId = (int) ($request->user()?->id ?? 0);
+        $data = Cache::remember("dashboard:widget:fault:{$userId}:{$days}:{$limit}", 300, fn () => $this->widget->faultTypeTop($days, $limit));
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -52,7 +55,8 @@ class DashboardWidgetController extends Controller
     {
         $days = $this->parseDays($request, 30);
         $limit = max(1, min(20, (int) $request->query('limit', 5)));
-        $data = Cache::remember("dashboard:widget:tech:{$days}:{$limit}", 300, fn () => $this->widget->technicianRanking($days, $limit));
+        $userId = (int) ($request->user()?->id ?? 0);
+        $data = Cache::remember("dashboard:widget:tech:{$userId}:{$days}:{$limit}", 300, fn () => $this->widget->technicianRanking($days, $limit));
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -61,7 +65,8 @@ class DashboardWidgetController extends Controller
     {
         $days = $this->parseDays($request);
         // V0.6.3 性能优化: 整个 widget/all 加 120s Redis 缓存 (dashboard 每刷新都调)
-        $cacheKey = "dashboard:widget:all:{$days}";
+        $userId = (int) ($request->user()?->id ?? 0);
+        $cacheKey = "dashboard:widget:all:{$userId}:{$days}";
         $data = Cache::remember($cacheKey, 120, function () use ($days) {
             return [
                 'method_distribution'   => $this->widget->methodDistribution($days),

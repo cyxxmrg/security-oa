@@ -304,7 +304,8 @@ class CustomerService
 
     public function stats(Request $request): array
     {
-        return Cache::remember('customers:stats', 300, function () {
+        $userId = (int) ($request->user()?->id ?? 0);
+        return Cache::remember("customers:stats:{$userId}", 300, function () {
             $total         = Customer::count();
             $vip           = Customer::where('category', 'vip')->count();
             $project_total = Customer::withCount('projects')->get()->sum('projects_count');

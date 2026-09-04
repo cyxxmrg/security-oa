@@ -207,7 +207,8 @@ class DashboardController extends Controller
     public function todo(): JsonResponse
     {
         // V1.2.7 P2-3: 走 CacheHelper, tag=dashboard
-        $data = CacheHelper::remember('dashboard:todo', 60, ['dashboard'], fn () => $this->dashboardService->todos());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:todo:{$userId}", 60, ['dashboard'], fn () => $this->dashboardService->todos());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -243,7 +244,8 @@ class DashboardController extends Controller
     public function serviceStats(): JsonResponse
     {
         // V1.2.7 P2-3: 走 CacheHelper, tag=dashboard
-        $data = CacheHelper::remember('dashboard:service_stats', 120, ['dashboard'], fn () => $this->dashboardService->serviceMetrics());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:service_stats:{$userId}", 120, ['dashboard'], fn () => $this->dashboardService->serviceMetrics());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -253,7 +255,8 @@ class DashboardController extends Controller
      */
     public function revenueTrend(): JsonResponse
     {
-        $data = CacheHelper::remember('dashboard:revenue_trend', 300, ['dashboard'], fn () => $this->dashboardService->revenueChart());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:revenue_trend:{$userId}", 300, ['dashboard'], fn () => $this->dashboardService->revenueChart());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -263,7 +266,8 @@ class DashboardController extends Controller
      */
     public function screen(): JsonResponse
     {
-        $data = CacheHelper::remember('dashboard:screen', 120, ['dashboard'], fn () => $this->dashboardService->getScreenData());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:screen:{$userId}", 120, ['dashboard'], fn () => $this->dashboardService->getScreenData());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -303,7 +307,8 @@ class DashboardController extends Controller
      */
     public function warrantyStats(): JsonResponse
     {
-        $data = CacheHelper::remember('dashboard:warranty_stats', 300, ['dashboard'], fn () => $this->dashboardService->getWarrantyStats());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:warranty_stats:{$userId}", 300, ['dashboard'], fn () => $this->dashboardService->getWarrantyStats());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 
@@ -313,7 +318,8 @@ class DashboardController extends Controller
      */
     public function maintenanceStats(): JsonResponse
     {
-        $data = CacheHelper::remember('dashboard:maintenance_stats', 120, ['dashboard'], fn () => $this->dashboardService->getMaintenanceStats());
+        $userId = (int) (request()->user()?->id ?? 0);
+        $data = CacheHelper::remember("dashboard:maintenance_stats:{$userId}", 120, ['dashboard'], fn () => $this->dashboardService->getMaintenanceStats());
         return response()->json(['code' => 0, 'data' => $data]);
     }
 }
