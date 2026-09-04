@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectStageLog extends Model
 {
+    use HasDataScope;
+
     protected $table = 'project_stage_logs';
     protected $fillable = ['project_id', 'stage_key', 'action', 'note', 'entered_by'];
 
