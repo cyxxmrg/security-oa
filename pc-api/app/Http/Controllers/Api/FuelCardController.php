@@ -98,7 +98,7 @@ class FuelCardController extends Controller
         // 事务: 增加记录 + 同步余额
         $row = DB::transaction(function () use ($data) {
             $r = FuelCardRecharge::create($data);
-            $card = FuelCard::find($data['card_id']);
+            $card = FuelCard::lockForUpdate()->findOrFail($data['card_id']);
             $card->balance = round(((float) $card->balance) + (float) $data['amount'], 2);
             $card->save();
             return $r;
@@ -109,7 +109,8 @@ class FuelCardController extends Controller
     public function destroyRecharge(FuelCardRecharge $recharge): JsonResponse
     {
         DB::transaction(function () use ($recharge) {
-            $card = $recharge->card;
+            $recharge = FuelCardRecharge::lockForUpdate()->findOrFail($recharge->id);
+            $card = FuelCard::lockForUpdate()->findOrFail($recharge->card_id);
             $card->balance = max(0, round(((float) $card->balance) - (float) $recharge->amount, 2));
             $card->save();
             $recharge->delete();

@@ -39,7 +39,7 @@ Route::prefix('expenses')->middleware(['auth:sanctum', 'ensure_business'])->grou
 // 这些点在角色权限矩阵 UI 中可勾选, 管理员可自行调整可见范围。
 Route::prefix('vehicles')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
     Route::get('/', [VehicleController::class, 'index'])->middleware('permission:vehicle.*');
-    Route::post('/', [VehicleController::class, 'store'])->middleware('permission:vehicle.view');
+    Route::post('/', [VehicleController::class, 'store'])->middleware('permission:vehicle.create');
     Route::get('stats', [VehicleController::class, 'stats'])->middleware('permission:vehicle.*');
     Route::get('usage', [VehicleController::class, 'usageRequests'])->middleware('permission:vehicle.apply|vehicle.dispatch');
     Route::post('usage', [VehicleController::class, 'storeUsageRequest'])->middleware('permission:vehicle.apply');
@@ -57,8 +57,8 @@ Route::prefix('vehicles')->middleware(['auth:sanctum', 'ensure_business'])->grou
     Route::put('maintenances/{maintenance}', [VehicleController::class, 'updateMaintenance'])->middleware('permission:vehicle.maintenance');
     Route::delete('maintenances/{maintenance}', [VehicleController::class, 'destroyMaintenance'])->middleware('permission:vehicle.maintenance');
     Route::get('{vehicle}', [VehicleController::class, 'show'])->middleware('permission:vehicle.*');
-    Route::put('{vehicle}', [VehicleController::class, 'update'])->middleware('permission:vehicle.view');
-    Route::delete('{vehicle}', [VehicleController::class, 'destroy'])->middleware('permission:vehicle.view');
+    Route::put('{vehicle}', [VehicleController::class, 'update'])->middleware('permission:vehicle.edit');
+    Route::delete('{vehicle}', [VehicleController::class, 'destroy'])->middleware('permission:vehicle.edit');
 });
 
 // ========== 油卡管理 ==========
