@@ -341,6 +341,7 @@ export const processApi = {
   instanceDetail:    (id: number)   => get(`/process/instances/${id}`),
   instanceUpdate:    (id: number, data: unknown) => put(`/process/instances/${id}`, data),
   instanceDelete:    (id: number)   => del(`/process/instances/${id}`),
+  instanceSubmitAcceptance: (id: number, data: unknown) => post(`/process/instances/${id}/submit-acceptance`, data),
   instanceAccept:    (id: number, data: unknown) => post(`/process/instances/${id}/accept`, data),
   instanceReject:    (id: number, data: unknown) => post(`/process/instances/${id}/reject`, data),
   instanceProgress:  (id: number, data: unknown) => post(`/process/instances/${id}/progress`, data),

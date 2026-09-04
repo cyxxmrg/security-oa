@@ -81,6 +81,7 @@ export interface OptionItem { value: string; label: string }
 export const STATUS_OPTIONS: OptionItem[] = [
   { value: 'pending', label: '待开始' },
   { value: 'in_progress', label: '进行中' },
+  { value: 'completed', label: '已完工' },
   { value: 'accepted', label: '已验收' },
   { value: 'rejected', label: '已驳回' },
   { value: 'overdue', label: '超期' },

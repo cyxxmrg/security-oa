@@ -10,11 +10,26 @@ use Illuminate\Support\Facades\DB;
 
 class ProcessAcceptanceService
 {
+    public function submit(ProcessInstance $process, User $operator, ?int $inspectionId, ?string $comment = null): ApprovalRecord
+    {
+        return DB::transaction(function () use ($process, $operator, $inspectionId, $comment) {
+            $process = ProcessInstance::lockForUpdate()->findOrFail($process->id);
+            $approval = $this->pendingApproval($process->id, true);
+            if ($approval) {
+                return $approval;
+            }
+
+            return $this->createApproval($process, $operator, $inspectionId, $comment);
+        });
+    }
+
     public function approve(ProcessInstance $process, User $operator, ?int $inspectionId, string $comment): ProcessInstance
     {
         return DB::transaction(function () use ($process, $operator, $inspectionId, $comment) {
-            $approval = $this->pendingApproval($process->id, true)
-                ?? $this->createApproval($process, $operator, $inspectionId, true);
+            $approval = $this->pendingApproval($process->id, true);
+            if (!$approval) {
+                throw new \RuntimeException('未找到待处理的工序验收审批，请先提交验收申请');
+            }
             $process = ProcessInstance::lockForUpdate()->findOrFail($process->id);
             $this->assertApprovable($process, $approval, $operator);
 
@@ -37,8 +52,10 @@ class ProcessAcceptanceService
     public function reject(ProcessInstance $process, User $operator, ?int $inspectionId, string $reason): ProcessInstance
     {
         return DB::transaction(function () use ($process, $operator, $inspectionId, $reason) {
-            $approval = $this->pendingApproval($process->id, true)
-                ?? $this->createApproval($process, $operator, $inspectionId, false);
+            $approval = $this->pendingApproval($process->id, true);
+            if (!$approval) {
+                throw new \RuntimeException('未找到待处理的工序验收审批，请先提交验收申请');
+            }
             $process = ProcessInstance::lockForUpdate()->findOrFail($process->id);
             $this->assertApprovable($process, $approval, $operator);
 
@@ -94,7 +111,7 @@ class ProcessAcceptanceService
         ProcessInstance $process,
         User $operator,
         ?int $inspectionId,
-        bool $requirePassedInspection
+        ?string $comment
     ): ApprovalRecord
     {
         $process = ProcessInstance::lockForUpdate()->with('project')->findOrFail($process->id);
@@ -112,22 +129,15 @@ class ProcessAcceptanceService
         if (!$inspection) {
             throw new \RuntimeException('处理验收前必须先创建验收记录');
         }
-        if ($requirePassedInspection && $inspection->result !== ProcessInspection::RESULT_PASS) {
+        if ($inspection->result !== ProcessInspection::RESULT_PASS) {
             throw new \RuntimeException('验收通过前，最新验收记录必须为合格');
-        }
-        $applicant = $process->foreman_id ? User::find($process->foreman_id) : null;
-        if (!$applicant) {
-            throw new \RuntimeException('工序未配置有效负责人，无法发起验收审批');
-        }
-        if ($applicant->id === $operator->id) {
-            throw new \RuntimeException('工序负责人不能审批自己的验收申请');
         }
         $flowService = app(ApprovalFlowService::class);
         $template = $flowService->resolveTemplate('process_acceptance', 'project');
         if (!$template) {
             throw new \RuntimeException('未找到工序验收对应的启用项目审批流程');
         }
-        $flowData = $flowService->initFlow($template, $applicant, '提交工序验收审批');
+        $flowData = $flowService->initFlow($template, $operator, $comment ?: '提交工序验收审批');
 
         return ApprovalRecord::create([
             'code' => ApprovalNumberService::next('PRJ'),
@@ -136,12 +146,13 @@ class ProcessAcceptanceService
             'title' => "工序验收 - {$process->name} (" . ($process->project?->name ?? '未知项目') . ')',
             'priority' => 'normal',
             'status' => ApprovalRecord::STATUS_PENDING,
-            'applicant_id' => $applicant->id,
+            'applicant_id' => $operator->id,
             'current_approver_id' => $flowData['current_approver_id'],
             'payload' => [
                 'process_id' => $process->id,
                 'project_id' => $process->project_id,
                 'inspection_id' => $inspection->id,
+                'foreman_id' => $process->foreman_id,
                 '_approval_flow' => $flowData['definition'],
             ],
             'flow' => $flowData['flow'],

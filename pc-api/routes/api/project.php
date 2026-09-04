@@ -59,6 +59,7 @@ Route::prefix('process')->middleware(['auth:sanctum', 'ensure_business', 'permis
     Route::put('instances/{process}', [ProcessController::class, 'updateInstance'])->middleware('permission:process.create|process.edit');
     Route::delete('instances/{process}', [ProcessController::class, 'destroyInstance'])->middleware('permission:process.create|process.edit');
     Route::post('instances/{process}/progress', [ProcessController::class, 'updateProgress'])->middleware('permission:process.create|process.edit');
+    Route::post('instances/{process}/submit-acceptance', [ProcessController::class, 'submitAcceptance'])->middleware('permission:process.create|process.edit');
     Route::post('instances/{process}/accept', [ProcessController::class, 'acceptInstance'])->middleware('permission:process.approve');
     Route::post('instances/{process}/reject', [ProcessController::class, 'rejectInstance'])->middleware('permission:process.approve');
     // 验收记录

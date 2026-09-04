@@ -72,21 +72,14 @@
       <template #default="{ row }">
         <el-button link type="primary" size="small" @click="emit('view', row as Instance)">详情</el-button>
         <el-button
-          v-if="(row as Instance).status === 'in_progress' || (row as Instance).status === 'pending' || (row as Instance).is_overdue"
+          v-if="(row as Instance).status === 'completed'"
           link
           type="success"
           size="small"
-          @click="emit('accept', row as Instance)"
-        >接受</el-button>
+          @click="emit('submit-acceptance', row as Instance)"
+        >提交验收</el-button>
         <el-button
-          v-if="(row as Instance).status === 'in_progress' || (row as Instance).status === 'pending'"
-          link
-          type="danger"
-          size="small"
-          @click="emit('reject', row as Instance)"
-        >驳回</el-button>
-        <el-button
-          v-if="(row as Instance).status === 'in_progress'"
+          v-if="(row as Instance).status === 'in_progress' || (row as Instance).status === 'rejected'"
           link
           type="warning"
           size="small"
@@ -111,8 +104,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'view', row: Instance): void
   (e: 'viewProject', row: Instance): void
-  (e: 'accept', row: Instance): void
-  (e: 'reject', row: Instance): void
+  (e: 'submit-acceptance', row: Instance): void
   (e: 'progress', row: Instance): void
 }>()
 

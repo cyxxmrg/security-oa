@@ -301,7 +301,33 @@ class ProcessController extends Controller
         return response()->json(['code' => 0, 'message' => '进度已更新', 'data' => $process->fresh()]);
     }
 
-    /** 验收通过 */
+    /** 提交验收审批 */
+    public function submitAcceptance(Request $request, ProcessInstance $process): JsonResponse
+    {
+        $data = $request->validate([
+            'inspection_id' => 'nullable|integer|exists:process_inspections,id',
+            'comment'       => 'nullable|string|max:500',
+        ]);
+        $this->ensureInspectionBelongsToProcess($data['inspection_id'] ?? null, $process);
+
+        try {
+            $approval = app(ProcessAcceptanceService::class)->submit(
+                $process,
+                $request->user(),
+                $data['inspection_id'] ?? null,
+                $data['comment'] ?? null
+            );
+            return response()->json([
+                'code' => 0,
+                'message' => '验收审批已提交，请前往项目审批中心处理',
+                'data' => ['approval_id' => $approval->id, 'approval_code' => $approval->code],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    /** 验收通过（兼容旧客户端，仅处理已有审批单） */
     public function acceptInstance(Request $request, ProcessInstance $process): JsonResponse
     {
         $data = $request->validate([

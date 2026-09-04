@@ -26,8 +26,7 @@
         :loading="loading"
         @view="handleView"
         @view-project="handleViewProject"
-        @accept="handleAccept"
-        @reject="handleReject"
+        @submit-acceptance="handleSubmitAcceptance"
         @progress="handleProgress"
       />
 
@@ -102,7 +101,7 @@ import InstanceDetailDialog from './InstanceDetailDialog.vue'
 import CreateInstanceDialog from './components/instance-list/CreateInstanceDialog.vue'
 
 import type { Instance, InstanceStats, SearchForm, ProjectOption, UserOption, TemplateOption } from './components/instance-list/types'
-import { STATUS_OPTIONS, REJECT_REASONS } from './components/instance-list/types'
+import { STATUS_OPTIONS } from './components/instance-list/types'
 
 // v0.3.19 拆 InstanceList.vue 712→380（-47%）
 // 子组件: StatCards / FilterBar / Table / ActionDialog / ProgressUpdateDialog / CreateInstanceDialog
@@ -250,7 +249,7 @@ const handleViewProject = (row: Instance) => {
 }
 
 // ========== 接受/驳回对话框 ==========
-type ActionKind = 'accept' | 'reject'
+type ActionKind = 'submit-acceptance' | 'accept' | 'reject'
 const actionDialog = reactive({
   visible: false,
   loading: false,
@@ -267,51 +266,31 @@ const actionDialog = reactive({
   target: null as Instance | null,
 })
 
-const openAcceptDialog = (row: Instance) => {
+const openSubmitAcceptanceDialog = (row: Instance) => {
   actionDialog.visible = true
   actionDialog.loading = false
-  actionDialog.kind = 'accept'
-  actionDialog.title = `接受工序 — ${row.template_name || '#' + row.id}`
+  actionDialog.kind = 'submit-acceptance'
+  actionDialog.title = `提交验收 — ${row.template_name || '#' + row.id}`
   actionDialog.reasonLabel = ''
   actionDialog.reasonKey = ''
-  actionDialog.commentLabel = '验收意见'
+  actionDialog.commentLabel = '提交说明'
   actionDialog.commentKey = 'comment'
-  actionDialog.commentPlaceholder = '请输入验收意见'
+  actionDialog.commentPlaceholder = '请输入验收说明（可选）'
   actionDialog.form = { comment: '', reason: '' }
   actionDialog.target = row
 }
-
-const openRejectDialog = (row: Instance) => {
-  actionDialog.visible = true
-  actionDialog.loading = false
-  actionDialog.kind = 'reject'
-  actionDialog.title = `驳回工序 — ${row.template_name || '#' + row.id}`
-  actionDialog.reasonLabel = '驳回原因'
-  actionDialog.reasonKey = 'reason'
-  actionDialog.reasonOptions = [...REJECT_REASONS]
-  actionDialog.commentLabel = '详细说明'
-  actionDialog.commentKey = 'comment'
-  actionDialog.commentPlaceholder = '请详细描述驳回原因'
-  actionDialog.form = { comment: '', reason: '' }
-  actionDialog.target = row
-}
-
-const handleAccept = (row: Instance) => openAcceptDialog(row)
-const handleReject = (row: Instance) => openRejectDialog(row)
+const handleSubmitAcceptance = (row: Instance) => openSubmitAcceptanceDialog(row)
 
 const submitAction = async () => {
   if (!actionDialog.target) return
-  if (actionDialog.kind === 'reject' && !actionDialog.form.reason) {
-    ElMessage.warning('请选择驳回原因')
-    return
-  }
-  if (!actionDialog.form.comment) {
-    ElMessage.warning('请输入备注')
-    return
-  }
   actionDialog.loading = true
   try {
-    if (actionDialog.kind === 'accept') {
+    if (actionDialog.kind === 'submit-acceptance') {
+      await processApi.instanceSubmitAcceptance(actionDialog.target.id, {
+        comment: actionDialog.form.comment || undefined,
+      })
+      ElMessage.success('验收审批已提交，请前往项目审批中心处理')
+    } else if (actionDialog.kind === 'accept') {
       await processApi.instanceAccept(actionDialog.target.id, { comment: actionDialog.form.comment })
       ElMessage.success('验收审批已处理')
     } else {
