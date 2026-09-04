@@ -601,7 +601,7 @@ class RoleController extends Controller
         // admin 直接返所有权限 (前端不显示 hidden menu)
         $userRoles = [];
         try {
-            $userRoles = $user->roles->pluck('name')->all();
+            $userRoles = $user->activeRoles()->pluck('roles.name')->all();
         } catch (\Throwable $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
             // ignore
@@ -616,11 +616,17 @@ class RoleController extends Controller
             return response()->json(['code' => 0, 'data' => $list, 'roles' => $userRoles]);
         }
 
-        $list = $user->getAllPermissions()->map(fn($p) => [
-            'name' => $p->name,
-            'module' => $p->module ?? '',
-            'label' => $p->display_name ?? $p->description ?? $p->name,
-        ])->values();
+        $activePermissionNames = $user->activePermissionNames();
+        $list = Permission::query()
+            ->whereIn('name', $activePermissionNames)
+            ->orderBy('module')
+            ->orderBy('id')
+            ->get(['name', 'module', 'display_name', 'description'])
+            ->map(fn($p) => [
+                'name' => $p->name,
+                'module' => $p->module ?? '',
+                'label' => $p->display_name ?? $p->description ?? $p->name,
+            ])->values();
 
         return response()->json(['code' => 0, 'data' => $list, 'roles' => $userRoles]);
     }

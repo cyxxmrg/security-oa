@@ -82,7 +82,8 @@ trait HandlesApproval
             ]);
         }
         try {
-            return $user->hasActivePermissionTo('settings.approval')
+            return $user->hasActivePermissionTo('approval.config')
+                || $user->hasActivePermissionTo('settings.approval')
                 || $user->hasActivePermissionTo('system.role');
         } catch (\Throwable $e) {
             return false;
