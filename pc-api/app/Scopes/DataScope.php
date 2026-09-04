@@ -189,6 +189,47 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'tender_projects':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', self::tenderProjectAccessSql($userId, 'tender_projects')],
+                ];
+
+            case 'tender_bids':
+                return [
+                    ['__raw__', self::tenderBidAccessSql($userId, 'tender_bids')],
+                ];
+
+            case 'tender_bid_items':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM tender_bids tb WHERE tb.id = tender_bid_items.tender_bid_id AND (%s)))",
+                        self::tenderBidAccessSql($userId, 'tb')
+                    )],
+                ];
+
+            case 'tender_attachments':
+                return [
+                    ['uploaded_by_user_id', '=', $userId],
+                    ['__raw__', self::tenderAttachmentAccessSql($userId, 'tender_attachments')],
+                ];
+
+            case 'tender_deposit_rules':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM tender_projects tp WHERE tp.id = tender_deposit_rules.tender_project_id AND (%s)))",
+                        self::tenderProjectAccessSql($userId, 'tp')
+                    )],
+                ];
+
+            case 'tender_deposits':
+                return [
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM tender_projects tp WHERE tp.id = tender_deposits.tender_project_id AND (%s)))",
+                        self::tenderProjectAccessSql($userId, 'tp')
+                    )],
+                ];
+
             case 'repair_orders':
                 return [
                     ['created_by', '=', $userId],
@@ -458,6 +499,44 @@ class DataScope implements Scope
             $alias,
             $userId,
             $userId
+        );
+    }
+
+    private static function tenderProjectAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))) OR EXISTS (SELECT 1 FROM external_quote_requests erq WHERE erq.id = %s.rfq_id AND (erq.created_by = %d OR EXISTS (SELECT 1 FROM projects ep WHERE ep.id = erq.project_id AND (ep.manager_id = %d OR EXISTS (SELECT 1 FROM project_members epm WHERE epm.project_id = ep.id AND epm.user_id = %d AND epm.status = 'active'))))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId,
+            $alias,
+            $userId,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function tenderBidAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.submitter_user_id = %d OR EXISTS (SELECT 1 FROM tender_projects tp WHERE tp.id = %s.tender_project_id AND (%s)))",
+            $alias,
+            $userId,
+            $alias,
+            self::tenderProjectAccessSql($userId, 'tp')
+        );
+    }
+
+    private static function tenderAttachmentAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(EXISTS (SELECT 1 FROM tender_projects tp WHERE tp.id = %s.tender_project_id AND (%s)) OR EXISTS (SELECT 1 FROM tender_bids tb WHERE tb.id = %s.tender_bid_id AND (%s)))",
+            $alias,
+            self::tenderProjectAccessSql($userId, 'tp'),
+            $alias,
+            self::tenderBidAccessSql($userId, 'tb')
         );
     }
 

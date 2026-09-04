@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TenderProject extends Model
 {
+    use HasDataScope;
+
     protected $table = 'tender_projects';
     protected $fillable = [
         'code', 'name', 'description', 'project_id', 'rfq_id', 'created_by',

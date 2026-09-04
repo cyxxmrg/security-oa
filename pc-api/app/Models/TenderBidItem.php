@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TenderBidItem extends Model
 {
+    use HasDataScope;
+
     protected $table = 'tender_bid_items';
     protected $fillable = [
         'tender_bid_id', 'name', 'spec', 'unit',

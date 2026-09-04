@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class TenderDeposit extends Model
 {
+    use HasDataScope;
+
     protected $table = 'tender_deposits';
 
     protected $fillable = [

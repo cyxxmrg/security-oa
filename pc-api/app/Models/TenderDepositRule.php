@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class TenderDepositRule extends Model
 {
+    use HasDataScope;
+
     protected $table = 'tender_deposit_rules';
 
     protected $fillable = [

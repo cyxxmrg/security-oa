@@ -48,6 +48,38 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('project_budgets.project_id', $clauses[1][1]);
     }
 
+    public function test_tender_clauses_follow_tender_project_access(): void
+    {
+        $projects = \App\Scopes\DataScope::tableClauses('tender_projects', 86);
+        $this->assertCount(2, $projects);
+        $this->assertSame(['created_by', '=', 86], $projects[0]);
+        $this->assertStringContainsString('tender_projects.created_by = 86', $projects[1][1]);
+        $this->assertStringContainsString('tender_projects.project_id', $projects[1][1]);
+        $this->assertStringContainsString('external_quote_requests erq', $projects[1][1]);
+
+        $bids = \App\Scopes\DataScope::tableClauses('tender_bids', 86);
+        $this->assertStringContainsString('tender_bids.submitter_user_id = 86', $bids[0][1]);
+        $this->assertStringContainsString('FROM tender_projects tp', $bids[0][1]);
+
+        $items = \App\Scopes\DataScope::tableClauses('tender_bid_items', 86);
+        $this->assertStringContainsString('FROM tender_bids tb', $items[0][1]);
+        $this->assertStringContainsString('tb.tender_project_id', $items[0][1]);
+    }
+
+    public function test_tender_sensitive_children_follow_parent_access(): void
+    {
+        $attachments = \App\Scopes\DataScope::tableClauses('tender_attachments', 86);
+        $this->assertSame(['uploaded_by_user_id', '=', 86], $attachments[0]);
+        $this->assertStringContainsString('FROM tender_projects tp', $attachments[1][1]);
+        $this->assertStringContainsString('FROM tender_bids tb', $attachments[1][1]);
+
+        foreach (['tender_deposit_rules', 'tender_deposits'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertStringContainsString('FROM tender_projects tp', $clauses[0][1]);
+            $this->assertStringContainsString('tp.project_id', $clauses[0][1]);
+        }
+    }
+
     public function test_construction_team_clauses_keep_common_teams_visible(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('construction_teams', 86);

@@ -8,6 +8,8 @@ use App\Models\TenderBid;
 use App\Models\TenderAttachment;
 use App\Models\TenderDeposit;
 use App\Models\TenderDepositRule;
+use App\Models\Project;
+use App\Models\ExternalQuoteRequest;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseItem;
 use App\Models\Payable;
@@ -86,9 +88,28 @@ class TenderController extends Controller
             'budget'      => 'nullable|numeric|min:0',  // 可选预算
         ]);
         unset($data['title']);
+
+        if (!empty($data['project_id'])) {
+            Project::query()->findOrFail((int) $data['project_id']);
+        }
+
+        if (!empty($data['rfq_id'])) {
+            $rfq = ExternalQuoteRequest::query()->findOrFail((int) $data['rfq_id']);
+            $rfqProjectId = $rfq->project_id ? (int) $rfq->project_id : null;
+            $hasRfqAccess = (int) $rfq->created_by === (int) $request->user()->id;
+            if (!$hasRfqAccess && $rfqProjectId) {
+                $hasRfqAccess = Project::query()->whereKey($rfqProjectId)->exists();
+            }
+            abort_unless($hasRfqAccess, 404);
+
+            if (!empty($data['project_id']) && $rfqProjectId && (int) $data['project_id'] !== $rfqProjectId) {
+                return response()->json(['code' => 1001, 'message' => '招标项目与报价请求所属项目不一致'], 422);
+            }
+        }
+
         $today = date('Ymd');
         $sequence = \App\Services\NumberSequenceService::next("tender:{$today}", static function () use ($today): int {
-            return TenderProject::where('code', 'like', "T-{$today}-%")
+            return TenderProject::allData()->where('code', 'like', "T-{$today}-%")
                 ->pluck('code')
                 ->map(static function (string $code): int {
                     $parts = explode('-', $code);
@@ -782,7 +803,7 @@ class TenderController extends Controller
     {
         $today = date('Ymd');
         $sequence = \App\Services\NumberSequenceService::next("tender-bid:{$today}", static function () use ($today): int {
-            return TenderBid::where('code', 'like', "BID-{$today}-%")
+            return TenderBid::allData()->where('code', 'like', "BID-{$today}-%")
                 ->pluck('code')
                 ->map(static function (string $code): int {
                     $parts = explode('-', $code);

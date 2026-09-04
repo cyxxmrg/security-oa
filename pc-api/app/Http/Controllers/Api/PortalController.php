@@ -33,7 +33,7 @@ class PortalController extends Controller
      */
     public function tenderByToken(string $token): JsonResponse
     {
-        $t = TenderProject::where('public_token', $token)->firstOr(function () {
+        $t = TenderProject::allData()->where('public_token', $token)->firstOr(function () {
             abort(response()->json(['code' => 1001, 'message' => '链接无效或已过期'], 404));
         });
         if (!in_array($t->status, ['open', 'bidding', 'published', 'evaluating', 'awarded', 'closed'])) {
@@ -76,7 +76,7 @@ class PortalController extends Controller
         if ($verify) {
             return $verify;
         }
-        $t = TenderProject::where('public_token', $token)->firstOr(function () {
+        $t = TenderProject::allData()->where('public_token', $token)->firstOr(function () {
             abort(response()->json(['code' => 1001, 'message' => '链接无效'], 404));
         });
         $bid = $t->bids()->where('supplier_id', $supplierId)->with('items')->first();
@@ -106,7 +106,7 @@ class PortalController extends Controller
         if ($verify) {
             return $verify;
         }
-        $t = TenderProject::where('public_token', $token)->firstOr(function () {
+        $t = TenderProject::allData()->where('public_token', $token)->firstOr(function () {
             abort(response()->json(['code' => 1001, 'message' => '链接无效'], 404));
         });
         if (!in_array($t->status, ['open', 'bidding', 'published'])) {
@@ -175,7 +175,7 @@ class PortalController extends Controller
         if ($verify) {
             return $verify;
         }
-        $t = TenderProject::where('public_token', $token)->firstOrFail();
+        $t = TenderProject::allData()->where('public_token', $token)->firstOrFail();
         if (!in_array($t->status, ['open', 'bidding', 'published'], true)) {
             return response()->json(['code' => 1003, 'message' => '该项目当前不接受投标附件'], 422);
         }
@@ -290,7 +290,7 @@ class PortalController extends Controller
             return response()->json(['code' => 0, 'data' => ['supplier' => null, 'invitations' => []]]);
         }
         // 该供应商被邀请的招标 (在 invited_supplier_ids 数组中)
-        $list = TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)
+        $list = TenderProject::allData()->whereJsonContains('invited_supplier_ids', $supplier->id)
                               ->whereIn('status', ['open', 'bidding', 'published', 'evaluating', 'awarded', 'closed'])
                               ->orderByDesc('publish_at')
                               ->get(['id', 'code', 'name', 'status', 'deadline', 'public_token']);
@@ -338,10 +338,10 @@ class PortalController extends Controller
 
         // 简报
         $stats = [
-            'invitation_count' => TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)->count(),
+            'invitation_count' => TenderProject::allData()->whereJsonContains('invited_supplier_ids', $supplier->id)->count(),
             'bid_count'        => $bids->count(),
             'won_count'        => $bids->where('status', 'awarded')->count(),
-            'active_tender'    => TenderProject::whereJsonContains('invited_supplier_ids', $supplier->id)
+            'active_tender'    => TenderProject::allData()->whereJsonContains('invited_supplier_ids', $supplier->id)
                                                 ->whereIn('status', ['open', 'bidding', 'published'])->count(),
         ];
 
@@ -377,7 +377,7 @@ class PortalController extends Controller
     {
         $today = date('Ymd');
         $sequence = \App\Services\NumberSequenceService::next("tender-bid:{$today}", static function () use ($today): int {
-            return TenderBid::where('code', 'like', "BID-{$today}-%")
+            return TenderBid::allData()->where('code', 'like', "BID-{$today}-%")
                 ->pluck('code')
                 ->map(static function (string $code): int {
                     $parts = explode('-', $code);
