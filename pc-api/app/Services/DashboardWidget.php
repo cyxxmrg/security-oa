@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\RepairOrder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,16 +23,13 @@ class DashboardWidget
      */
     public function methodDistribution(int $days = 90): array
     {
-        $rows = DB::select("
-            SELECT
-                COALESCE(ro.method_type, 'unspecified') AS method_type,
-                COUNT(*) AS cnt
-            FROM repair_orders ro
-            WHERE ro.status IN ('completed','closed','shipped_back','repaired')
-              AND ro.received_at >= (CURRENT_DATE - (:days || ' days')::interval)
-            GROUP BY method_type
-            ORDER BY cnt DESC
-        ", ['days' => $days]);
+        $rows = RepairOrder::query()
+            ->whereIn('status', ['completed', 'closed', 'shipped_back', 'repaired'])
+            ->whereRaw("received_at >= (CURRENT_DATE - (? || ' days')::interval)", [$days])
+            ->selectRaw("COALESCE(method_type, 'unspecified') AS method_type, COUNT(*) AS cnt")
+            ->groupBy('method_type')
+            ->orderByDesc('cnt')
+            ->get();
 
         $out = [];
         foreach ($rows as $r) {
@@ -47,25 +45,21 @@ class DashboardWidget
      */
     public function cycleTimePercentile(int $days = 90): array
     {
-        // 用 PG 的 percentile_cont (注意: percentile 内部不能 EXTRACT, 在外层算)
-        $row = DB::selectOne("
-            WITH durations AS (
-                SELECT
-                    EXTRACT(EPOCH FROM (updated_at - received_at))::numeric(10,2) AS seconds
-                FROM repair_orders
-                WHERE status IN ('completed','closed','shipped_back')
-                  AND received_at IS NOT NULL
-                  AND updated_at IS NOT NULL
-                  AND updated_at > received_at
-                  AND received_at >= (CURRENT_DATE - (:days || ' days')::interval)
-            )
-            SELECT
-                count(*) AS cnt,
-                COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds), 0)::numeric(10,2) AS p50_sec,
-                COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY seconds), 0)::numeric(10,2) AS p90_sec,
-                COALESCE(MAX(seconds), 0)::numeric(10,2) AS max_sec
-            FROM durations
-        ", ['days' => $days]);
+        $durations = RepairOrder::query()
+            ->whereIn('status', ['completed', 'closed', 'shipped_back'])
+            ->whereNotNull('received_at')
+            ->whereNotNull('updated_at')
+            ->whereColumn('updated_at', '>', 'received_at')
+            ->whereRaw("received_at >= (CURRENT_DATE - (? || ' days')::interval)", [$days])
+            ->selectRaw('EXTRACT(EPOCH FROM (updated_at - received_at))::numeric(10,2) AS seconds');
+
+        $row = DB::query()
+            ->fromSub($durations, 'durations')
+            ->selectRaw('count(*) AS cnt')
+            ->selectRaw("COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds), 0)::numeric(10,2) AS p50_sec")
+            ->selectRaw("COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY seconds), 0)::numeric(10,2) AS p90_sec")
+            ->selectRaw('COALESCE(MAX(seconds), 0)::numeric(10,2) AS max_sec')
+            ->first();
 
         $cnt = (int) $row->cnt;
         return [
@@ -84,18 +78,15 @@ class DashboardWidget
     public function faultTypeTop(int $days = 30, int $limit = 5): array
     {
         // 用 system_dicts.label 翻译 (V0.5.7 块B)
-        $rows = DB::select("
-            SELECT
-                ro.fault_type,
-                COUNT(*) AS cnt
-            FROM repair_orders ro
-            WHERE ro.fault_type IS NOT NULL
-              AND ro.fault_type <> ''
-              AND ro.received_at >= (CURRENT_DATE - (:days || ' days')::interval)
-            GROUP BY ro.fault_type
-            ORDER BY cnt DESC
-            LIMIT :limit
-        ", ['days' => $days, 'limit' => $limit]);
+        $rows = RepairOrder::query()
+            ->whereNotNull('fault_type')
+            ->where('fault_type', '<>', '')
+            ->whereRaw("received_at >= (CURRENT_DATE - (? || ' days')::interval)", [$days])
+            ->selectRaw('fault_type, COUNT(*) AS cnt')
+            ->groupBy('fault_type')
+            ->orderByDesc('cnt')
+            ->limit($limit)
+            ->get();
 
         if (empty($rows)) return [];
 
@@ -130,24 +121,23 @@ class DashboardWidget
     public function technicianRanking(int $days = 30, int $limit = 5): array
     {
         // repair_orders.received_by 关联 users
-        $rows = DB::select("
-            SELECT
-                ro.received_by AS user_id,
+        $rows = RepairOrder::query()
+            ->leftJoin('users as u', 'u.id', '=', 'repair_orders.received_by')
+            ->whereNotNull('repair_orders.received_by')
+            ->whereIn('repair_orders.status', ['completed', 'closed', 'shipped_back'])
+            ->whereNotNull('repair_orders.received_at')
+            ->whereColumn('repair_orders.updated_at', '>', 'repair_orders.received_at')
+            ->whereRaw("repair_orders.received_at >= (CURRENT_DATE - (? || ' days')::interval)", [$days])
+            ->selectRaw("repair_orders.received_by AS user_id,
                 COALESCE(u.name, '未分配') AS name,
                 COUNT(*) AS completed_count,
-                COALESCE(AVG(EXTRACT(EPOCH FROM (ro.updated_at - ro.received_at)) / 86400)::numeric(10,2), 0) AS avg_days,
-                COALESCE(SUM(ro.total_cost), 0)::numeric(14,2) AS total_revenue
-            FROM repair_orders ro
-            LEFT JOIN users u ON u.id = ro.received_by
-            WHERE ro.received_by IS NOT NULL
-              AND ro.status IN ('completed','closed','shipped_back')
-              AND ro.received_at IS NOT NULL
-              AND ro.updated_at > ro.received_at
-              AND ro.received_at >= (CURRENT_DATE - (:days || ' days')::interval)
-            GROUP BY ro.received_by, u.name
-            ORDER BY completed_count DESC, avg_days ASC
-            LIMIT :limit
-        ", ['days' => $days, 'limit' => $limit]);
+                COALESCE(AVG(EXTRACT(EPOCH FROM (repair_orders.updated_at - repair_orders.received_at)) / 86400)::numeric(10,2), 0) AS avg_days,
+                COALESCE(SUM(repair_orders.total_cost), 0)::numeric(14,2) AS total_revenue")
+            ->groupBy('repair_orders.received_by', 'u.name')
+            ->orderByDesc('completed_count')
+            ->orderBy('avg_days')
+            ->limit($limit)
+            ->get();
 
         return array_map(fn($r) => [
             'user_id'         => (int) $r->user_id,
