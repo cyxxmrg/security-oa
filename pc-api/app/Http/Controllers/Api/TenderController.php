@@ -11,8 +11,11 @@ use App\Models\TenderDepositRule;
 use App\Models\Project;
 use App\Models\ExternalQuoteRequest;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseContract;
+use App\Models\PurchaseShipment;
 use App\Models\PurchaseItem;
 use App\Models\Payable;
+use App\Models\StockRecord;
 use App\Services\PurchaseFlowService;
 use App\Services\FileUploadService;
 use App\Services\TenderService;
@@ -403,17 +406,19 @@ class TenderController extends Controller
         $poIds = $t->purchaseOrders->pluck('id')->all();
         $stockRecords = collect();
         if (!empty($poIds)) {
-            $stockRecords = \DB::table('stock_records')
-                ->where('related_type', 'purchase_shipment')
-                ->whereIn('related_id', function ($sub) use ($poIds) {
-                    $sub->select('id')->from('purchase_shipments')
-                        ->whereIn('contract_id', function ($s2) use ($poIds) {
-                            $s2->select('id')->from('purchase_contracts')
-                                ->whereIn('purchase_order_id', $poIds);
-                        });
-                })
-                ->orderByDesc('id')
-                ->get(['id', 'record_no', 'type', 'quantity', 'related_id', 'related_type', 'operator_id', 'created_at']);
+            $contractIds = PurchaseContract::query()
+                ->whereIn('purchase_order_id', $poIds)
+                ->pluck('id');
+            $shipmentIds = $contractIds->isNotEmpty()
+                ? PurchaseShipment::query()->whereIn('contract_id', $contractIds)->pluck('id')
+                : collect();
+            if ($shipmentIds->isNotEmpty()) {
+                $stockRecords = StockRecord::query()
+                    ->where('related_type', 'purchase_shipment')
+                    ->whereIn('related_id', $shipmentIds)
+                    ->orderByDesc('id')
+                    ->get(['id', 'record_no', 'type', 'quantity', 'related_id', 'related_type', 'operator_id', 'created_at']);
+            }
         }
 
         return response()->json([
