@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectStageRequest;
-use App\Models\{Project, ProjectContract, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
+use App\Models\{Project, ProjectContract, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, Warranty, Rectification, ProcessInstance, DiskFolder, DiskSetting};
 use App\Services\CacheHelper;
 use App\Services\ProjectApprovalBusinessService;
 use Illuminate\Http\JsonResponse;
@@ -72,10 +72,10 @@ class ProjectController extends Controller
         $project->loadCount([
             'constructionLogs', 'materials', 'purchaseOrders',
         ]);
-        $project->setAttribute('process_instances_count', (int) DB::table('process_instances')->where('project_id', $project->id)->count());
-        $project->setAttribute('rectifications_count',    (int) DB::table('rectifications')->where('project_id', $project->id)->count());
-        $project->setAttribute('warranties_count',        (int) DB::table('warranties')->where('project_id', $project->id)->count());
-        $project->setAttribute('settlements_count',       (int) DB::table('project_settlements')->where('project_id', $project->id)->count());
+        $project->setAttribute('process_instances_count', (int) ProcessInstance::query()->where('project_id', $project->id)->count());
+        $project->setAttribute('rectifications_count',    (int) Rectification::query()->where('project_id', $project->id)->count());
+        $project->setAttribute('warranties_count',        (int) Warranty::query()->where('project_id', $project->id)->count());
+        $project->setAttribute('settlements_count',       (int) ProjectSettlement::query()->where('project_id', $project->id)->count());
 
         return response()->json(['code' => 0, 'data' => $project]);
     }
