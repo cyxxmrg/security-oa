@@ -251,6 +251,14 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('FROM payables pbl', $clauses[2][1]);
     }
 
+    public function test_legacy_supplier_payables_follow_creator_or_project_access(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('supplier_payables', 86);
+        $this->assertCount(2, $clauses);
+        $this->assertSame(['created_by', '=', 86], $clauses[0]);
+        $this->assertStringContainsString('supplier_payables.project_id', $clauses[1][1]);
+    }
+
     public function test_inspection_records_follow_task_and_plan_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('inspection_records', 86);
