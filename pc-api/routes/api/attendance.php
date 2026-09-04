@@ -16,13 +16,13 @@ Route::prefix('attendance')->middleware(['auth:sanctum', 'ensure_business'])->gr
     Route::get('records', [AttendanceController::class, 'records'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.record');
     Route::get('report', [AttendanceController::class, 'report'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.report');
     Route::get('leave', [AttendanceController::class, 'leaveRequests'])->withoutMiddleware('ensure_business');
-    Route::post('leave', [AttendanceController::class, 'storeLeaveRequest']);
+    Route::post('leave', [AttendanceController::class, 'storeLeaveRequest'])->middleware('permission:approval.mine');
     Route::post('leave/{leave}/approve', [AttendanceController::class, 'approveLeave'])->middleware('permission:attendance.leave');
-    Route::delete('leave/{leave}', [AttendanceController::class, 'destroyLeaveRequest']);
+    Route::delete('leave/{leave}', [AttendanceController::class, 'destroyLeaveRequest'])->middleware('permission:approval.mine');
     Route::get('overtime', [AttendanceController::class, 'overtimeRequests'])->withoutMiddleware('ensure_business');
-    Route::post('overtime', [AttendanceController::class, 'storeOvertimeRequest']);
+    Route::post('overtime', [AttendanceController::class, 'storeOvertimeRequest'])->middleware('permission:approval.mine');
     Route::post('overtime/{overtime}/approve', [AttendanceController::class, 'approveOvertime'])->middleware('permission:attendance.overtime');
-    Route::delete('overtime/{overtime}', [AttendanceController::class, 'destroyOvertimeRequest']);
+    Route::delete('overtime/{overtime}', [AttendanceController::class, 'destroyOvertimeRequest'])->middleware('permission:approval.mine');
     Route::get('/', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business');
     Route::get('stats', [AttendanceController::class, 'stats'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
 });

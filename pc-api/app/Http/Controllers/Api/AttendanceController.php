@@ -242,8 +242,8 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'date'     => 'required|date_format:Y-m-d',
             'type'     => 'required|in:in,out,field_in,field_out,clock_in,clock_out',
-            'time'     => 'required|date_format:H:i:s',
-            'clock_time' => 'nullable|date_format:H:i:s',  // V1.2.10 别名
+            'time'     => 'nullable|date_format:H:i:s|required_without:clock_time',
+            'clock_time' => 'nullable|date_format:H:i:s|required_without:time',  // V1.2.10 别名
             'location' => 'nullable|string|max:200',
             'reason'   => 'required|string|max:500',
         ]);
