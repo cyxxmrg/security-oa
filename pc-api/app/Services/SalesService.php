@@ -265,8 +265,7 @@ class SalesService
                 'customer_id'    => $opp->customer_id,
                 'name'           => $data['project_name'],
                 'status'         => 'pending',
-                'remark'         => $data['remark'] ?? null,
-                'created_by'     => $opp->sales_id,
+                'notes'          => $data['remark'] ?? null,
             ]);
             $opp->update(['moved_to_pool_at' => now()]);
             return $pool;
@@ -567,9 +566,14 @@ class SalesService
     {
         $data = $request->validate([
             'name'   => 'sometimes|string|max:200',
-            'status' => 'sometimes|in:pending,approved,rejected,converted',
+            'status' => 'sometimes|in:pending,active,archived,approved,rejected,converted',
+            'notes'  => 'nullable|string',
             'remark' => 'nullable|string',
         ]);
+        if (array_key_exists('remark', $data) && !array_key_exists('notes', $data)) {
+            $data['notes'] = $data['remark'];
+        }
+        unset($data['remark']);
         $pool->update($data);
         return $pool->fresh();
     }

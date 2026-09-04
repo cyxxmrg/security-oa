@@ -110,17 +110,43 @@ class CheckResourceOwnership
             return $this->deny($model, $user, '跟进记录不属于当前用户负责的销售对象');
         }
 
+        if ($classBase === 'projectpool' || strtolower($param) === 'pool') {
+            $opportunity = $model->relationLoaded('opportunity')
+                ? $model->opportunity
+                : $model->load('opportunity')->opportunity;
+            if ($opportunity && $this->matchesUser($opportunity->sales_id, $user)) {
+                return $next($request);
+            }
+            return $this->deny($model, $user, '项目池记录不属于当前用户负责的商机');
+        }
+
         // 3) 附件走 follow_up 关联
         if ($classBase === 'salesfollowupattachment' || strtolower($param) === 'att') {
             $att = $model;
             $followUpId = $att->follow_up_id;
             $followUp = \App\Models\SalesFollowUp::find($followUpId);
-            if ($followUp && (int) $followUp->user_id === (int) $user->id) {
+            if (!$followUp) {
+                return $this->deny($model, $user, "附件所属跟进记录不存在 (follow_up_id={$followUpId})");
+            }
+            if ((int) $followUp->user_id === (int) $user->id) {
                 return $next($request);
+            }
+
+            $targetType = strtolower((string) $followUp->target_type);
+            if (in_array($targetType, ['opp', 'opportunity'], true)) {
+                $opportunity = \App\Models\Opportunity::find($followUp->target_id);
+                if ($opportunity && $this->matchesUser($opportunity->sales_id, $user)) {
+                    return $next($request);
+                }
+            } elseif ($targetType === 'quote') {
+                $quote = \App\Models\Quotation::with('opportunity')->find($followUp->target_id);
+                if ($quote?->opportunity && $this->matchesUser($quote->opportunity->sales_id, $user)) {
+                    return $next($request);
+                }
             }
             return response()->json([
                 'code'    => 403,
-                'message' => "无权操作该附件 (follow_up_id={$followUpId} 不属于你)",
+                'message' => "无权操作该附件 (跟进记录不属于当前用户负责的销售对象)",
             ], 403);
         }
 
