@@ -141,13 +141,12 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project): JsonResponse
     {
-        $validStages = implode(',', array_map(fn($c) => $c->value, ProjectStage::cases()));
         $data = $request->validate([
             'name' => 'sometimes|string|max:200',
-            'stage' => "sometimes|string|in:{$validStages}",
-            'status' => 'sometimes|string',
             'progress' => 'sometimes|integer|min:0|max:100',
-            'description' => 'nullable|string', 'end_date' => 'nullable|date', 'priority' => 'nullable|string',
+            'description' => 'nullable|string',
+            'end_date' => 'nullable|date',
+            'priority' => 'nullable|string|in:low,medium,normal,high,urgent',
         ]);
 
         $project->update($data);
