@@ -682,8 +682,6 @@ class DataScope implements Scope
             $userId,
             $alias,
             $userId,
-            $alias,
-            $userId,
             $userId
         );
     }
