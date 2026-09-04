@@ -28,6 +28,16 @@ class DiskInitCommand extends Command
     {
         $this->info('=== V1.0 网盘初始化 ===');
 
+        $systemUser = User::query()
+            ->where('username', 'system')
+            ->orWhere('is_system', true)
+            ->orderByDesc('is_system')
+            ->first();
+        if (!$systemUser) {
+            $this->error('未找到 system 用户，无法创建网盘根目录。');
+            return self::FAILURE;
+        }
+
         // 1) 建 3 个根目录
         $roots = $this->ensureRoots();
         $this->line("  根目录: project={$roots['project']->id} work={$roots['work']->id} share={$roots['share']->id}");
@@ -46,7 +56,7 @@ class DiskInitCommand extends Command
                 $this->line("    - 跳过（已存在）: {$p->name}");
                 continue;
             }
-            $obs->created($p);
+            $obs->created($p, $systemUser->id);
             $this->line("    + 创建: {$p->name}");
         }
 
@@ -104,7 +114,7 @@ class DiskInitCommand extends Command
                 'parent_id'     => null,
                 'name'          => $name,
                 'path'          => '/',
-                'created_by'    => 1,
+                'created_by'    => $systemUser->id,
                 'is_system'     => true,
                 'scope'         => $scope,
                 'is_protected'  => $protected,

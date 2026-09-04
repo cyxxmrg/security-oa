@@ -18,7 +18,7 @@ class ProjectDiskObserver
     /** 默认子目录 */
     public const DEFAULT_SUB_FOLDERS = ['合同', '报销', '验收', '报告'];
 
-    public function created(Project $project): void
+    public function created(Project $project, ?int $fallbackCreatedBy = null): void
     {
         $projectRoot = DiskFolder::where('scope', DiskFolder::SCOPE_PROJECT_ROOT)->first();
         if (!$projectRoot) {
@@ -26,7 +26,7 @@ class ProjectDiskObserver
             return;
         }
 
-        $createdBy = $project->manager_id ?: Auth::id();
+        $createdBy = $project->manager_id ?: $fallbackCreatedBy ?: Auth::id();
         if (!$createdBy) {
             return;
         }
