@@ -456,6 +456,11 @@ class DataScope implements Scope
                     ['__raw__', self::inspectionPlanAccessSql($userId, 'inspection_plans')],
                 ];
 
+            case 'inspection_schedules':
+                return [
+                    ['__raw__', self::inspectionPlanRelationSql($userId, 'inspection_schedules')],
+                ];
+
             case 'inspection_tasks':
                 return [
                     ['assigned_to', '=', $userId],
