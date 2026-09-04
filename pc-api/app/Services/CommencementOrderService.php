@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ProjectCommencementOrder;
+use App\Models\Project;
 use App\Models\RectificationDailyRequired;
 use App\Models\ConstructionTeam;
 use App\Models\WorkProcess;
@@ -33,7 +34,7 @@ class CommencementOrderService
         $prefix = "COMM-{$year}-";
         $next = NumberSequenceService::next(
             "commencement-order:{$year}",
-            fn () => (int) ProjectCommencementOrder::where('code', 'like', $prefix . '%')
+            fn () => (int) ProjectCommencementOrder::allData()->where('code', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'COMM-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
         );
@@ -47,6 +48,7 @@ class CommencementOrderService
     public function createOrder(int $projectId, array $data, int $userId): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($projectId, $data, $userId) {
+            Project::findOrFail($projectId);
             $this->validateTeam($projectId, $data['team_id'] ?? null);
 
             $order = ProjectCommencementOrder::create([
@@ -237,6 +239,10 @@ class CommencementOrderService
     public function approve(int $orderId, int $approverId, ?string $comment = null): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $approverId, $comment) {
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
+            if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
+                throw new \RuntimeException('只有待审批状态可审批');
+            }
             $approval = ApprovalRecord::where('type', 'project')
                 ->where('sub_type', 'commencement')
                 ->whereJsonContains('payload->order_id', $orderId)
@@ -245,10 +251,6 @@ class CommencementOrderService
                 ->first();
             if (!$approval) {
                 throw new \RuntimeException('未找到有效的开工审批中心记录');
-            }
-            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
-            if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
-                throw new \RuntimeException('只有待审批状态可审批');
             }
             $operator = User::findOrFail($approverId);
             $result = app(ApprovalFlowService::class)->advanceFlow($approval, $operator, $comment ?? '审批通过');
@@ -279,6 +281,10 @@ class CommencementOrderService
             if (trim($reason) === '') {
                 throw new \InvalidArgumentException('驳回原因不能为空');
             }
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
+            if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
+                throw new \RuntimeException('只有待审批状态可驳回');
+            }
             $approval = ApprovalRecord::where('type', 'project')
                 ->where('sub_type', 'commencement')
                 ->whereJsonContains('payload->order_id', $orderId)
@@ -287,10 +293,6 @@ class CommencementOrderService
                 ->first();
             if (!$approval) {
                 throw new \RuntimeException('未找到有效的开工审批中心记录');
-            }
-            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
-            if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
-                throw new \RuntimeException('只有待审批状态可驳回');
             }
             $operator = User::findOrFail($approverId);
             $result = app(ApprovalFlowService::class)->rejectFlow($approval, $operator, $reason);

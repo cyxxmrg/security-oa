@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\Construction;
 
 use App\Http\Controllers\Controller;
-use App\Models\CommencementOrder;
+use App\Models\ProjectCommencementOrder;
 use App\Services\CommencementOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +28,7 @@ class CommencementOrderController extends Controller
     // 1. 开工单列表
     public function index(Request $request): JsonResponse
     {
-        $query = CommencementOrder::with([
+        $query = ProjectCommencementOrder::with([
             'project:id,name',
             'team:id,team_name',
             'creator:id,name',
@@ -98,7 +98,7 @@ class CommencementOrderController extends Controller
     // 3. 详情
     public function show(int $id): JsonResponse
     {
-        $order = CommencementOrder::with([
+        $order = ProjectCommencementOrder::with([
             'project:id,name',
             'team:id,team_name,leader_name',
             'creator:id,name',
