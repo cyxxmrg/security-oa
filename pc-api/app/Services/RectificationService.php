@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ConstructionLog;
 use App\Models\ProjectCommencementOrder;
+use App\Models\Project;
 use App\Models\RectificationDailyRequired;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +31,16 @@ class RectificationService
     public function createRectification(int $projectId, array $data, int $userId): array
     {
         return DB::transaction(function () use ($projectId, $data, $userId) {
+            Project::findOrFail($projectId);
+            if (!empty($data['commencement_order_id'])) {
+                ProjectCommencementOrder::where('project_id', $projectId)
+                    ->findOrFail((int) $data['commencement_order_id']);
+            }
+            if (!empty($data['construction_log_id'])) {
+                ConstructionLog::where('project_id', $projectId)
+                    ->findOrFail((int) $data['construction_log_id']);
+            }
+
             $rect = \App\Models\Rectification::create([
                 'project_id'            => $projectId,
                 'commencement_order_id' => $data['commencement_order_id'] ?? null,
@@ -64,7 +75,7 @@ class RectificationService
         $prefix = "RECT-{$year}-";
         $next = NumberSequenceService::next(
             "rectification:{$year}",
-            fn () => (int) \App\Models\Rectification::withTrashed()
+            fn () => (int) \App\Models\Rectification::allData()->withTrashed()
                 ->where('code', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RECT-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
