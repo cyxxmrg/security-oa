@@ -66,7 +66,7 @@ class ExternalQuoteService
                 'code'           => $this->generateRequestCode(),
                 'title'          => $data['title'] ?? '',
                 'required_items' => $data['required_items'] ?? [],
-                'required_files' => $this->normalizeDraftFiles($data['required_files'] ?? []),
+                'required_files' => $this->normalizeDraftFiles($data['required_files'] ?? [], $userId),
                 'deadline'       => $data['deadline'] ?? null,
                 'status'         => ExternalQuoteRequest::STATUS_OPEN,
                 'public_token'   => (string) Str::uuid(),
@@ -274,17 +274,18 @@ class ExternalQuoteService
         return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
-    private function normalizeDraftFiles(mixed $files): array
+    private function normalizeDraftFiles(mixed $files, int $userId): array
     {
         if (!is_array($files)) {
             return [];
         }
 
+        $draftPrefix = "external-quotes/_draft/{$userId}/";
         return collect($files)
             ->filter(fn ($file) => is_array($file)
                 && !empty($file['path'])
                 && is_string($file['path'])
-                && str_starts_with($file['path'], 'external-quotes/_draft/'))
+                && str_starts_with($file['path'], $draftPrefix))
             ->map(fn (array $file) => [
                 'id' => (string) ($file['id'] ?? Str::uuid()),
                 'name' => (string) ($file['name'] ?? basename($file['path'])),

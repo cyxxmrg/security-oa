@@ -197,7 +197,7 @@ class ExternalQuoteController extends Controller
         ]);
         $result = $uploader->store($request, 'file', [
             'disk'         => 'attachments',
-            'subdir'       => 'external-quotes/_draft/' . date('Ymd'),
+            'subdir'       => 'external-quotes/_draft/' . $request->user()->id . '/' . date('Ymd'),
             'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'dwg', 'zip', 'rar'],
             'allowed_mime' => [
                 'application/pdf', 'application/msword',

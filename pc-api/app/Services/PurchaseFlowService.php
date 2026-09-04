@@ -22,7 +22,9 @@ use App\Models\ApprovalRecord;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
+use App\Models\ExternalQuote;
 use App\Models\Project;
+use App\Models\TenderProject;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -302,18 +304,52 @@ class PurchaseFlowService
             if ($plan->status !== self::STATUS_PLAN_APPROVED) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可生成采购单");
             }
+            $supplierId = (int) $data['supplier_id'];
+            $tenderId = $data['tender_id'] ?? null;
+            $quoteId = $data['quote_id'] ?? null;
+
+            if ($path === 'manual' && ($tenderId || $quoteId)) {
+                throw new \RuntimeException('手工采购路径不能绑定招标或报价来源');
+            }
+
+            if ($path === 'quote') {
+                if (!$quoteId) {
+                    throw new \RuntimeException('询价路径必须提供报价单');
+                }
+                $quote = ExternalQuote::with('request')->lockForUpdate()->findOrFail((int) $quoteId);
+                if ($quote->status !== ExternalQuote::STATUS_AWARDED
+                    || $quote->request?->status !== \App\Models\ExternalQuoteRequest::STATUS_AWARDED
+                    || (int) $quote->request?->awarded_quote_id !== (int) $quote->id
+                    || (int) $quote->supplier_id !== $supplierId) {
+                    throw new \RuntimeException('报价单未定标或与供应商不匹配');
+                }
+            }
+
+            if ($path === 'bid') {
+                if (!$tenderId) {
+                    throw new \RuntimeException('招标路径必须提供招标项目');
+                }
+                $tender = TenderProject::with('awardedBid')->lockForUpdate()->findOrFail((int) $tenderId);
+                if (!in_array($tender->status, [TenderProject::STATUS_CLOSED, 'awarded'], true)
+                    || !$tender->awarded_bid_id
+                    || (int) $tender->awarded_supplier_id !== $supplierId
+                    || ($plan->project_id && $tender->project_id && (int) $plan->project_id !== (int) $tender->project_id)) {
+                    throw new \RuntimeException('招标项目未定标或与计划/供应商不匹配');
+                }
+            }
+
             $po = PurchaseOrder::create([
                 'plan_id'              => $plan->id,
                 'source_requirement_id'=> $plan->requirement_id,
                 'project_id'           => $plan->project_id,
-                'supplier_id'          => $data['supplier_id'],
+                'supplier_id'          => $supplierId,
                 'po_no'                => $data['po_no'] ?? null,
                 'code'                 => $data['code'] ?? null,
                 'title'                => $data['title'] ?? $plan->title,
                 'total_amount'         => $data['total_amount'],
-                'tender_id'            => $data['tender_id'] ?? null,
+                'tender_id'            => $tenderId,
                 'path'                 => $path,
-                'quote_id'             => $data['quote_id'] ?? null,
+                'quote_id'             => $quoteId,
                 'status'               => self::STATUS_ORDER_DRAFT,
                 'created_by'           => $user?->id,
                 'notes'                => $data['notes'] ?? null,

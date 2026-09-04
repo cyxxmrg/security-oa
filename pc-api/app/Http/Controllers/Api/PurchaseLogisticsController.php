@@ -25,6 +25,7 @@ class PurchaseLogisticsController extends Controller
             'event_at'    => 'nullable|date',
             'location'    => 'nullable|string|max:200',
             'status'      => 'nullable|string|max:30',
+            'tracking_no' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'operator'    => 'nullable|string|max:50',
         ]);
@@ -82,6 +83,7 @@ class PurchaseLogisticsController extends Controller
             'event_at'    => 'nullable|date',
             'location'    => 'nullable|string|max:200',
             'status'      => 'nullable|string|max:30',
+            'tracking_no' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'operator'    => 'nullable|string|max:50',
         ]);
