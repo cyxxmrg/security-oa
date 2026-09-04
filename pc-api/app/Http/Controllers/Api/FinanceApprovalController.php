@@ -40,6 +40,9 @@ class FinanceApprovalController extends Controller
             'amount'       => 'nullable|numeric|min:0',
             'bank_account' => 'nullable|string|max:200',
             'payload'      => 'nullable|array',
+            'payload.claim_id' => 'required_if:sub_type,expense|integer|exists:expense_claims,id',
+            'payload.payment_request_id' => 'required_if:sub_type,purchase_payment|integer|exists:purchase_payment_requests,id',
+            'payload.settlement_id' => 'required_if:sub_type,referral_settlement|integer|exists:referral_settlements,id',
             'cc'           => 'nullable|array',
         ]);
 

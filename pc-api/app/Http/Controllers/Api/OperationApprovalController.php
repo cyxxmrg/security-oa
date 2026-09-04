@@ -42,6 +42,17 @@ class OperationApprovalController extends Controller
             'start_date' => 'nullable|date',
             'end_date'   => 'nullable|date|after_or_equal:start_date',
             'payload'    => 'nullable|array',
+            'payload.project_id' => 'nullable|integer|exists:projects,id',
+            'payload.requirement_id' => 'required_if:sub_type,purchase_requirement|integer|exists:purchase_requirements,id',
+            'payload.plan_id' => 'required_if:sub_type,purchase_plan|integer|exists:purchase_plans,id',
+            'payload.purchase_order_id' => 'required_if:sub_type,purchase_order|integer|exists:purchase_orders,id',
+            'payload.leave_id' => 'required_if:sub_type,leave|integer|exists:leave_requests,id',
+            'payload.overtime_id' => 'required_if:sub_type,overtime|integer|exists:overtime_requests,id',
+            'payload.resignation_id' => 'required_if:sub_type,resignation|integer|exists:employee_resignations,id',
+            'payload.items' => 'required_if:sub_type,material-request|array|min:1',
+            'payload.items.*.inventory_item_id' => 'required_if:sub_type,material-request|integer|exists:inventory_items,id',
+            'payload.items.*.quantity' => 'required_if:sub_type,material-request|integer|min:1',
+            'payload.items.*.warehouse_id' => 'nullable|integer|exists:warehouses,id',
             'cc'         => 'nullable|array',
         ]);
 
