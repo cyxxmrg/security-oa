@@ -88,6 +88,22 @@ class LedgerController extends Controller
             ], 422);
         }
 
+        $payableIds = array_values(array_unique(array_map(
+            'intval',
+            array_column($validated['allocations'], 'payable_id')
+        )));
+        if (count($payableIds) !== count($validated['allocations'])) {
+            return response()->json(['code' => 1, 'msg' => '同一应付单不能重复分摊'], 422);
+        }
+        $matchedPayableIds = SupplierPayable::whereIn('id', $payableIds)
+            ->where('supplier_id', $validated['supplier_id'])
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        if (count($matchedPayableIds) !== count($payableIds)) {
+            return response()->json(['code' => 1, 'msg' => '分摊应付单不存在或不属于当前供应商'], 422);
+        }
+
         $payment = SupplierPayment::create([
             'supplier_id'   => $validated['supplier_id'],
             'amount'        => $validated['amount'],
@@ -145,7 +161,11 @@ class LedgerController extends Controller
     {
         $validated = $request->validate([
             'customer_id'             => ['required', 'integer', 'exists:customers,id'],
-            'project_id'              => ['nullable', 'integer', 'exists:projects,id'],
+            'project_id'              => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('customer_id', $request->input('customer_id'))),
+            ],
             'amount'                  => ['required', 'numeric', 'min:0.01'],
             'receipt_date'            => ['required', 'date'],
             'method'                  => ['required', Rule::in(['cash', 'bank', 'alipay', 'wechat', 'check', 'other'])],
@@ -164,6 +184,30 @@ class LedgerController extends Controller
             return response()->json([
                 'code' => 1, 'msg' => "分摊金额合计 ¥{$sum} 与收款金额 ¥{$validated['amount']} 不一致",
             ], 422);
+        }
+
+        $receivableIds = array_values(array_unique(array_map(
+            'intval',
+            array_column($validated['allocations'], 'receivable_id')
+        )));
+        if (count($receivableIds) !== count($validated['allocations'])) {
+            return response()->json(['code' => 1, 'msg' => '同一应收单不能重复分摊'], 422);
+        }
+        $matchedReceivableIds = CustomerReceivable::whereIn('id', $receivableIds)
+            ->where('customer_id', $validated['customer_id'])
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $matchedReceivableIds = array_unique(array_merge(
+            $matchedReceivableIds,
+            ReceivableModel::whereIn('id', $receivableIds)
+                ->where('customer_id', $validated['customer_id'])
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
+        ));
+        if (count($matchedReceivableIds) !== count($receivableIds)) {
+            return response()->json(['code' => 1, 'msg' => '分摊应收单不存在或不属于当前客户'], 422);
         }
 
         $receipt = CustomerReceipt::create([
