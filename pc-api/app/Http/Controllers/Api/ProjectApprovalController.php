@@ -8,6 +8,7 @@ use App\Models\ApprovalRecord;
 use App\Services\ApprovalFlowService;
 use App\Services\CommencementOrderService;
 use App\Services\ProcessAcceptanceService;
+use App\Services\ProjectApprovalBusinessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -34,14 +35,15 @@ class ProjectApprovalController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'sub_type'   => 'required|string|max:50',
+            'sub_type'   => 'required|string|in:project_create,project_stage,project_close',
             'title'      => 'required|string|max:255',
             'priority'   => 'nullable|in:urgent,high,normal,low',
             'amount'     => 'nullable|numeric|min:0',
-            'to_stage'   => 'nullable|string|max:50',
+            'to_stage'   => 'nullable|string|in:mobilization,construction,acceptance,settlement,warranty,closed',
             'start_date' => 'nullable|date',
             'end_date'   => 'nullable|date|after_or_equal:start_date',
-            'payload'    => 'nullable|array',
+            'payload'    => 'required|array',
+            'payload.project_id' => 'required|integer|exists:projects,id',
             'cc'         => 'nullable|array',
         ]);
 
@@ -50,6 +52,12 @@ class ProjectApprovalController extends Controller
 
         try {
             $record = \DB::transaction(function () use ($data, $applicant) {
+            $businessService = app(ProjectApprovalBusinessService::class);
+            $data['payload'] = $businessService->preparePayload(
+                $data['sub_type'],
+                $data['payload'],
+                $data['to_stage'] ?? null
+            );
             $flowService = app(ApprovalFlowService::class);
             $template = $flowService->resolveTemplate($data['sub_type'], 'project');
             if (!$template) {
@@ -116,6 +124,13 @@ class ProjectApprovalController extends Controller
             $approval->save();
 
             if ($result['status'] === ApprovalRecord::STATUS_APPROVED
+                && ProjectApprovalBusinessService::supports($approval->sub_type)) {
+                app(ProjectApprovalBusinessService::class)->sync(
+                    $approval,
+                    $request->user(),
+                    ApprovalRecord::STATUS_APPROVED
+                );
+            } elseif ($result['status'] === ApprovalRecord::STATUS_APPROVED
                 && $approval->sub_type === 'commencement') {
                 app(CommencementOrderService::class)->syncApprovalBusinessState(
                     $approval,
@@ -163,7 +178,13 @@ class ProjectApprovalController extends Controller
                 $approval->comment = $comment;
                 $approval->save();
 
-                if ($approval->sub_type === 'commencement') {
+                if (ProjectApprovalBusinessService::supports($approval->sub_type)) {
+                    app(ProjectApprovalBusinessService::class)->sync(
+                        $approval,
+                        $request->user(),
+                        ApprovalRecord::STATUS_REJECTED
+                    );
+                } elseif ($approval->sub_type === 'commencement') {
                     app(CommencementOrderService::class)->syncApprovalBusinessState(
                         $approval,
                         $request->user(),

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Concerns\ClearsListCache;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectStageRequest;
 use App\Models\{Project, ProjectContract, ProjectMaterial, ProjectSettlement, PurchaseOrder, Supplier, ContractPaymentNode, WorkOrder, RepairOrder, ProjectStageLog, WarrantyDeposit, DiskFolder, DiskSetting};
+use App\Services\ProjectApprovalBusinessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -85,57 +86,59 @@ class ProjectController extends Controller
         $memberIds = $data['member_ids'] ?? [];
         unset($data['member_ids']);
 
-        Cache::forget('projects:dashboard_summary');
-        $project = Project::create($data + ['stage' => 'mobilization', 'status' => 'pending', 'progress' => 0]);
+        $project = DB::transaction(function () use ($data, $memberIds, $request) {
+            $project = Project::create($data + ['stage' => 'mobilization', 'status' => 'pending', 'progress' => 0]);
 
-        // 添加团队成员
-        foreach ($memberIds as $userId) {
-            DB::table('project_members')->insert([
-                'project_id' => $project->id, 'user_id' => $userId,
-                'role' => 'worker', 'status' => 'active',
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
-        }
-        $managerId = $data['manager_id'] ?? null;
-        if ($managerId && !in_array($managerId, $memberIds)) {
-            DB::table('project_members')->insert([
-                'project_id' => $project->id, 'user_id' => $data['manager_id'],
-                'role' => 'manager', 'status' => 'active',
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
-        }
-
-        // 网盘已初始化时自动为此项目创建文件夹
-        if (DiskSetting::get('initialized', false)) {
-            try {
-                $projectRoot = DiskFolder::where('scope', 'project_root')->first();
-                if ($projectRoot) {
-                    $folder = DiskFolder::firstOrCreate(
-                        ['project_id' => $project->id],
-                        [
-                            'parent_id'    => $projectRoot->id,
-                            'name'         => $project->name,
-                            'path'         => $projectRoot->path,
-                            'created_by'   => $data['manager_id'] ?? $request->user()->id,
-                            'is_system'    => false,
-                            'scope'        => 'none',
-                            'is_protected' => false,
-                            'system_type'  => 'project_doc',
-                        ]
-                    );
-                    if ($folder->wasRecentlyCreated) {
-                        $folder->path = $projectRoot->path . $folder->id . '/';
-                        $folder->save();
-                    }
-                }
-            } catch (\Exception $e) {
-                // 网盘文件夹创建失败不影响项目创建
-                \Log::warning('项目网盘文件夹创建失败', ['project_id' => $project->id, 'error' => $e->getMessage()]);
+            foreach ($memberIds as $userId) {
+                DB::table('project_members')->insert([
+                    'project_id' => $project->id, 'user_id' => $userId,
+                    'role' => 'worker', 'status' => 'active',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
             }
-        }
+            $managerId = $data['manager_id'] ?? null;
+            if ($managerId && !in_array($managerId, $memberIds)) {
+                DB::table('project_members')->insert([
+                    'project_id' => $project->id, 'user_id' => $data['manager_id'],
+                    'role' => 'manager', 'status' => 'active',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+
+            if (DiskSetting::get('initialized', false)) {
+                try {
+                    $projectRoot = DiskFolder::where('scope', 'project_root')->first();
+                    if ($projectRoot) {
+                        $folder = DiskFolder::firstOrCreate(
+                            ['project_id' => $project->id],
+                            [
+                                'parent_id'    => $projectRoot->id,
+                                'name'         => $project->name,
+                                'path'         => $projectRoot->path,
+                                'created_by'   => $data['manager_id'] ?? $request->user()->id,
+                                'is_system'    => false,
+                                'scope'        => 'none',
+                                'is_protected' => false,
+                                'system_type'  => 'project_doc',
+                            ]
+                        );
+                        if ($folder->wasRecentlyCreated) {
+                            $folder->path = $projectRoot->path . $folder->id . '/';
+                            $folder->save();
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('项目网盘文件夹创建失败', ['project_id' => $project->id, 'error' => $e->getMessage()]);
+                }
+            }
+
+            app(ProjectApprovalBusinessService::class)->createProjectCreateApproval($project, $request->user());
+            return $project;
+        });
+        Cache::forget('projects:dashboard_summary');
         $this->clearListCache('projects:index');
 
-        return response()->json(['code' => 0, 'message' => '创建成功', 'data' => $project->load('customer', 'manager')]);
+        return response()->json(['code' => 0, 'message' => '项目已创建，等待审批', 'data' => $project->load('customer', 'manager')]);
     }
 
     public function update(Request $request, Project $project): JsonResponse

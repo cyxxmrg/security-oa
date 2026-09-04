@@ -33,6 +33,9 @@ class ApprovalFlowService
         'purchase_payment'     => '采购',
         'commencement'         => '开工',
         'process_acceptance'   => '工序验收',
+        'project_create'       => '项目',
+        'project_stage'        => '项目',
+        'project_close'        => '项目',
         'material-request'     => '采购',
         'referral_settlement'  => '报销',
     ];
