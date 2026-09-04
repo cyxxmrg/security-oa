@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
+use App\Models\ReferralSettlement;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -128,6 +129,18 @@ class FinanceApprovalController extends Controller
                                 'reject_reason' => null,
                             ]);
                     }
+                    if ($approval->sub_type === 'referral_settlement' && !empty($payload['settlement_id'])) {
+                        $updated = ReferralSettlement::whereKey($payload['settlement_id'])
+                            ->where('status', 'pending')
+                            ->update([
+                                'status' => 'approved',
+                                'approved_by' => $user->id,
+                                'approved_at' => now(),
+                            ]);
+                        if ($updated !== 1) {
+                            throw new \RuntimeException('居间费结算单已变更，审批未同步');
+                        }
+                    }
                 }
 
                 $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部审批节点已完成）' : '已通过，已转交下一节点';
@@ -163,6 +176,19 @@ class FinanceApprovalController extends Controller
             if ($approval->sub_type === 'purchase_payment') {
                 app(\App\Services\PurchaseFlowService::class)
                     ->syncApprovalBusinessState($approval, $request->user(), 'rejected', $comment);
+            }
+            if ($approval->sub_type === 'referral_settlement') {
+                $payload = $approval->payload ?? [];
+                if (!empty($payload['settlement_id'])) {
+                    ReferralSettlement::whereKey($payload['settlement_id'])
+                        ->where('status', 'pending')
+                        ->update([
+                            'status' => 'cancelled',
+                            'approved_by' => null,
+                            'approved_at' => null,
+                            'notes' => $comment,
+                        ]);
+                }
             }
 
             return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);

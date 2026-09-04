@@ -10,11 +10,11 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 商机池
     Route::prefix('opps')->group(function () {
-        Route::get('/', [SalesController::class, 'oppsIndex']);
-        Route::get('kanban', [SalesController::class, 'oppsKanban']);
-        Route::get('stage-options', [SalesController::class, 'oppsStageOptions']);
-        Route::get('funnel', [SalesController::class, 'oppsFunnel']);
-        Route::get('lost-reasons', [SalesController::class, 'oppsLostReasons']);
+        Route::get('/', [SalesController::class, 'oppsIndex'])->middleware('permission:sales.*');
+        Route::get('kanban', [SalesController::class, 'oppsKanban'])->middleware('permission:sales.*');
+        Route::get('stage-options', [SalesController::class, 'oppsStageOptions'])->middleware('permission:sales.*');
+        Route::get('funnel', [SalesController::class, 'oppsFunnel'])->middleware('permission:sales.*');
+        Route::get('lost-reasons', [SalesController::class, 'oppsLostReasons'])->middleware('permission:sales.*');
         Route::post('/', [SalesController::class, 'oppsStore'])->middleware('permission:sales.create|sales.edit');
         Route::patch('{opp}/stage', [SalesController::class, 'oppsUpdateStage'])->middleware(['owns:opp', 'permission:sales.create|sales.edit']);
         Route::post('{opp}/mark-won', [SalesController::class, 'oppsMarkWon'])->middleware(['owns:opp', 'permission:sales.create|sales.edit']);
@@ -52,8 +52,8 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 报价单
     Route::prefix('quotes')->group(function () {
-        Route::get('/', [SalesController::class, 'quotesIndex']);
-        Route::get('status-options', [SalesController::class, 'quotesStatusOptions']);
+        Route::get('/', [SalesController::class, 'quotesIndex'])->middleware('permission:sales.*');
+        Route::get('status-options', [SalesController::class, 'quotesStatusOptions'])->middleware('permission:sales.*');
         Route::post('/', [SalesController::class, 'quotesStore'])->middleware('permission:sales.create|sales.edit');
         Route::put('{quote}/status', [SalesController::class, 'quotesUpdateStatus'])->middleware(['owns:quote', 'permission:sales.create|sales.edit']);
         Route::post('{quote}/items', [SalesController::class, 'quotesStoreItems'])->middleware(['owns:quote', 'permission:sales.create|sales.edit']);
@@ -68,7 +68,7 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 报价单 quotations 别名
     Route::prefix('quotations')->group(function () {
-        Route::get('/', [SalesController::class, 'quotesIndex']);
+        Route::get('/', [SalesController::class, 'quotesIndex'])->middleware('permission:sales.*');
         Route::get('{quotation}', [SalesController::class, 'quotationsShow'])->middleware('owns:quotation');
         Route::put('{quotation}', [SalesController::class, 'quotationsUpdate'])->middleware(['owns:quotation', 'permission:sales.create|sales.edit']);
         Route::delete('{quotation}', [SalesController::class, 'quotationsDestroy'])->middleware(['owns:quotation', 'permission:sales.create|sales.edit']);
@@ -79,7 +79,7 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 推荐人
     Route::prefix('referrers')->group(function () {
-        Route::get('/', [SalesController::class, 'referrersIndex']);
+        Route::get('/', [SalesController::class, 'referrersIndex'])->middleware('permission:sales.*');
         Route::post('/', [SalesController::class, 'referrersStore'])->middleware('permission:sales.create|sales.edit');
         Route::get('{referrer}', [SalesController::class, 'referrersShow'])->middleware('owns:referrer');
         Route::put('{referrer}', [SalesController::class, 'referrersUpdate'])->middleware(['owns:referrer', 'permission:sales.create|sales.edit']);
@@ -88,7 +88,7 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 项目池
     Route::prefix('pool')->group(function () {
-        Route::get('/', [SalesController::class, 'poolIndex']);
+        Route::get('/', [SalesController::class, 'poolIndex'])->middleware('permission:sales.*');
         Route::post('{pool}/convert-to-project', [SalesController::class, 'poolConvertToProject'])->middleware(['owns:pool', 'permission:sales.create|sales.edit']);
         Route::get('{pool}', [SalesController::class, 'poolShow'])->middleware('owns:pool');
         Route::put('{pool}', [SalesController::class, 'poolUpdate'])->middleware(['owns:pool', 'permission:sales.create|sales.edit']);
@@ -96,7 +96,7 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 跟进记录 + 附件
     Route::prefix('follow-ups')->group(function () {
-        Route::get('/', [SalesController::class, 'followUpsIndex']);
+        Route::get('/', [SalesController::class, 'followUpsIndex'])->middleware('permission:sales.*');
         Route::post('/', [SalesController::class, 'followUpsStore'])->middleware('permission:sales.create|sales.edit');
         Route::get('attachments/{att}/download', [SalesController::class, 'followUpsDownloadAttachment'])->middleware('owns:att');
         Route::delete('attachments/{att}', [SalesController::class, 'followUpsDeleteAttachment'])->middleware(['owns:att', 'permission:sales.create|sales.edit']);
@@ -108,11 +108,11 @@ Route::prefix('sales')->middleware(['auth:sanctum', 'ensure_business'])->group(f
 
     // 推荐人居间费结算
     Route::prefix('referral-settlements')->group(function () {
-        Route::get('/', [SalesController::class, 'referralSettlementsIndex']);
-        Route::get('stats', [SalesController::class, 'referralSettlementsStats']);
-        Route::post('{settlement}/approve', [SalesController::class, 'referralSettlementsApprove'])->middleware('permission:sales.create|sales.edit');
-        Route::post('{settlement}/pay', [SalesController::class, 'referralSettlementsPay'])->middleware('permission:sales.create|sales.edit');
-        Route::get('{settlement}', [SalesController::class, 'referralSettlementsShow']);
+        Route::get('/', [SalesController::class, 'referralSettlementsIndex'])->middleware('permission:sales.settlement|finance.view');
+        Route::get('stats', [SalesController::class, 'referralSettlementsStats'])->middleware('permission:sales.settlement|finance.view');
+        Route::post('{settlement}/approve', [SalesController::class, 'referralSettlementsApprove'])->middleware('permission:sales.settlement|sales.create|sales.edit');
+        Route::post('{settlement}/pay', [SalesController::class, 'referralSettlementsPay'])->middleware('permission:finance.pay');
+        Route::get('{settlement}', [SalesController::class, 'referralSettlementsShow'])->middleware('permission:sales.settlement|finance.view');
     });
 
     // 产品库

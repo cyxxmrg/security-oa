@@ -146,7 +146,7 @@ class SalesController extends Controller
 
     public function quotesIndex(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->paginateQuotes($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->paginateQuotes($request, $request->user())]);
     }
 
     public function quotesShow(Quotation $quote): JsonResponse
@@ -204,7 +204,7 @@ class SalesController extends Controller
 
     public function referrersIndex(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->paginateReferrers($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->paginateReferrers($request, $request->user())]);
     }
 
     public function referrersShow(Referrer $referrer): JsonResponse
@@ -230,7 +230,7 @@ class SalesController extends Controller
 
     public function poolIndex(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->paginatePool($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->paginatePool($request, $request->user())]);
     }
 
     public function poolShow(ProjectPool $pool): JsonResponse
@@ -250,7 +250,7 @@ class SalesController extends Controller
 
     public function followUpsIndex(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->paginateFollowUps($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->paginateFollowUps($request, $request->user())]);
     }
 
     public function followUpsShow(SalesFollowUp $followUp): JsonResponse
@@ -333,7 +333,7 @@ class SalesController extends Controller
 
     public function referralSettlementsIndex(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->paginateReferralSettlements($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->paginateReferralSettlements($request, $request->user())]);
     }
 
     public function referralSettlementsShow(ReferralSettlement $settlement): JsonResponse
@@ -344,7 +344,11 @@ class SalesController extends Controller
     public function referralSettlementsApprove(Request $request, ReferralSettlement $settlement): JsonResponse
     {
         try {
-            return response()->json(['code' => 0, 'data' => $this->svc->approveReferralSettlement($request, $settlement)]);
+            return response()->json([
+                'code' => 0,
+                'message' => '已提交财务审批',
+                'data' => $this->svc->approveReferralSettlement($request, $settlement),
+            ]);
         } catch (\RuntimeException $e) {
             return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
         }
@@ -361,7 +365,7 @@ class SalesController extends Controller
 
     public function referralSettlementsStats(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->referralSettlementsStats($request)]);
+        return response()->json(['code' => 0, 'data' => $this->svc->referralSettlementsStats($request, $request->user())]);
     }
 
     /**

@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
@@ -298,9 +299,10 @@ class SalesService
     // === 报价单 Quotation ===
     // ============================================================
 
-    public function paginateQuotes(Request $request)
+    public function paginateQuotes(Request $request, User $user)
     {
         $query = Quotation::with(['opportunity', 'createdBy']);
+        $this->applyOpportunityOwnerScope($query, $user);
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('keyword')) $query->where('quote_no', 'like', "%{$request->keyword}%");
         $perPage = max(1, min((int)($request->per_page ?? 15), 200));
@@ -336,6 +338,8 @@ class SalesService
             'items.*.unit_price' => 'required|numeric|min:0',
             'items.*.remark'  => 'nullable|string',
         ]);
+        $opportunity = Opportunity::findOrFail($data['opportunity_id']);
+        $this->assertOpportunityAccess($opportunity, $request->user());
         $data['code'] = 'Q' . date('Ymd') . strtoupper(Str::random(6));
         $data['status'] = 'draft';
         $data['created_by'] = $request->user()->id;
@@ -454,6 +458,7 @@ class SalesService
 
     public function createOppQuotation(Request $request, Opportunity $opp): Quotation
     {
+        $this->assertOpportunityAccess($opp, $request->user());
         $data = $request->validate([
             'items'              => 'required|array|min:1',
             'items.*.name'       => 'required|string',
@@ -480,9 +485,10 @@ class SalesService
     // === 推荐人 Referrer ===
     // ============================================================
 
-    public function paginateReferrers(Request $request)
+    public function paginateReferrers(Request $request, User $user)
     {
         $query = Referrer::with('customer');
+        $this->applyOwnerScope($query, $user, 'owner_id');
         if ($request->filled('keyword')) {
             $kw = $request->keyword;
             $query->where(function ($q) use ($kw) {
@@ -543,9 +549,10 @@ class SalesService
     // === 项目池 ProjectPool ===
     // ============================================================
 
-    public function paginatePool(Request $request)
+    public function paginatePool(Request $request, User $user)
     {
         $query = ProjectPool::with(['opportunity', 'customer']);
+        $this->applyOpportunityOwnerScope($query, $user);
         if ($request->filled('status')) $query->where('status', $request->status);
         $perPage = max(1, min((int)($request->per_page ?? 15), 200));
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
@@ -647,10 +654,31 @@ class SalesService
     // === 跟进记录 SalesFollowUp + 附件 ===
     // ============================================================
 
-    public function paginateFollowUps(Request $request)
+    public function paginateFollowUps(Request $request, User $user)
     {
         $query = SalesFollowUp::with(['user']);
-        if ($request->filled('opportunity_id')) $query->where('target_id', $request->opportunity_id)->where('target_type', 'opportunity');
+        if ($request->filled('opportunity_id')) {
+            $query->where('target_id', $request->opportunity_id)
+                ->whereIn('target_type', ['opp', 'opportunity']);
+        }
+        if (!$this->canViewTeam($user)) {
+            $opportunityIds = Opportunity::query();
+            $this->applyOwnerScope($opportunityIds, $user, 'sales_id');
+            $quoteIds = Quotation::query()->whereHas('opportunity', function ($q) use ($user) {
+                $this->applyOwnerScope($q, $user, 'sales_id');
+            })->select('id');
+            $query->where(function ($q) use ($user, $opportunityIds, $quoteIds) {
+                $q->where('user_id', $user->id)
+                    ->orWhere(function ($target) use ($opportunityIds) {
+                        $target->whereIn('target_type', ['opp', 'opportunity'])
+                            ->whereIn('target_id', $opportunityIds->select('id'));
+                    })
+                    ->orWhere(function ($target) use ($quoteIds) {
+                        $target->where('target_type', 'quote')
+                            ->whereIn('target_id', $quoteIds);
+                    });
+            });
+        }
         $perPage = max(1, min((int)($request->per_page ?? 15), 200));
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
@@ -663,10 +691,8 @@ class SalesService
     public function createFollowUp(Request $request): SalesFollowUp
     {
         $data = $request->validate([
-            // V1.2.10: 表里没有 opportunity_id, 用 target_type+target_id
             'opportunity_id' => 'nullable|integer|exists:opportunities,id',
-            'lead_id'        => 'nullable|integer|exists:sales_leads,id',
-            'target_type'    => 'nullable|string|in:opportunity,lead,customer',
+            'target_type'    => 'nullable|string|in:opp,opportunity,quote,customer',
             'target_id'      => 'nullable|integer',
             'content'        => 'required|string',
             'next_action_at' => 'nullable|date',
@@ -678,23 +704,34 @@ class SalesService
         ]);
         $data['user_id'] = $request->user()->id;
 
-        // V1.2.10: 前端传 opportunity_id 时, 拆成 target_type+target_id
+        if ($request->filled('lead_id')) {
+            throw ValidationException::withMessages([
+                'lead_id' => '线索模块已下线，请改用 opportunity_id',
+            ]);
+        }
+
         if (!empty($data['opportunity_id'])) {
-            $data['target_type'] = 'opportunity';
+            $data['target_type'] = 'opp';
             $data['target_id']   = $data['opportunity_id'];
             unset($data['opportunity_id']);
-        } elseif (!empty($data['lead_id'])) {
-            $data['target_type'] = 'lead';
-            $data['target_id']   = $data['lead_id'];
-            unset($data['lead_id']);
         } else {
-            $data['target_type'] = $data['target_type'] ?? 'opportunity';
+            $data['target_type'] = $data['target_type'] ?? 'opp';
         }
+        if (empty($data['target_id'])) {
+            throw ValidationException::withMessages([
+                'target_id' => '必须指定跟进目标',
+            ]);
+        }
+        $this->assertFollowUpTargetAccess($data['target_type'], (int) $data['target_id'], $request->user());
         // method 映射到 contact_method
         if (!empty($data['method']) && empty($data['contact_method'])) {
             $data['contact_method'] = $data['method'];
             unset($data['method']);
         }
+        if (array_key_exists('next_follow_at', $data) && !array_key_exists('next_action_at', $data)) {
+            $data['next_action_at'] = $data['next_follow_at'];
+        }
+        unset($data['next_follow_at']);
 
         return SalesFollowUp::create($data)->load(['user']);
     }
@@ -714,6 +751,10 @@ class SalesService
             $data['contact_method'] = $data['method'];
             unset($data['method']);
         }
+        if (array_key_exists('next_follow_at', $data) && !array_key_exists('next_action_at', $data)) {
+            $data['next_action_at'] = $data['next_follow_at'];
+        }
+        unset($data['next_follow_at']);
         $followUp->update($data);
         return $followUp->fresh();
     }
@@ -788,9 +829,10 @@ class SalesService
     // === 推荐结算 ReferralSettlement ===
     // ============================================================
 
-    public function paginateReferralSettlements(Request $request)
+    public function paginateReferralSettlements(Request $request, User $user)
     {
         $query = ReferralSettlement::with(['referrer', 'opportunity', 'approver']);
+        $this->applySettlementScope($query, $user);
         if ($request->filled('status')) $query->where('status', $request->status);
         $perPage = max(1, min((int)($request->per_page ?? 15), 200));
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
@@ -803,75 +845,92 @@ class SalesService
 
     public function approveReferralSettlement(Request $request, ReferralSettlement $settlement): ReferralSettlement
     {
-        if ($settlement->status !== 'pending') {
-            throw new RuntimeException('仅待审批状态可审批');
-        }
+        $this->assertSettlementOwner($settlement, $request->user());
         $data = $request->validate(['comment' => 'nullable|string|max:500']);
-        $settlement->update([
-            'status'        => 'approved',
-            'approver_id'   => $request->user()->id,
-            'approved_at'   => now(),
-            'approve_remark'=> $data['comment'] ?? null,
-        ]);
-
-        // 同步/创建审批中心记录
-        try {
+        return DB::transaction(function () use ($request, $settlement, $data) {
+            $settlement = ReferralSettlement::lockForUpdate()->findOrFail($settlement->id);
+            if ($settlement->status !== 'pending') {
+                throw new RuntimeException('仅待审批状态可提交财务审批');
+            }
             $approval = ApprovalRecord::where('type', 'finance')
                 ->where('sub_type', 'referral_settlement')
-                ->whereRaw("payload->>'settlement_id' = ?", [(string) $settlement->id])
+                ->whereJsonContains('payload->settlement_id', $settlement->id)
+                ->whereIn('status', [ApprovalRecord::STATUS_PENDING, ApprovalRecord::STATUS_APPROVED])
                 ->first();
-
-            if (!$approval) {
-                // 之前没同步，自动创建一条已通过的记录
-                $code = \App\Services\ApprovalNumberService::next('FIN');
-                ApprovalRecord::create([
-                    'code'                => $code,
-                    'type'                => 'finance',
-                    'sub_type'            => 'referral_settlement',
-                    'title'               => "销售提成审批 - {$settlement->id}",
-                    'status'              => ApprovalRecord::STATUS_APPROVED,
-                    'amount'              => $settlement->amount,
-                    'applicant_id'        => $settlement->created_by,
-                    'current_approver_id' => $request->user()->id,
-                    'payload'             => ['settlement_id' => $settlement->id],
-                ]);
-            } else {
-                $approval->status = ApprovalRecord::STATUS_APPROVED;
-                $approval->current_approver_id = $request->user()->id;
-                $approval->save();
+            if ($approval) {
+                return $settlement->fresh();
             }
-        } catch (\Exception $e) {
-            \Log::warning('销售提成审批同步失败', ['settlement_id' => $settlement->id, 'error' => $e->getMessage()]);
-        }
-
-        return $settlement->fresh();
+            $applicant = User::find($settlement->created_by) ?? $request->user();
+            $flowService = app(ApprovalFlowService::class);
+            $template = $flowService->resolveTemplate('referral_settlement', 'finance');
+            if (!$template) {
+                throw new RuntimeException('未找到居间费对应的启用财务审批流程');
+            }
+            $flowData = $flowService->initFlow(
+                $template,
+                $applicant,
+                $data['comment'] ?? '提交居间费结算审批'
+            );
+            ApprovalRecord::create([
+                'code' => \App\Services\ApprovalNumberService::next('FIN'),
+                'type' => 'finance',
+                'sub_type' => 'referral_settlement',
+                'title' => "销售居间费结算 #{$settlement->id}",
+                'priority' => 'normal',
+                'status' => ApprovalRecord::STATUS_PENDING,
+                'amount' => $settlement->amount,
+                'applicant_id' => $applicant->id,
+                'current_approver_id' => $flowData['current_approver_id'],
+                'payload' => [
+                    'settlement_id' => $settlement->id,
+                    'opportunity_id' => $settlement->opportunity_id,
+                    'referrer_id' => $settlement->referrer_id,
+                    'comment' => $data['comment'] ?? null,
+                    '_approval_flow' => $flowData['definition'],
+                ],
+                'flow' => $flowData['flow'],
+            ]);
+            return $settlement->fresh();
+        });
     }
 
     public function payReferralSettlement(Request $request, ReferralSettlement $settlement): ReferralSettlement
     {
-        if ($settlement->status !== 'approved') {
-            throw new RuntimeException('仅已审批状态可付款');
-        }
         $data = $request->validate([
             'paid_amount' => 'nullable|numeric|min:0',
             'pay_voucher' => 'nullable|string',
             'payment_no'  => 'nullable|string|max:100',
             'notes'       => 'nullable|string',
         ]);
-        $settlement->update([
-            'status'        => 'paid',
-            'paid_by'       => $request->user()->id,
-            'paid_at'       => now(),
-            'payment_voucher'=> $data['pay_voucher'] ?? null,
-            'payment_no'    => $data['payment_no'] ?? null,
-            'notes'         => $data['notes'] ?? $settlement->notes,
-        ]);
-        return $settlement->fresh();
+        return DB::transaction(function () use ($request, $settlement, $data) {
+            $settlement = ReferralSettlement::lockForUpdate()->findOrFail($settlement->id);
+            if ($settlement->status !== 'approved') {
+                throw new RuntimeException('仅已审批状态可付款');
+            }
+            $hasApprovedFlow = ApprovalRecord::where('type', 'finance')
+                ->where('sub_type', 'referral_settlement')
+                ->whereJsonContains('payload->settlement_id', $settlement->id)
+                ->where('status', ApprovalRecord::STATUS_APPROVED)
+                ->exists();
+            if (!$hasApprovedFlow) {
+                throw new RuntimeException('未找到已完成的财务审批记录，不能付款');
+            }
+            $settlement->update([
+                'status' => 'paid',
+                'paid_by' => $request->user()->id,
+                'paid_at' => now(),
+                'payment_voucher' => $data['pay_voucher'] ?? null,
+                'payment_no' => $data['payment_no'] ?? null,
+                'notes' => $data['notes'] ?? $settlement->notes,
+            ]);
+            return $settlement->fresh();
+        });
     }
 
-    public function referralSettlementsStats(Request $request): array
+    public function referralSettlementsStats(Request $request, User $user): array
     {
         $base = ReferralSettlement::query();
+        $this->applySettlementScope($base, $user);
         if ($request->filled('referrer_id')) $base->where('referrer_id', $request->referrer_id);
         $paid = (clone $base)->where('status', 'paid');
         return [
@@ -887,13 +946,75 @@ class SalesService
     // === 内部辅助 ===
     // ============================================================
 
+    private function canViewTeam(User $user): bool
+    {
+        return method_exists($user, 'hasRole')
+            && ($user->hasRole('admin') || $user->hasRole('manager') || $user->hasRole('sales_manager'));
+    }
+
+    private function applyOpportunityOwnerScope($query, User $user): void
+    {
+        if (!$this->canViewTeam($user)) {
+            $query->whereHas('opportunity', function ($opportunityQuery) use ($user) {
+                $this->applyOwnerScope($opportunityQuery, $user, 'sales_id');
+            });
+        }
+    }
+
+    private function applySettlementScope($query, User $user): void
+    {
+        if ($this->canViewTeam($user) || (method_exists($user, 'hasRole') && $user->hasRole('finance'))) {
+            return;
+        }
+        $query->whereHas('opportunity', function ($opportunityQuery) use ($user) {
+            $this->applyOwnerScope($opportunityQuery, $user, 'sales_id');
+        });
+    }
+
+    private function assertOpportunityAccess(Opportunity $opp, User $user): void
+    {
+        if ($this->canViewTeam($user)) {
+            return;
+        }
+        $query = Opportunity::query()->whereKey($opp->getKey());
+        $this->applyOwnerScope($query, $user, 'sales_id');
+        if (!$query->exists()) {
+            throw new RuntimeException('无权操作其他销售负责的商机');
+        }
+    }
+
+    private function assertFollowUpTargetAccess(string $targetType, int $targetId, User $user): void
+    {
+        if (in_array($targetType, ['opp', 'opportunity'], true)) {
+            $this->assertOpportunityAccess(Opportunity::findOrFail($targetId), $user);
+            return;
+        }
+        if ($targetType === 'quote') {
+            $quote = Quotation::with('opportunity')->findOrFail($targetId);
+            $this->assertOpportunityAccess($quote->opportunity, $user);
+            return;
+        }
+        if (!DB::table('customers')->where('id', $targetId)->exists()) {
+            throw ValidationException::withMessages(['target_id' => '跟进客户不存在']);
+        }
+    }
+
+    private function assertSettlementOwner(ReferralSettlement $settlement, User $user): void
+    {
+        if ($this->canViewTeam($user)) {
+            return;
+        }
+        $opportunity = $settlement->opportunity ?: Opportunity::findOrFail($settlement->opportunity_id);
+        $this->assertOpportunityAccess($opportunity, $user);
+    }
+
     /**
-     * 应用 owner 隔离 (admin/manager 跳过)
+     * 应用 owner 隔离 (admin/manager/sales_manager 跳过)
      */
     private function applyOwnerScope($query, User $user, string $col): void
     {
         if ($user && method_exists($user, 'hasRole')
-            && !($user->hasRole('admin') || $user->hasRole('manager'))) {
+            && !($user->hasRole('admin') || $user->hasRole('manager') || $user->hasRole('sales_manager'))) {
             $query->where(function ($q) use ($user, $col) {
                 $q->where($col, $user->id);
                 if ($user->department_id) {

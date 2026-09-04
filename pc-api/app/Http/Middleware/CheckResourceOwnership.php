@@ -80,6 +80,36 @@ class CheckResourceOwnership
             return $next($request);
         }
 
+        if ($classBase === 'quotation') {
+            $opportunity = $model->relationLoaded('opportunity')
+                ? $model->opportunity
+                : $model->load('opportunity')->opportunity;
+            if ($this->matchesUser($model->created_by, $user)
+                || ($opportunity && $this->matchesUser($opportunity->sales_id, $user))) {
+                return $next($request);
+            }
+            return $this->deny($model, $user, '报价单不属于当前用户负责的商机');
+        }
+
+        if ($classBase === 'salesfollowup') {
+            if ($this->matchesUser($model->user_id, $user)) {
+                return $next($request);
+            }
+            $targetType = strtolower((string) $model->target_type);
+            if (in_array($targetType, ['opp', 'opportunity'], true)) {
+                $opportunity = \App\Models\Opportunity::find($model->target_id);
+                if ($opportunity && $this->matchesUser($opportunity->sales_id, $user)) {
+                    return $next($request);
+                }
+            } elseif ($targetType === 'quote') {
+                $quote = \App\Models\Quotation::with('opportunity')->find($model->target_id);
+                if ($quote?->opportunity && $this->matchesUser($quote->opportunity->sales_id, $user)) {
+                    return $next($request);
+                }
+            }
+            return $this->deny($model, $user, '跟进记录不属于当前用户负责的销售对象');
+        }
+
         // 3) 附件走 follow_up 关联
         if ($classBase === 'salesfollowupattachment' || strtolower($param) === 'att') {
             $att = $model;
@@ -97,15 +127,28 @@ class CheckResourceOwnership
         // 4) 普通资源 — owner 匹配
         $ownerId = $model->{$ownerField} ?? null;
         if ($ownerId === null) {
+            if (in_array($classBase, ['quotation', 'referrer', 'salesfollowup'], true)) {
+                return $this->deny($model, $user, '资源未配置负责人，无法确认访问范围');
+            }
             return $next($request);
         }
-        if ((int) $ownerId === (int) $user->id) {
+        if ($this->matchesUser($ownerId, $user)) {
             return $next($request);
         }
 
+        return $this->deny($model, $user, "无权操作该资源 (需要 owner_id={$ownerId} 或销售经理权限)");
+    }
+
+    private function matchesUser(?int $ownerId, $user): bool
+    {
+        return $ownerId !== null && (int) $ownerId === (int) $user->id;
+    }
+
+    private function deny($model, $user, string $message): Response
+    {
         return response()->json([
             'code'    => 403,
-            'message' => "无权操作该资源 (需要 owner_id={$ownerId} 或销售经理权限)",
+            'message' => $message,
         ], 403);
     }
 
