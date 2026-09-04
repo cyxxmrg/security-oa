@@ -20,6 +20,13 @@ use App\Models\RepairMethod;
 use App\Models\RepairOrder;
 use App\Models\ServiceOrder;
 use App\Models\User;
+use App\Models\ConstructionTeam;
+use App\Models\ExternalConstructionWork;
+use App\Models\Rectification;
+use App\Models\Warranty;
+use App\Models\WarrantyServiceOrder;
+use App\Models\WorkOrder;
+use App\Models\WorkProcess;
 use App\Support\AuthScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -87,32 +94,32 @@ class DashboardService
         $today = Carbon::today();
 
         // ===== 基础计数 =====
-        $total    = (int) DB::table('warranties')->count();
-        $active   = (int) DB::table('warranties')->where('status', 'active')->count();
-        $expired  = (int) DB::table('warranties')->where('status', 'expired')->count();
+        $total    = (int) Warranty::query()->count();
+        $active   = (int) Warranty::query()->where('status', 'active')->count();
+        $expired  = (int) Warranty::query()->where('status', 'expired')->count();
 
         // 7 天内到期（仍 active）
-        $expiring7 = (int) DB::table('warranties')
+        $expiring7 = (int) Warranty::query()
             ->where('status', 'active')
             ->whereBetween('end_date', [$today, $today->copy()->addDays(7)])
             ->count();
 
         // 30 天内到期（仍 active）
-        $expiring30 = (int) DB::table('warranties')
+        $expiring30 = (int) Warranty::query()
             ->where('status', 'active')
             ->whereBetween('end_date', [$today, $today->copy()->addDays(30)])
             ->count();
 
         // 续期率 = renewed / (expired + renewed)  （分母 0 时返回 0）
-        $renewed = (int) DB::table('warranties')->where('status', 'renewed')->count();
+        $renewed = (int) Warranty::query()->where('status', 'renewed')->count();
         $denom   = $expired + $renewed;
         $renewalRate = $denom > 0 ? round($renewed / $denom * 100, 1) : 0.0;
 
         // 平均周期
-        $avgPeriodMonths = (float) DB::table('warranties')->avg('period_months');
+        $avgPeriodMonths = (float) Warranty::query()->avg('period_months');
 
         // 按 warranty_type 分布
-        $byTypeRows = DB::table('warranties')
+        $byTypeRows = Warranty::query()
             ->select('warranty_type', DB::raw('count(*) as cnt'))
             ->groupBy('warranty_type')
             ->pluck('cnt', 'warranty_type')
@@ -139,10 +146,10 @@ class DashboardService
     public function getMaintenanceStats(): array
     {
         $weekStart = now()->subDays(7)->toDateString();
-        $woThisWeek = (int) DB::table('work_orders')->where('created_at', '>=', $weekStart . ' 00:00:00')->count();
-        $woInProgress = (int) DB::table('work_orders')->where('status', 'in_progress')->count();
-        $woConvertedTotal = (int) DB::table('work_orders')->where('status', 'converted_to_repair')->count();
-        $woConvertedThisWeek = (int) DB::table('work_orders')
+        $woThisWeek = (int) WorkOrder::query()->where('created_at', '>=', $weekStart . ' 00:00:00')->count();
+        $woInProgress = (int) WorkOrder::query()->where('status', 'in_progress')->count();
+        $woConvertedTotal = (int) WorkOrder::query()->where('status', 'converted_to_repair')->count();
+        $woConvertedThisWeek = (int) WorkOrder::query()
             ->where('status', 'converted_to_repair')
             ->where('updated_at', '>=', $weekStart . ' 00:00:00')
             ->count();
@@ -188,7 +195,7 @@ class DashboardService
             ->sum('total_cost');
 
         // 项目预算总额 (活跃+已完成+质保中) — 用 budget_* 字段合计
-        $totalContract = (float) DB::table('projects')
+        $totalContract = (float) Project::query()
             ->whereIn('status', ['active', 'completed', 'warranty'])
             ->sum(DB::raw('COALESCE(budget_device,0) + COALESCE(budget_material,0) + COALESCE(budget_labor,0) + COALESCE(budget_outsource,0) + COALESCE(budget_other,0)'));
 
@@ -481,12 +488,12 @@ class DashboardService
         return [
             'active_projects'      => (int) Project::where('status', 'in_progress')->count(),
             'total_projects'       => (int) Project::count(),
-            'warranty_active'      => (int) DB::table('warranties')->where('status', 'active')->count(),
-            'warranty_expiring_30' => (int) DB::table('warranties')
+            'warranty_active'      => (int) Warranty::query()->where('status', 'active')->count(),
+            'warranty_expiring_30' => (int) Warranty::query()
                 ->where('status', 'active')
                 ->whereBetween('end_date', [$today, $today->copy()->addDays(30)])
                 ->count(),
-            'warranty_expired'     => (int) DB::table('warranties')->where('status', 'expired')->count(),
+            'warranty_expired'     => (int) Warranty::query()->where('status', 'expired')->count(),
             'pending_approvals'    => (int) ApprovalRecord::where('status', ApprovalRecord::STATUS_PENDING)->count(),
             // Notification 是 morphTo — 通过 notifiable_id + notifiable_type 收件人过滤
             'pending_todos'        => (int) Notification::query()
@@ -506,31 +513,7 @@ class DashboardService
      */
     private function overviewKpiSingle(): array
     {
-        $today = Carbon::today();
-        $todayEnd = $today->copy()->addDays(30);
-        $userId = auth()->id() ?? 0;
-
-        $sql = "
-            SELECT 'active_projects' AS k, (SELECT COUNT(*) FROM projects WHERE status='in_progress')::int AS v
-            UNION ALL SELECT 'total_projects', (SELECT COUNT(*) FROM projects)::int
-            UNION ALL SELECT 'warranty_active', (SELECT COUNT(*) FROM warranties WHERE status='active')::int
-            UNION ALL SELECT 'warranty_expiring_30', (SELECT COUNT(*) FROM warranties WHERE status='active' AND end_date BETWEEN ? AND ?)::int
-            UNION ALL SELECT 'warranty_expired', (SELECT COUNT(*) FROM warranties WHERE status='expired')::int
-            UNION ALL SELECT 'pending_approvals', (SELECT COUNT(*) FROM approval_records_v2 WHERE status='pending')::int
-            UNION ALL SELECT 'pending_todos', (SELECT COUNT(*) FROM notifications WHERE notifiable_id=? AND notifiable_type=? AND read_at IS NULL)::int
-        ";
-        $rows = DB::select($sql, [$today->toDateString(), $todayEnd->toDateString(), $userId, addslashes(User::class)]);
-
-        $kpi = [];
-        foreach ($rows as $r) {
-            $kpi[$r->k] = (int) $r->v;
-        }
-        // monthly_revenue 是 float, 单独算 (SUM 浮点)
-        $kpi['monthly_revenue'] = (float) DB::table('receivables')
-            ->where('received_date', '>=', Carbon::now()->startOfMonth())
-            ->sum('received_amount');
-
-        return $kpi;
+        return $this->overviewKpi();
     }
 
     /**
@@ -574,31 +557,26 @@ class DashboardService
     {
         $today = Carbon::today();
 
-        $byStatus = DB::table('warranties')
+        $byStatus = Warranty::query()
             ->select('status', DB::raw('count(*) as cnt'))
             ->groupBy('status')
             ->pluck('cnt', 'status')
             ->toArray();
 
-        $expiringSoon = DB::table('warranties as w')
-            ->leftJoin('customers as c', 'c.id', '=', 'w.customer_id')
-            ->where('w.status', 'active')
-            ->whereBetween('w.end_date', [$today, $today->copy()->addDays(30)])
-            ->orderBy('w.end_date', 'asc')
+        $expiringSoon = Warranty::query()
+            ->with('customer:id,name')
+            ->where('status', 'active')
+            ->whereBetween('end_date', [$today, $today->copy()->addDays(30)])
+            ->orderBy('end_date', 'asc')
             ->limit(10)
-            ->get([
-                'w.id', 'w.warranty_no',
-                'c.name as customer_name',
-                'w.end_date',
-                DB::raw('(w.end_date::date - CURRENT_DATE::date) as days_left'),
-            ])
+            ->get(['id', 'warranty_no', 'customer_id', 'end_date'])
             ->map(function ($r) {
                 return [
                     'id'            => (int) $r->id,
                     'warranty_no'   => $r->warranty_no,
-                    'customer_name' => $r->customer_name,
+                    'customer_name' => $r->customer?->name,
                     'end_date'      => $r->end_date,
-                    'days_left'     => (int) $r->days_left,
+                    'days_left'     => Carbon::today()->diffInDays(Carbon::parse($r->end_date), false),
                 ];
             })
             ->all();
@@ -621,17 +599,12 @@ class DashboardService
      */
     private function overviewConstructionHealth(): array
     {
-        $rows = DB::select("
-            SELECT 'active_teams' AS k, (SELECT COUNT(*) FROM construction_teams WHERE status='active')::int AS v
-            UNION ALL SELECT 'ongoing_processes', (SELECT COUNT(*) FROM work_processes WHERE status='active')::int
-            UNION ALL SELECT 'pending_rectifications', (SELECT COUNT(*) FROM rectifications WHERE status='pending')::int
-            UNION ALL SELECT 'open_external_works', (SELECT COUNT(*) FROM external_construction_works WHERE status='open')::int
-        ");
-        $out = [];
-        foreach ($rows as $r) {
-            $out[$r->k] = (int) $r->v;
-        }
-        return $out;
+        return [
+            'active_teams'          => (int) ConstructionTeam::query()->where('status', 'active')->count(),
+            'ongoing_processes'     => (int) WorkProcess::query()->where('status', 'active')->count(),
+            'pending_rectifications' => (int) Rectification::query()->where('status', 'pending')->count(),
+            'open_external_works'   => (int) ExternalConstructionWork::query()->where('status', 'open')->count(),
+        ];
     }
 
     /**
@@ -674,30 +647,28 @@ class DashboardService
      */
     private function monthlyRevenueTrend(): array
     {
+        $start = Carbon::now()->subMonths(5)->startOfMonth();
+        $end = Carbon::now()->endOfMonth();
+        $revenue = Receivable::query()
+            ->whereBetween('received_date', [$start, $end])
+            ->selectRaw("TO_CHAR(received_date, 'YYYY-MM') AS month_key, COALESCE(SUM(received_amount), 0) AS total")
+            ->groupBy('month_key')
+            ->pluck('total', 'month_key')
+            ->toArray();
+        $expense = Payable::query()
+            ->whereBetween('paid_date', [$start, $end])
+            ->selectRaw("TO_CHAR(paid_date, 'YYYY-MM') AS month_key, COALESCE(SUM(paid_amount), 0) AS total")
+            ->groupBy('month_key')
+            ->pluck('total', 'month_key')
+            ->toArray();
+
         $result = [];
-        $rows = DB::select("
-            WITH months AS (
-                SELECT to_char(d, 'YYYY-MM') AS month_key, d AS month_start, (d + INTERVAL '1 month - 1 day')::date AS month_end
-                FROM generate_series(
-                    date_trunc('month', CURRENT_DATE - INTERVAL '5 months'),
-                    date_trunc('month', CURRENT_DATE),
-                    INTERVAL '1 month'
-                ) AS d
-            )
-            SELECT
-                m.month_key AS month,
-                COALESCE((SELECT SUM(received_amount) FROM receivables
-                          WHERE received_date BETWEEN m.month_start AND m.month_end), 0) / 10000 AS revenue,
-                COALESCE((SELECT SUM(paid_amount) FROM payables
-                          WHERE paid_date BETWEEN m.month_start AND m.month_end), 0) / 10000 AS expense
-            FROM months m
-            ORDER BY m.month_key ASC
-        ");
-        foreach ($rows as $r) {
+        for ($i = 5; $i >= 0; $i--) {
+            $month = Carbon::now()->subMonths($i)->format('Y-m');
             $result[] = [
-                'month'   => $r->month,
-                'revenue' => round((float) $r->revenue, 2),
-                'expense' => round((float) $r->expense, 2),
+                'month'   => $month,
+                'revenue' => round((float) ($revenue[$month] ?? 0) / 10000, 2),
+                'expense' => round((float) ($expense[$month] ?? 0) / 10000, 2),
             ];
         }
         return $result;
@@ -805,8 +776,8 @@ class DashboardService
             ->limit(6)
             ->get(['id', 'project_id', 'work_date', 'content', 'status']);
 
-        // 3) 质保工单（最近 4 条）— 无 Eloquent Model，走 DB::table
-        $warrantyOrders = DB::table('warranty_service_orders')
+        // 3) 质保工单（最近 4 条）
+        $warrantyOrders = WarrantyServiceOrder::query()
             ->orderByDesc('updated_at')
             ->limit(4)
             ->get(['id', 'order_no', 'title', 'status', 'updated_at']);
