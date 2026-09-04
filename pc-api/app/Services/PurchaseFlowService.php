@@ -105,6 +105,12 @@ class PurchaseFlowService
     public function createRequirement(array $data, ?User $user = null): PurchaseRequirement
     {
         return DB::transaction(function () use ($data, $user) {
+            if (!$user) {
+                throw new \DomainException('创建人不能为空');
+            }
+            if ((float) ($data['quantity'] ?? 0) <= 0) {
+                throw new \DomainException('采购需求数量必须大于 0');
+            }
             $req = PurchaseRequirement::create([
                 'name'        => $data['name'] ?? null,
                 'project_id'  => $data['project_id'] ?? null,
@@ -120,7 +126,8 @@ class PurchaseFlowService
                 'status'      => self::STATUS_REQ_PENDING,
                 'source_type' => $data['source_type'] ?? 'manual',
                 'source_id'   => $data['source_id'] ?? null,
-                'creator'     => $user?->name ?? ($data['creator'] ?? null),
+                'creator'     => $user->name,
+                'created_by'  => $user->id,
                 'remark'      => $data['remark'] ?? null,
             ]);
             $this->log(self::ENTITY_REQUIREMENT, $req->id, null, self::STATUS_REQ_PENDING, 'submit', $user, "从 {$req->source_type} 创建需求");
@@ -136,18 +143,31 @@ class PurchaseFlowService
     public function approveRequirement(int $reqId, ?User $user = null, string $remark = ''): PurchaseRequirement
     {
         return DB::transaction(function () use ($reqId, $user, $remark) {
-            $req = PurchaseRequirement::lockForUpdate()->findOrFail($reqId);
+            if (!$user) {
+                throw new \DomainException('审批人不能为空');
+            }
+            $approval = ApprovalRecord::where('type', 'operation')
+                ->where('sub_type', 'purchase_requirement')
+                ->whereJsonContains('payload->requirement_id', $reqId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $flowService = app(ApprovalFlowService::class);
+            $flowResult = $flowService->advanceFlow($approval, $user, $remark ?: '同意');
+            $req = PurchaseRequirement::allData()->lockForUpdate()->findOrFail($reqId);
             if ($req->status !== self::STATUS_REQ_PENDING) {
                 throw new \RuntimeException("需求当前状态 {$req->status} 不可审批");
             }
-            $req->update([
-                'status'        => self::STATUS_REQ_APPROVED,
-                'reviewed_by'   => $user?->id,
-                'reviewed_at'   => now(),
-                'review_remark' => $remark,
-            ]);
-            $this->log(self::ENTITY_REQUIREMENT, $req->id, self::STATUS_REQ_PENDING, self::STATUS_REQ_APPROVED, 'approve', $user, $remark);
-            $this->syncRequirementApprovalStatus($req, $user, ApprovalRecord::STATUS_APPROVED, $remark);
+            $approval->forceFill([
+                'flow' => $flowResult['flow'],
+                'status' => $flowResult['status'],
+                'current_approver_id' => $flowResult['current_approver_id'],
+                'comment' => $remark ?: '同意',
+            ])->save();
+
+            if ($flowResult['status'] === ApprovalRecord::STATUS_APPROVED) {
+                $this->syncApprovalBusinessState($approval, $user, self::STATUS_REQ_APPROVED, $remark);
+            }
             return $req->fresh();
         });
     }
@@ -168,6 +188,7 @@ class PurchaseFlowService
                 'priority'       => $data['priority'] ?? 'medium',
                 'status'         => self::STATUS_PLAN_DRAFT,
                 'submitter_id'   => $user?->id,
+                'created_by'     => $user?->id,
                 'remark'         => $data['remark'] ?? null,
             ]);
             // 关联多个需求 (用 merge_plan_id)
@@ -192,16 +213,46 @@ class PurchaseFlowService
     public function submitPlan(int $planId, ?User $user = null): PurchasePlan
     {
         return DB::transaction(function () use ($planId, $user) {
+            if (!$user) {
+                throw new \DomainException('提交人不能为空');
+            }
             $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
             if ($plan->status !== self::STATUS_PLAN_DRAFT) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可提交");
             }
             $plan->update([
                 'status'       => self::STATUS_PLAN_SUBMITTED,
-                'submitter_id' => $user?->id ?? $plan->submitter_id,
+                'submitter_id' => $user->id,
                 'submitted_at' => now(),
             ]);
             $this->log(self::ENTITY_PLAN, $plan->id, self::STATUS_PLAN_DRAFT, self::STATUS_PLAN_SUBMITTED, 'submit', $user);
+
+            $template = app(ApprovalFlowService::class)->resolveTemplate('purchase_plan', 'operation');
+            if (!$template) {
+                throw new \DomainException('未找到采购计划的启用审批流程模板');
+            }
+            $flowService = app(ApprovalFlowService::class);
+            $flowData = $flowService->initFlow($template, $user, '提交采购计划审批');
+            ApprovalRecord::create([
+                'code' => $this->nextCode('PLAN-AP'),
+                'type' => 'operation',
+                'sub_type' => 'purchase_plan',
+                'title' => '[采购计划] ' . ($plan->code ?? '#' . $plan->id) . ' 审批 (¥' . number_format($plan->total_amount ?? 0, 2) . ')',
+                'priority' => 'normal',
+                'status' => ApprovalRecord::STATUS_PENDING,
+                'amount' => $plan->total_amount ?? 0,
+                'applicant_id' => $user->id,
+                'current_approver_id' => $flowData['current_approver_id'],
+                'payload' => [
+                    'plan_id' => $plan->id,
+                    'plan_no' => $plan->code,
+                    'title' => $plan->title,
+                    'total_amount' => $plan->total_amount,
+                    'project_id' => $plan->project_id,
+                    '_approval_flow' => $flowData['definition'],
+                ],
+                'flow' => $flowData['flow'],
+            ]);
             return $plan->fresh();
         });
     }
@@ -209,17 +260,30 @@ class PurchaseFlowService
     public function approvePlan(int $planId, ?User $user = null, string $remark = ''): PurchasePlan
     {
         return DB::transaction(function () use ($planId, $user, $remark) {
-            $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            if (!$user) {
+                throw new \DomainException('审批人不能为空');
+            }
+            $approval = ApprovalRecord::where('type', 'operation')
+                ->where('sub_type', 'purchase_plan')
+                ->whereJsonContains('payload->plan_id', $planId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $flowService = app(ApprovalFlowService::class);
+            $flowResult = $flowService->advanceFlow($approval, $user, $remark ?: '同意');
+            $plan = PurchasePlan::allData()->lockForUpdate()->findOrFail($planId);
             if ($plan->status !== self::STATUS_PLAN_SUBMITTED) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可审批");
             }
-            $plan->update([
-                'status'         => self::STATUS_PLAN_APPROVED,
-                'approver_id'    => $user?->id,
-                'approved_at'    => now(),
-                'approve_remark' => $remark,
-            ]);
-            $this->log(self::ENTITY_PLAN, $plan->id, self::STATUS_PLAN_SUBMITTED, self::STATUS_PLAN_APPROVED, 'approve', $user, $remark);
+            $approval->forceFill([
+                'flow' => $flowResult['flow'],
+                'status' => $flowResult['status'],
+                'current_approver_id' => $flowResult['current_approver_id'],
+                'comment' => $remark ?: '同意',
+            ])->save();
+            if ($flowResult['status'] === ApprovalRecord::STATUS_APPROVED) {
+                $this->syncApprovalBusinessState($approval, $user, self::STATUS_PLAN_APPROVED, $remark);
+            }
             return $plan->fresh();
         });
     }
@@ -265,6 +329,9 @@ class PurchaseFlowService
     public function submitOrder(int $orderId, ?User $user = null): PurchaseOrder
     {
         return DB::transaction(function () use ($orderId, $user) {
+            if (!$user) {
+                throw new \DomainException('提交人不能为空');
+            }
             $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
             if ($po->status !== self::STATUS_ORDER_DRAFT) {
                 throw new \RuntimeException("采购单当前状态 {$po->status} 不可提交");
@@ -287,6 +354,12 @@ class PurchaseFlowService
                     ->whereJsonContains('payload->purchase_order_id', $po->id)
                     ->exists();
                 if (!$exists) {
+                    $flowService = app(ApprovalFlowService::class);
+                    $template = $flowService->resolveTemplate('purchase_order', 'operation');
+                    if (!$template) {
+                        throw new \DomainException('未找到采购订单的启用审批流程模板');
+                    }
+                    $flowData = $flowService->initFlow($template, $user, '提交采购订单审批');
                     ApprovalRecord::create([
                         'code'         => $this->nextCode('PO-AP'),
                         'type'         => 'operation',
@@ -295,19 +368,15 @@ class PurchaseFlowService
                         'priority'     => 'normal',
                         'status'       => ApprovalRecord::STATUS_PENDING,
                         'amount'       => $po->total_amount,
-                        'applicant_id' => $user?->id ?? $po->created_by ?? 1,
-                        'current_approver_id' => 1,
-                        'payload'      => $payload,
-                        'flow'         => [[
-                            'operator' => $user?->name ?? '—',
-                            'action'   => 'submit',
-                            'time'     => now()->toDateTimeString(),
-                        ]],
+                        'applicant_id' => $user->id,
+                        'current_approver_id' => $flowData['current_approver_id'],
+                        'payload'      => array_merge($payload, ['_approval_flow' => $flowData['definition']]),
+                        'flow'         => $flowData['flow'],
                     ]);
                 }
             } catch (\Throwable $e) {
-                // 审批中心创建失败不影响 PO 提交
-                \Log::warning('PO submit -> approval failed: ' . $e->getMessage());
+                \Log::error('PO submit -> approval failed: ' . $e->getMessage());
+                throw $e;
             }
             return $po->fresh();
         });
@@ -316,33 +385,32 @@ class PurchaseFlowService
     public function approveOrder(int $orderId, ?User $user = null, string $remark = ''): PurchaseOrder
     {
         return DB::transaction(function () use ($orderId, $user, $remark) {
-            $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
+            if (!$user) {
+                throw new \DomainException('审批人不能为空');
+            }
+            $approval = ApprovalRecord::where('type', 'operation')
+                ->where('sub_type', 'purchase_order')
+                ->whereJsonContains('payload->purchase_order_id', $orderId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $flowService = app(ApprovalFlowService::class);
+            $flowResult = $flowService->advanceFlow($approval, $user, $remark ?: '同意');
+            $po = PurchaseOrder::allData()->lockForUpdate()->findOrFail($orderId);
             if ($po->status !== self::STATUS_ORDER_PENDING) {
                 throw new \RuntimeException("采购单当前状态 {$po->status} 不可审批");
             }
-            $po->update([
-                'status'      => self::STATUS_ORDER_APPROVED,
-                'approved_by' => $user?->id,
-                'approved_at' => now(),
-            ]);
-            $this->log(self::ENTITY_ORDER, $po->id, self::STATUS_ORDER_PENDING, self::STATUS_ORDER_APPROVED, 'approve', $user, $remark);
+            $approval->forceFill([
+                'flow' => $flowResult['flow'],
+                'status' => $flowResult['status'],
+                'current_approver_id' => $flowResult['current_approver_id'],
+                'comment' => $remark ?: '同意',
+            ])->save();
+            if ($flowResult['status'] !== ApprovalRecord::STATUS_APPROVED) {
+                return $po->fresh();
+            }
 
-            // 同步应付账款 (auto create)
-            $payable = Payable::firstOrCreate(
-                ['po_id' => $po->id, 'supplier_id' => $po->supplier_id],
-                [
-                    'project_id'  => $po->project_id,
-                    'amount'      => $po->total_amount,
-                    'paid_amount' => 0,
-                    'remaining_amount' => $po->total_amount,
-                    'due_date'    => today()->addDays(30),
-                    'payment_term'=> '月结30天',
-                    'status'      => 'pending',
-                    'ref_no'      => 'AP-' . date('Ymd') . '-' . str_pad($po->id, 4, '0', STR_PAD_LEFT),
-                    'description' => "采购单 {$po->po_no} 应付",
-                    'tender_id'   => $po->tender_id,
-                ]
-            );
+            $this->syncApprovalBusinessState($approval, $user, self::STATUS_ORDER_APPROVED, $remark);
             return $po->fresh();
         });
     }
@@ -411,11 +479,17 @@ class PurchaseFlowService
     public function createPaymentRequest(int $contractId, array $data, ?User $user = null): PurchasePaymentRequest
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
+            if (!$user) {
+                throw new \DomainException('申请人不能为空');
+            }
             $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
             if (!in_array($c->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
                 throw new \RuntimeException("合同当前状态 {$c->status} 不可申请付款");
             }
             $amount = (float) $data['amount'];
+            if ($amount <= 0) {
+                throw new \RuntimeException('付款申请金额必须大于 0');
+            }
             $existingAmount = (float) PurchasePaymentRequest::where('contract_id', $c->id)
                 ->whereIn('status', [
                     self::STATUS_PAYREQ_PENDING,
@@ -435,11 +509,12 @@ class PurchaseFlowService
                 'request_date' => $data['request_date'] ?? today(),
                 'status'       => self::STATUS_PAYREQ_PENDING,
                 'applicant'    => $user?->name,
-                'applicant_id' => $user?->id,
+                'applicant_id' => $user->id,
                 'reason'       => $data['reason'] ?? null,
-                'payable_id'   => $c->purchaseOrder?->id ? Payable::where('po_id', $c->purchase_order_id)->value('id') : null,
+                'payable_id'   => $c->purchaseOrder?->id ? Payable::allData()->where('po_id', $c->purchase_order_id)->value('id') : null,
             ]);
             $this->log(self::ENTITY_PAYMENT_REQ, $req->id, null, self::STATUS_PAYREQ_PENDING, 'submit', $user, $req->stage_label ? "[{$req->stage_label}] 付款申请" : '付款申请');
+            $this->syncPaymentRequestApprovalRecord($req, $user);
             return $req;
         });
     }
@@ -447,61 +522,112 @@ class PurchaseFlowService
     public function approvePaymentRequest(int $reqId, ?User $user = null, string $remark = ''): PurchasePaymentRequest
     {
         return DB::transaction(function () use ($reqId, $user, $remark) {
-            $req = PurchasePaymentRequest::lockForUpdate()->findOrFail($reqId);
+            if (!$user) {
+                throw new \DomainException('审批人不能为空');
+            }
+            $approval = ApprovalRecord::where('type', 'finance')
+                ->where('sub_type', 'purchase_payment')
+                ->whereJsonContains('payload->payment_request_id', $reqId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $flowResult = app(ApprovalFlowService::class)->advanceFlow($approval, $user, $remark ?: '同意');
+            $req = PurchasePaymentRequest::allData()->lockForUpdate()->findOrFail($reqId);
             if ($req->status !== self::STATUS_PAYREQ_PENDING) {
                 throw new \RuntimeException('只有待审批的付款申请可以审批');
             }
-            $req->update([
-                'status'         => self::STATUS_PAYREQ_APPROVED,
-                'approver_id'    => $user?->id,
-                'approved_at'    => now(),
-                'approve_remark' => $remark,
-            ]);
-            $this->log(self::ENTITY_PAYMENT_REQ, $req->id, self::STATUS_PAYREQ_PENDING, self::STATUS_PAYREQ_APPROVED, 'approve', $user, $remark);
-
-            // 同步到审批中心
-            try {
-                $exists = ApprovalRecord::where('type', 'finance')
-                    ->where('sub_type', 'purchase_payment')
-                    ->where('status', 'pending')
-                    ->whereJsonContains('payload->payment_request_id', $req->id)
-                    ->exists();
-                if (!$exists) {
-                    $flowService = app(\App\Services\ApprovalFlowService::class);
-                    $template = $flowService->resolveTemplate('purchase_payment');
-                    $applicant = User::find($req->applicant_id ?? $user?->id ?? 1);
-                    $flowData = $template
-                        ? $flowService->initFlow($template, $applicant, '提交付款审批')
-                        : ['current_approver_id' => 1, 'flow' => [[
-                            'operator' => $user?->name ?? '—',
-                            'action'   => 'submit',
-                            'time'     => now()->toDateTimeString(),
-                            'comment'  => '提交付款审批',
-                        ]]];
-
-                    ApprovalRecord::create([
-                        'code'                => $this->nextCode('PAY-AP'),
-                        'type'                => 'finance',
-                        'sub_type'            => 'purchase_payment',
-                        'title'               => "[付款] {$req->code} ¥{$req->amount} 财务审批",
-                        'priority'            => 'high',
-                        'status'              => ApprovalRecord::STATUS_PENDING,
-                        'amount'              => $req->amount,
-                        'applicant_id'        => $req->applicant_id ?? $user?->id ?? 1,
-                        'current_approver_id' => $flowData['current_approver_id'],
-                        'payload'             => [
-                            'payment_request_id' => $req->id,
-                            'contract_id'        => $req->contract_id,
-                            'supplier_id'        => $req->supplier_id,
-                        ],
-                        'flow'                => $flowData['flow'],
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                \Log::warning('Payment request -> approval failed: ' . $e->getMessage());
+            $approval->forceFill([
+                'flow' => $flowResult['flow'],
+                'status' => $flowResult['status'],
+                'current_approver_id' => $flowResult['current_approver_id'],
+                'comment' => $remark ?: '同意',
+            ])->save();
+            if ($flowResult['status'] === ApprovalRecord::STATUS_APPROVED) {
+                $this->syncApprovalBusinessState($approval, $user, self::STATUS_PAYREQ_APPROVED, $remark);
             }
             return $req->fresh();
         });
+    }
+
+    public function syncApprovalBusinessState(ApprovalRecord $approval, User $user, string $status, string $comment = ''): void
+    {
+        $payload = is_array($approval->payload) ? $approval->payload : [];
+        $subType = (string) $approval->sub_type;
+
+        if ($subType === 'purchase_requirement' && !empty($payload['requirement_id'])) {
+            $requirement = PurchaseRequirement::allData()->lockForUpdate()->findOrFail((int) $payload['requirement_id']);
+            if ($requirement->status !== self::STATUS_REQ_PENDING) {
+                throw new \RuntimeException("需求当前状态 {$requirement->status} 不可更新为 {$status}");
+            }
+            $requirement->update([
+                'status'        => $status,
+                'reviewed_by'   => $user->id,
+                'reviewed_at'   => now(),
+                'review_remark' => $comment,
+            ]);
+            $this->log(self::ENTITY_REQUIREMENT, $requirement->id, self::STATUS_REQ_PENDING, $status, $status === self::STATUS_REQ_APPROVED ? 'approve' : 'reject', $user, $comment);
+            return;
+        }
+
+        if ($subType === 'purchase_plan' && !empty($payload['plan_id'])) {
+            $plan = PurchasePlan::allData()->lockForUpdate()->findOrFail((int) $payload['plan_id']);
+            if ($plan->status !== self::STATUS_PLAN_SUBMITTED) {
+                throw new \RuntimeException("计划当前状态 {$plan->status} 不可更新为 {$status}");
+            }
+            $plan->update([
+                'status'         => $status,
+                'approver_id'    => $user->id,
+                'approved_at'    => now(),
+                'approve_remark' => $comment,
+            ]);
+            $this->log(self::ENTITY_PLAN, $plan->id, self::STATUS_PLAN_SUBMITTED, $status, $status === self::STATUS_PLAN_APPROVED ? 'approve' : 'reject', $user, $comment);
+            return;
+        }
+
+        if ($subType === 'purchase_order' && !empty($payload['purchase_order_id'])) {
+            $order = PurchaseOrder::allData()->lockForUpdate()->findOrFail((int) $payload['purchase_order_id']);
+            if ($order->status !== self::STATUS_ORDER_PENDING) {
+                throw new \RuntimeException("采购单当前状态 {$order->status} 不可更新为 {$status}");
+            }
+            $order->update([
+                'status'      => $status,
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+            ]);
+            $this->log(self::ENTITY_ORDER, $order->id, self::STATUS_ORDER_PENDING, $status, $status === self::STATUS_ORDER_APPROVED ? 'approve' : 'reject', $user, $comment);
+            if ($status === self::STATUS_ORDER_APPROVED) {
+                Payable::allData()->firstOrCreate(
+                    ['po_id' => $order->id, 'supplier_id' => $order->supplier_id],
+                    [
+                        'project_id'       => $order->project_id,
+                        'amount'           => $order->total_amount,
+                        'paid_amount'      => 0,
+                        'remaining_amount' => $order->total_amount,
+                        'due_date'         => today()->addDays(30),
+                        'payment_term'     => '月结30天',
+                        'status'           => 'pending',
+                        'ref_no'           => 'AP-' . date('Ymd') . '-' . str_pad($order->id, 4, '0', STR_PAD_LEFT),
+                        'description'      => "采购单 {$order->po_no} 应付",
+                        'tender_id'        => $order->tender_id,
+                    ]
+                );
+            }
+            return;
+        }
+
+        if ($subType === 'purchase_payment' && !empty($payload['payment_request_id'])) {
+            $request = PurchasePaymentRequest::allData()->lockForUpdate()->findOrFail((int) $payload['payment_request_id']);
+            if ($request->status !== self::STATUS_PAYREQ_PENDING) {
+                throw new \RuntimeException("付款申请当前状态 {$request->status} 不可更新为 {$status}");
+            }
+            $request->update([
+                'status'         => $status,
+                'approver_id'    => $user->id,
+                'approved_at'    => now(),
+                'approve_remark' => $comment,
+            ]);
+            $this->log(self::ENTITY_PAYMENT_REQ, $request->id, self::STATUS_PAYREQ_PENDING, $status, $status === self::STATUS_PAYREQ_APPROVED ? 'approve' : 'reject', $user, $comment);
+        }
     }
 
     /**
@@ -510,7 +636,7 @@ class PurchaseFlowService
     public function executePayment(int $reqId, array $data, ?User $user = null): PurchasePayment
     {
         return DB::transaction(function () use ($reqId, $data, $user) {
-            $req = PurchasePaymentRequest::with('payments')->lockForUpdate()->findOrFail($reqId);
+            $req = PurchasePaymentRequest::allData()->with('payments')->lockForUpdate()->findOrFail($reqId);
             if ($req->status !== self::STATUS_PAYREQ_APPROVED) {
                 throw new \RuntimeException('付款申请未审批或已付款，不能执行付款');
             }
@@ -529,7 +655,7 @@ class PurchaseFlowService
 
             $payable = null;
             if ($req->payable_id) {
-                $payable = Payable::lockForUpdate()->find($req->payable_id);
+            $payable = Payable::allData()->lockForUpdate()->find($req->payable_id);
                 if ($payable && (float) $payable->remaining_amount <= 0.0001 && (float) $payable->paid_amount <= 0.0001 && (float) $payable->amount > 0) {
                     $payable->update([
                         'remaining_amount' => $payable->amount,
@@ -699,7 +825,7 @@ class PurchaseFlowService
                     'related_type'      => 'purchase_shipment',
                     'party_type'        => 'supplier',
                     'party_id'          => $sh->supplier_id,
-                    'operator_id'       => $user?->id ?? 1,
+                    'operator_id'       => $user?->id,
                     'remark'            => "采购到货 {$sh->code} / {$contractItem->material}",
                 ]);
                 $firstRecord ??= $lastRecord;
@@ -735,9 +861,9 @@ class PurchaseFlowService
             $contract = $sh->contract ? PurchaseContract::lockForUpdate()->find($sh->contract->id) : null;
             if ($contract && $contract->plan_id) {
                 $reqIds = \DB::table('purchase_requirements')->where('merged_plan_id', $contract->plan_id)->pluck('id');
-                PurchaseRequirement::whereIn('id', $reqIds)->lockForUpdate()->get()->each->update(['status' => self::STATUS_REQ_FULFILLED]);
-                PurchasePlan::lockForUpdate()->where('id', $contract->plan_id)->update(['status' => self::STATUS_PLAN_FULFILLED]);
-                PurchaseOrder::lockForUpdate()->where('id', $contract->purchase_order_id)->update(['status' => self::STATUS_ORDER_FULFILLED]);
+                PurchaseRequirement::allData()->whereIn('id', $reqIds)->lockForUpdate()->get()->each->update(['status' => self::STATUS_REQ_FULFILLED]);
+                PurchasePlan::allData()->lockForUpdate()->where('id', $contract->plan_id)->update(['status' => self::STATUS_PLAN_FULFILLED]);
+                PurchaseOrder::allData()->lockForUpdate()->where('id', $contract->purchase_order_id)->update(['status' => self::STATUS_ORDER_FULFILLED]);
             }
             return $sh->fresh();
         });
@@ -770,6 +896,7 @@ class PurchaseFlowService
             }
 
             $model->update(['status' => 'cancelled']);
+            $this->cancelApproval($entityType, $entityId, $user, $remark);
             $this->log($entityType, $entityId, $from, 'cancelled', 'cancel', $user, $remark);
             return ['cancelled' => true, 'entity_type' => $entityType, 'entity_id' => $entityId, 'from' => $from];
         });
@@ -840,6 +967,9 @@ class PurchaseFlowService
             $this->assertContractEditable($contract);
             $qty = (float)($data['qty'] ?? 0);
             $unitPrice = (float)($data['unit_price'] ?? 0);
+            if ($qty <= 0) {
+                throw new \RuntimeException('合同清单数量必须大于 0');
+            }
             $item = PurchaseContractItem::create([
                 'contract_id' => $contractId,
                 'inventory_item_id' => $data['inventory_item_id'] ?? null,
@@ -864,6 +994,9 @@ class PurchaseFlowService
             $item = PurchaseContractItem::where('contract_id', $contractId)->where('id', $itemId)->lockForUpdate()->firstOrFail();
             $qty = isset($data['qty']) ? (float)$data['qty'] : (float)$item->qty;
             $unitPrice = isset($data['unit_price']) ? (float)$data['unit_price'] : (float)$item->unit_price;
+            if ($qty <= 0) {
+                throw new \RuntimeException('合同清单数量必须大于 0');
+            }
             $item->update([
                 'inventory_item_id' => $data['inventory_item_id'] ?? $item->inventory_item_id,
                 'material'   => $data['material'] ?? $item->material,
@@ -1062,6 +1195,7 @@ class PurchaseFlowService
 
     public function listShipping(int $contractId): array
     {
+        PurchaseContract::findOrFail($contractId);
         $rows = PurchaseShippingPlan::with('contractItem')
             ->where('contract_id', $contractId)
             ->orderBy('expected_at')
@@ -1120,22 +1254,37 @@ class PurchaseFlowService
         $rootReqId = null;
         switch ($entityType) {
             case self::ENTITY_REQUIREMENT:
-                $rootReqId = $entityId;
+                $rootReqId = PurchaseRequirement::whereKey($entityId)->value('id');
                 break;
             case self::ENTITY_PLAN:
-                $rootReqId = PurchasePlan::where('id', $entityId)->value('requirement_id');
+                $rootReqId = PurchasePlan::whereKey($entityId)->value('requirement_id');
                 if (!$rootReqId) {
-                    // 通过 merged_plan_id 反查
                     $rootReqId = PurchaseRequirement::where('merged_plan_id', $entityId)->value('id');
                 }
                 break;
             case self::ENTITY_ORDER:
                 $po = PurchaseOrder::find($entityId);
-                $rootReqId = $po?->source_requirement_id ?? PurchasePlan::where('id', $po?->plan_id)->value('requirement_id');
+                $rootReqId = $po?->source_requirement_id ?? PurchasePlan::whereKey($po?->plan_id)->value('requirement_id');
                 break;
             case self::ENTITY_CONTRACT:
                 $c = PurchaseContract::find($entityId);
-                $rootReqId = $c?->plan?->requirement_id ?? PurchasePlan::where('id', $c?->plan_id)->value('requirement_id');
+                $rootReqId = $c?->plan?->requirement_id ?? PurchasePlan::whereKey($c?->plan_id)->value('requirement_id');
+                break;
+            case self::ENTITY_PAYMENT_REQ:
+                $paymentRequest = PurchasePaymentRequest::find($entityId);
+                $contract = $paymentRequest ? PurchaseContract::find($paymentRequest->contract_id) : null;
+                $rootReqId = $contract?->plan?->requirement_id ?? PurchasePlan::whereKey($contract?->plan_id)->value('requirement_id');
+                break;
+            case self::ENTITY_PAYMENT:
+                $payment = PurchasePayment::find($entityId);
+                $paymentRequest = $payment ? PurchasePaymentRequest::find($payment->payment_request_id) : null;
+                $contract = $paymentRequest ? PurchaseContract::find($paymentRequest->contract_id) : null;
+                $rootReqId = $contract?->plan?->requirement_id ?? PurchasePlan::whereKey($contract?->plan_id)->value('requirement_id');
+                break;
+            case self::ENTITY_SHIPMENT:
+                $shipment = PurchaseShipment::find($entityId);
+                $contract = $shipment ? PurchaseContract::find($shipment->contract_id) : null;
+                $rootReqId = $contract?->plan?->requirement_id ?? PurchasePlan::whereKey($contract?->plan_id)->value('requirement_id');
                 break;
         }
         $rootReqId = $rootReqId ?: 0;
@@ -1167,7 +1316,6 @@ class PurchaseFlowService
             array_map(fn($id) => ['type' => self::ENTITY_ORDER, 'id' => $id], $poIds),
             array_map(fn($id) => ['type' => self::ENTITY_CONTRACT, 'id' => $id], $contractIds),
             array_map(fn($id) => ['type' => self::ENTITY_PAYMENT_REQ, 'id' => $id], $payReqIds),
-            [['type' => self::ENTITY_PAYMENT, 'id' => 0]],  // 占位
         );
         $payIds = $pays->pluck('id')->toArray();
         $shipIds = $shipments->pluck('id')->toArray();
@@ -1201,94 +1349,128 @@ class PurchaseFlowService
     }
 
 
-    private function syncRequirementApprovalRecord(PurchaseRequirement $requirement, ?User $user = null): void
+    public function syncRequirementApprovalRecord(PurchaseRequirement $requirement, ?User $user = null): void
     {
-        try {
-            $exists = ApprovalRecord::where('type', 'operation')
-                ->where('sub_type', 'purchase_requirement')
-                ->where('payload->requirement_id', $requirement->id)
-                ->exists();
-            if ($exists) {
-                return;
-            }
-            ApprovalRecord::create([
-                'code'                => $this->nextCode('REQ-AP'),
-                'type'                => 'operation',
-                'sub_type'            => 'purchase_requirement',
-                'title'               => "[采购需求] {$requirement->code} {$requirement->material} x {$requirement->quantity}{$requirement->unit}",
-                'priority'            => match ($requirement->priority) {
-                    'urgent' => 'high',
-                    'high' => 'high',
-                    'low' => 'low',
-                    default => 'normal',
-                },
-                'status'              => ApprovalRecord::STATUS_PENDING,
-                'amount'              => $requirement->budget,
-                'applicant_id'        => $user?->id ?? 1,
-                'current_approver_id' => $this->resolveApproverId('purchase_requirement', $user),
-                'payload'             => [
-                    'requirement_id' => $requirement->id,
-                    'requirement_code' => $requirement->code,
-                    'project_id' => $requirement->project_id,
-                    'inventory_item_id' => $requirement->inventory_item_id,
-                    'material' => $requirement->material,
-                    'spec' => $requirement->spec,
-                    'quantity' => (float) $requirement->quantity,
-                    'unit' => $requirement->unit,
-                    'need_date' => $requirement->need_date?->format('Y-m-d'),
-                    'remark' => $requirement->remark,
-                ],
-                'flow'         => [[
-                    'operator' => $user?->name ?? '系统',
-                    'action'   => 'submit',
-                    'time'     => now()->toDateTimeString(),
-                    'comment'  => '提交采购需求审批',
-                ]],
-            ]);
-        } catch (\Throwable $e) {
-            \Log::warning('Purchase flow requirement -> approval failed: ' . $e->getMessage());
+        if (!$user) {
+            throw new \DomainException('申请人不能为空');
         }
+        $exists = ApprovalRecord::where('type', 'operation')
+            ->where('sub_type', 'purchase_requirement')
+            ->where('payload->requirement_id', $requirement->id)
+            ->exists();
+        if ($exists) {
+            return;
+        }
+        $flowService = app(ApprovalFlowService::class);
+        $template = $flowService->resolveTemplate('purchase_requirement', 'operation');
+        if (!$template) {
+            throw new \DomainException('未找到采购需求的启用审批流程模板');
+        }
+        $flowData = $flowService->initFlow($template, $user, '提交采购需求审批');
+        ApprovalRecord::create([
+            'code'                => $this->nextCode('REQ-AP'),
+            'type'                => 'operation',
+            'sub_type'            => 'purchase_requirement',
+            'title'               => "[采购需求] {$requirement->code} {$requirement->material} x {$requirement->quantity}{$requirement->unit}",
+            'priority'            => match ($requirement->priority) {
+                'urgent' => 'high',
+                'high' => 'high',
+                'low' => 'low',
+                default => 'normal',
+            },
+            'status'              => ApprovalRecord::STATUS_PENDING,
+            'amount'              => $requirement->budget,
+            'applicant_id'        => $user->id,
+            'current_approver_id' => $flowData['current_approver_id'],
+            'payload'             => [
+                'requirement_id' => $requirement->id,
+                'requirement_code' => $requirement->code,
+                'project_id' => $requirement->project_id,
+                'inventory_item_id' => $requirement->inventory_item_id,
+                'material' => $requirement->material,
+                'spec' => $requirement->spec,
+                'quantity' => (float) $requirement->quantity,
+                'unit' => $requirement->unit,
+                'need_date' => $requirement->need_date?->format('Y-m-d'),
+                'remark' => $requirement->remark,
+                '_approval_flow' => $flowData['definition'],
+            ],
+            'flow'         => $flowData['flow'],
+        ]);
     }
 
-    private function syncRequirementApprovalStatus(PurchaseRequirement $requirement, ?User $user, string $status, string $remark = ''): void
+    private function syncPaymentRequestApprovalRecord(PurchasePaymentRequest $request, User $user): void
     {
-        try {
-            $approval = ApprovalRecord::where('type', 'operation')
-                ->where('sub_type', 'purchase_requirement')
-                ->where('payload->requirement_id', $requirement->id)
-                ->first();
-            if (!$approval) {
-                return;
-            }
-            $flow = is_array($approval->flow) ? $approval->flow : [];
-            $flow[] = [
-                'operator' => $user?->name ?? '系统',
-                'action'   => $status === ApprovalRecord::STATUS_APPROVED ? 'approve' : 'reject',
-                'time'     => now()->toDateTimeString(),
-                'comment'  => $remark,
-            ];
-            $approval->update([
-                'status' => $status,
-                'flow' => $flow,
-            ]);
-        } catch (\Throwable $e) {
-            \Log::warning('Purchase flow requirement approval status sync failed: ' . $e->getMessage());
+        $exists = ApprovalRecord::where('type', 'finance')
+            ->where('sub_type', 'purchase_payment')
+            ->where('payload->payment_request_id', $request->id)
+            ->exists();
+        if ($exists) {
+            return;
         }
+
+        $flowService = app(ApprovalFlowService::class);
+        $template = $flowService->resolveTemplate('purchase_payment', 'finance');
+        if (!$template) {
+            throw new \DomainException('未找到采购付款申请的启用审批流程模板');
+        }
+        $flowData = $flowService->initFlow($template, $user, '提交付款审批');
+        ApprovalRecord::create([
+            'code' => $this->nextCode('PAY-AP'),
+            'type' => 'finance',
+            'sub_type' => 'purchase_payment',
+            'title' => "[付款] {$request->code} ¥{$request->amount} 财务审批",
+            'priority' => 'high',
+            'status' => ApprovalRecord::STATUS_PENDING,
+            'amount' => $request->amount,
+            'applicant_id' => $user->id,
+            'current_approver_id' => $flowData['current_approver_id'],
+            'payload' => [
+                'payment_request_id' => $request->id,
+                'contract_id' => $request->contract_id,
+                'supplier_id' => $request->supplier_id,
+                '_approval_flow' => $flowData['definition'],
+            ],
+            'flow' => $flowData['flow'],
+        ]);
     }
 
-    private function resolveApproverId(string $subType, ?User $user = null): ?int
+    private function cancelApproval(string $entityType, int $entityId, ?User $user, string $remark): void
     {
-        try {
-            $flowService = app(\App\Services\ApprovalFlowService::class);
-            $template = $flowService->resolveTemplate($subType);
-            if ($template) {
-                $flowData = $flowService->initFlow($template, $user ?? User::find(1), '提交审批');
-                return $flowData['current_approver_id'];
-            }
-        } catch (\Throwable $e) {
-            \Log::warning('resolveApproverId failed', ['subType' => $subType, 'msg' => $e->getMessage()]);
+        $target = match ($entityType) {
+            self::ENTITY_REQUIREMENT => ['operation', 'purchase_requirement', 'requirement_id'],
+            self::ENTITY_PLAN => ['operation', 'purchase_plan', 'plan_id'],
+            self::ENTITY_ORDER => ['operation', 'purchase_order', 'purchase_order_id'],
+            self::ENTITY_PAYMENT_REQ => ['finance', 'purchase_payment', 'payment_request_id'],
+            default => null,
+        };
+        if ($target === null) {
+            return;
         }
-        return 1;
+
+        $approval = ApprovalRecord::where('type', $target[0])
+            ->where('sub_type', $target[1])
+            ->where('status', ApprovalRecord::STATUS_PENDING)
+            ->whereJsonContains("payload->{$target[2]}", $entityId)
+            ->lockForUpdate()
+            ->first();
+        if (!$approval) {
+            return;
+        }
+
+        $flow = is_array($approval->flow) ? $approval->flow : [];
+        $flow[] = [
+            'operator' => $user?->name ?? '系统',
+            'action' => 'cancel',
+            'time' => now()->toDateTimeString(),
+            'comment' => $remark,
+        ];
+        $approval->forceFill([
+            'status' => ApprovalRecord::STATUS_CANCELLED,
+            'current_approver_id' => null,
+            'comment' => $remark,
+            'flow' => $flow,
+        ])->save();
     }
 
     private function nextCode(string $prefix): string

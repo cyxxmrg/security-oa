@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueCode;
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,10 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseRequirement extends Model
 {
-    use HasFactory, GeneratesUniqueCode;
+    use HasFactory, HasDataScope, GeneratesUniqueCode;
 
     protected $fillable = [
-        'code', 'project_id', 'inventory_item_id', 'material', 'spec', 'quantity', 'unit',
+        'code', 'project_id', 'inventory_item_id', 'material', 'spec', 'quantity', 'unit', 'created_by',
         'need_date', 'priority', 'status', 'creator', 'remark',
         'review_remark', 'reviewed_by', 'reviewed_at',
         'source_type', 'source_id', 'name', 'budget', 'spec_text',

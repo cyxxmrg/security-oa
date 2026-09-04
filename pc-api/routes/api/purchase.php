@@ -49,57 +49,57 @@ Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business', 'permis
 });
 
 // ========== 采购协同 8 步流转 ==========
-Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business', 'permission:purchase'])->group(function () {
-    Route::post('requirements', [PurchaseFlowController::class, 'createRequirement']);
-    Route::get('by-source/{type}/{id}', [PurchaseFlowController::class, 'bySource']);
-    Route::post('requirements/{id}/submit', [PurchaseFlowController::class, 'submitRequirement'])->whereNumber('id');
-    Route::post('requirements/{id}/approve', [PurchaseFlowController::class, 'approveRequirement'])->whereNumber('id');
-    Route::post('{entityType}/{id}/cancel', [PurchaseFlowController::class, 'cancel'])->whereNumber('id');
-    Route::get('{entityType}/{id}/trace', [PurchaseFlowController::class, 'trace'])->whereNumber('id');
-    Route::post('plans', [PurchaseFlowController::class, 'createPlan']);
-    Route::post('plans/{id}/submit', [PurchaseFlowController::class, 'submitPlan'])->whereNumber('id');
-    Route::post('plans/{id}/approve', [PurchaseFlowController::class, 'approvePlan'])->whereNumber('id');
-    Route::post('orders', [PurchaseFlowController::class, 'createOrder']);
-    Route::post('orders/{id}/submit', [PurchaseFlowController::class, 'submitOrder'])->whereNumber('id');
-    Route::post('orders/{id}/approve', [PurchaseFlowController::class, 'approveOrder'])->whereNumber('id');
-    Route::post('contracts', [PurchaseFlowController::class, 'createContract']);
-    Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id');
-    Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id');
-    Route::post('contracts/{id}/files', [PurchaseFlowController::class, 'uploadContractFile'])->whereNumber('id');
+Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::post('requirements', [PurchaseFlowController::class, 'createRequirement'])->middleware('permission:purchase.requirement');
+    Route::get('by-source/{type}/{id}', [PurchaseFlowController::class, 'bySource'])->middleware('permission:purchase.requirement');
+    Route::post('requirements/{id}/submit', [PurchaseFlowController::class, 'submitRequirement'])->whereNumber('id')->middleware('permission:purchase.requirement');
+    Route::post('requirements/{id}/approve', [PurchaseFlowController::class, 'approveRequirement'])->whereNumber('id')->middleware('permission:purchase.requirement');
+    Route::post('{entityType}/{id}/cancel', [PurchaseFlowController::class, 'cancel'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::get('{entityType}/{id}/trace', [PurchaseFlowController::class, 'trace'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('plans', [PurchaseFlowController::class, 'createPlan'])->middleware('permission:purchase.order');
+    Route::post('plans/{id}/submit', [PurchaseFlowController::class, 'submitPlan'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('plans/{id}/approve', [PurchaseFlowController::class, 'approvePlan'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('orders', [PurchaseFlowController::class, 'createOrder'])->middleware('permission:purchase.order');
+    Route::post('orders/{id}/submit', [PurchaseFlowController::class, 'submitOrder'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('orders/{id}/approve', [PurchaseFlowController::class, 'approveOrder'])->whereNumber('id')->middleware('permission:purchase.order');
+    Route::post('contracts', [PurchaseFlowController::class, 'createContract'])->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/files', [PurchaseFlowController::class, 'uploadContractFile'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('contracts/{id}/files/{fid}/download', [PurchaseFlowController::class, 'downloadContractFile'])
-        ->whereNumber('id')->whereNumber('fid')->name('purchase-flow.contract-files.download');
-    Route::delete('contracts/{id}/files/{fid}', [PurchaseFlowController::class, 'deleteContractFile'])->whereNumber('id')->whereNumber('fid');
-    Route::get('contracts/{id}/items', [PurchaseFlowController::class, 'listContractItems'])->whereNumber('id');
-    Route::post('contracts/{id}/items', [PurchaseFlowController::class, 'addContractItem'])->whereNumber('id');
-    Route::post('contracts/{id}/items/sync', [PurchaseFlowController::class, 'syncContractItems'])->whereNumber('id');
-    Route::put('contracts/{id}/items/{iid}', [PurchaseFlowController::class, 'updateContractItem'])->whereNumber('id')->whereNumber('iid');
-    Route::delete('contracts/{id}/items/{iid}', [PurchaseFlowController::class, 'deleteContractItem'])->whereNumber('id')->whereNumber('iid');
-    Route::post('contracts/{id}/shipping-plans', [PurchaseFlowController::class, 'setShippingPlan'])->whereNumber('id');
-    Route::post('contracts/{id}/tracking', [PurchaseFlowController::class, 'addTracking'])->whereNumber('id');
-    Route::get('contracts/{id}/shipping', [PurchaseFlowController::class, 'listShipping'])->whereNumber('id');
-    Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id');
-    Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id');
+        ->whereNumber('id')->whereNumber('fid')->name('purchase-flow.contract-files.download')->middleware('permission:purchase.detail');
+    Route::delete('contracts/{id}/files/{fid}', [PurchaseFlowController::class, 'deleteContractFile'])->whereNumber('id')->whereNumber('fid')->middleware('permission:purchase.detail');
+    Route::get('contracts/{id}/items', [PurchaseFlowController::class, 'listContractItems'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/items', [PurchaseFlowController::class, 'addContractItem'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/items/sync', [PurchaseFlowController::class, 'syncContractItems'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::put('contracts/{id}/items/{iid}', [PurchaseFlowController::class, 'updateContractItem'])->whereNumber('id')->whereNumber('iid')->middleware('permission:purchase.detail');
+    Route::delete('contracts/{id}/items/{iid}', [PurchaseFlowController::class, 'deleteContractItem'])->whereNumber('id')->whereNumber('iid')->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/shipping-plans', [PurchaseFlowController::class, 'setShippingPlan'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('contracts/{id}/tracking', [PurchaseFlowController::class, 'addTracking'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::get('contracts/{id}/shipping', [PurchaseFlowController::class, 'listShipping'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('payment-requests/{id}/vouchers/{vid}/download', [PurchaseFlowController::class, 'downloadPaymentVoucher'])
-        ->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download');
-    Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest']);
+        ->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download')->middleware('permission:purchase.detail');
+    Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest'])->middleware('permission:purchase.detail');
     Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])
         ->whereNumber('id')->middleware('permission:finance.pay');
     Route::post('payments', [PurchaseFlowController::class, 'executePayment'])->middleware('permission:finance.pay');
-    Route::post('shipments', [PurchaseFlowController::class, 'createShipment']);
-    Route::post('shipments/{id}/update-status', [PurchaseFlowController::class, 'updateShipmentStatus'])->whereNumber('id');
-    Route::post('shipments/{id}/auto-inbound', [PurchaseFlowController::class, 'autoInbound'])->whereNumber('id');
-    Route::post('shipments/{id}/confirm-inbound', [PurchaseFlowController::class, 'confirmInbound'])->whereNumber('id');
-    Route::get('logs', [PurchaseFlowController::class, 'logs']);
-    Route::get('orders-list', [PurchaseFlowController::class, 'listOrders']);
-    Route::get('requirements-list', [PurchaseFlowController::class, 'listRequirements']);
-    Route::get('contracts-list', [PurchaseFlowController::class, 'listPurchaseContracts']);
-    Route::post('from-work-order/{workOrderId}', [PurchaseFlowController::class, 'fromWorkOrder'])->whereNumber('workOrderId');
-    Route::post('from-external-work/{workId}', [PurchaseFlowController::class, 'fromExternalWork'])->whereNumber('workId');
+    Route::post('shipments', [PurchaseFlowController::class, 'createShipment'])->middleware('permission:purchase.detail');
+    Route::post('shipments/{id}/update-status', [PurchaseFlowController::class, 'updateShipmentStatus'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('shipments/{id}/auto-inbound', [PurchaseFlowController::class, 'autoInbound'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::post('shipments/{id}/confirm-inbound', [PurchaseFlowController::class, 'confirmInbound'])->whereNumber('id')->middleware('permission:purchase.detail');
+    Route::get('logs', [PurchaseFlowController::class, 'logs'])->middleware('permission:purchase.detail');
+    Route::get('orders-list', [PurchaseFlowController::class, 'listOrders'])->middleware('permission:purchase.order|purchase.detail');
+    Route::get('requirements-list', [PurchaseFlowController::class, 'listRequirements'])->middleware('permission:purchase.requirement');
+    Route::get('contracts-list', [PurchaseFlowController::class, 'listPurchaseContracts'])->middleware('permission:purchase.detail');
+    Route::post('from-work-order/{workOrderId}', [PurchaseFlowController::class, 'fromWorkOrder'])->whereNumber('workOrderId')->middleware('permission:purchase.requirement');
+    Route::post('from-external-work/{workId}', [PurchaseFlowController::class, 'fromExternalWork'])->whereNumber('workId')->middleware('permission:purchase.requirement');
 });
 
 // ========== 采购管理 ==========
-Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permission:purchase'])->group(function () {
-    Route::prefix('requirements')->group(function () {
+Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::prefix('requirements')->middleware('permission:purchase.requirement')->group(function () {
         Route::get('/', [PurchaseRequirementController::class, 'index']);
         Route::get('stats', [PurchaseRequirementController::class, 'stats']);
         Route::post('/', [PurchaseRequirementController::class, 'store']);
@@ -107,7 +107,7 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::delete('{requirement}', [PurchaseRequirementController::class, 'destroy']);
     });
 
-    Route::prefix('plans')->group(function () {
+    Route::prefix('plans')->middleware('permission:purchase.order')->group(function () {
         Route::get('/', [PurchasePlanController::class, 'index']);
         Route::get('stats', [PurchasePlanController::class, 'stats']);
         Route::post('/', [PurchasePlanController::class, 'store']);
@@ -117,7 +117,7 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::delete('{plan}', [PurchasePlanController::class, 'destroy']);
     });
 
-    Route::prefix('contracts')->group(function () {
+    Route::prefix('contracts')->middleware('permission:purchase.detail')->group(function () {
         Route::get('/', [PurchaseContractController::class, 'index']);
         Route::get('stats', [PurchaseContractController::class, 'stats']);
         Route::post('/', [PurchaseContractController::class, 'store']);
@@ -127,7 +127,7 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::delete('{contract}', [PurchaseContractController::class, 'destroy']);
     });
 
-    Route::prefix('payment-requests')->group(function () {
+    Route::prefix('payment-requests')->middleware('permission:purchase.detail')->group(function () {
         Route::get('/', [PurchasePaymentRequestController::class, 'index']);
         Route::get('stats', [PurchasePaymentRequestController::class, 'stats']);
         Route::post('/', [PurchasePaymentRequestController::class, 'store']);
@@ -135,13 +135,13 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::delete('{req}', [PurchasePaymentRequestController::class, 'destroy']);
     });
 
-    Route::prefix('payments')->group(function () {
+    Route::prefix('payments')->middleware('permission:purchase.detail')->group(function () {
         Route::get('/', [PurchasePaymentController::class, 'index']);
         Route::get('stats', [PurchasePaymentController::class, 'stats']);
         Route::post('/', [PurchasePaymentController::class, 'store'])->middleware('permission:finance.pay');
     });
 
-    Route::prefix('shipments')->group(function () {
+    Route::prefix('shipments')->middleware('permission:purchase.detail')->group(function () {
         Route::get('/', [PurchaseShipmentController::class, 'index']);
         Route::get('stats', [PurchaseShipmentController::class, 'stats']);
         Route::post('{shipment}/logistics-update', [PurchaseLogisticsController::class, 'store']);
@@ -151,9 +151,9 @@ Route::prefix('purchase')->middleware(['auth:sanctum', 'ensure_business', 'permi
         Route::get('{shipment}', [PurchaseShipmentController::class, 'show']);
     });
 
-    Route::get('logistics', [PurchaseLogisticsController::class, 'overview']);
+    Route::get('logistics', [PurchaseLogisticsController::class, 'overview'])->middleware('permission:purchase.detail');
 
-    Route::prefix('approvals')->group(function () {
+    Route::prefix('approvals')->middleware('permission:purchase.detail')->group(function () {
         Route::get('/', [PurchaseApprovalController::class, 'index']);
         Route::post('/', [PurchaseApprovalController::class, 'store']);
         Route::post('{appr}/decide', [PurchaseApprovalController::class, 'decide'])->middleware('permission:finance.pay');

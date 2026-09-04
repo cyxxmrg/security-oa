@@ -61,6 +61,12 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'purchase_requirements':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', $myProjects],
+                ];
+
             case 'purchase_contracts':
                 // V0.6.3: 采购合同 — 自己签字 OR 关联项目可访问
                 // V1.0.2: 修 signed_by → signer_id (表里实际列名)

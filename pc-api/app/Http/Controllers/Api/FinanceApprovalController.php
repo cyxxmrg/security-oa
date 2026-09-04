@@ -114,6 +114,10 @@ class FinanceApprovalController extends Controller
 
                 if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
                     $payload = $approval->payload ?? [];
+                    if ($approval->sub_type === 'purchase_payment') {
+                        app(\App\Services\PurchaseFlowService::class)
+                            ->syncApprovalBusinessState($approval, $user, 'approved', $comment);
+                    }
                     if ($approval->sub_type === 'expense' && !empty($payload['claim_id'])) {
                         \App\Models\ExpenseClaim::where('id', $payload['claim_id'])
                             ->where('status', 'submitted')
@@ -155,6 +159,11 @@ class FinanceApprovalController extends Controller
             $approval->current_approver_id = $result['current_approver_id'];
             $approval->comment = $comment;
             $approval->save();
+
+            if ($approval->sub_type === 'purchase_payment') {
+                app(\App\Services\PurchaseFlowService::class)
+                    ->syncApprovalBusinessState($approval, $request->user(), 'rejected', $comment);
+            }
 
             return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
         });

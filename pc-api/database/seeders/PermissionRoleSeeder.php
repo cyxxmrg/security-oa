@@ -156,7 +156,12 @@ class PermissionRoleSeeder extends Seeder
         ],
         '采购管理' => [
             ['name' => 'purchase',        'label' => '采购协同管理'],
+            ['name' => 'purchase.requirement', 'label' => '采购需求'],
+            ['name' => 'purchase.order',      'label' => '采购计划与订单'],
+            ['name' => 'purchase.detail',     'label' => '采购合同、付款与收货'],
+            ['name' => 'purchase.supplier',   'label' => '供应商库'],
             ['name' => 'purchase.tender','label' => '采购招标管理'],
+            ['name' => 'purchase.portal',    'label' => '门户管理'],
         ],
         '对外报价' => [
             ['name' => 'sales.external_quote', 'label' => '对外报价管理'],

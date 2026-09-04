@@ -29,6 +29,7 @@ class ApprovalFlowService
         'expense'              => '报销',
         'purchase_requirement' => '采购',
         'purchase_plan'        => '采购',
+        'purchase_order'       => '采购',
         'purchase_payment'     => '采购',
         'commencement'         => '开工',
         'material-request'     => '采购',
@@ -130,6 +131,7 @@ class ApprovalFlowService
      */
     public function advanceFlow(ApprovalRecord $record, User $operator, string $comment = ''): array
     {
+        $this->assertCurrentApprover($record, $operator);
         $flow = is_array($record->flow) ? $record->flow : [];
         $currentStepIndex = $this->getCurrentStepIndex($flow);
 
@@ -256,6 +258,7 @@ class ApprovalFlowService
      */
     public function rejectFlow(ApprovalRecord $record, User $operator, string $reason = ''): array
     {
+        $this->assertCurrentApprover($record, $operator);
         $flow = is_array($record->flow) ? $record->flow : [];
 
         // 标记当前待审批节点为已驳回
@@ -281,5 +284,27 @@ class ApprovalFlowService
             'current_approver_id' => null,
             'flow'                => $flow,
         ];
+    }
+
+    /**
+     * 只允许当前审批节点处理审批单，系统账号保留应急处理能力。
+     */
+    public function assertCurrentApprover(ApprovalRecord $record, User $operator): void
+    {
+        if ($record->status !== ApprovalRecord::STATUS_PENDING) {
+            throw new DomainException('该审批单已结束，无法继续处理');
+        }
+
+        if (($operator->is_system ?? false) === true || ($operator->user_type ?? null) === 'system') {
+            return;
+        }
+
+        if ((int) $record->applicant_id === (int) $operator->id) {
+            throw new DomainException('申请人不能审批自己的申请');
+        }
+
+        if ((int) $record->current_approver_id !== (int) $operator->id) {
+            throw new DomainException('当前用户不是该审批节点的审批人');
+        }
     }
 }

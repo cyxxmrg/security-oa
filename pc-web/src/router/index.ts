@@ -194,23 +194,23 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '采购协同', icon: 'Connection' },
         children: [
           // 1. 采购单子模块
-          { path: 'requirement', name: 'CollabRequirement', component: () => import('@/views/purchase/Requirement.vue'), meta: { title: '采购需求' } },
-          { path: 'order', name: 'CollabOrder', component: () => import('@/views/purchase/Plan.vue'), meta: { title: '采购计划' } },
-          { path: 'contract', name: 'CollabContract', component: () => import('@/views/purchase/Contract.vue'), meta: { title: '采购合同' } },
+          { path: 'requirement', name: 'CollabRequirement', component: () => import('@/views/purchase/Requirement.vue'), meta: { title: '采购需求', permission: 'purchase.requirement' } },
+          { path: 'order', name: 'CollabOrder', component: () => import('@/views/purchase/Plan.vue'), meta: { title: '采购计划', permission: 'purchase.order' } },
+          { path: 'contract', name: 'CollabContract', component: () => import('@/views/purchase/Contract.vue'), meta: { title: '采购合同', permission: 'purchase.detail' } },
           // V0.6.2.2: "采购详情" 路由指向新 PurchaseDetail.vue (按订单号 PO 聚合, 4 Tab: 基础/合同/付款/发货)
-          { path: 'receive', name: 'CollabReceive', component: () => import('@/views/purchase/PurchaseDetail.vue'), meta: { title: '采购详情' } },
+          { path: 'receive', name: 'CollabReceive', component: () => import('@/views/purchase/PurchaseDetail.vue'), meta: { title: '采购详情', permission: 'purchase.detail' } },
           // 2. 供应商库
-          { path: 'supplier', name: 'CollabSupplier', component: () => import('@/views/supplier/index.vue'), meta: { title: '供应商库' } },
-          { path: 'supplier/:id', name: 'CollabSupplierDetail', component: () => import('@/views/supplier/Detail.vue'), meta: { title: '供应商详情', hidden: true }, props: true },
+          { path: 'supplier', name: 'CollabSupplier', component: () => import('@/views/supplier/index.vue'), meta: { title: '供应商库', permission: 'purchase.supplier' } },
+          { path: 'supplier/:id', name: 'CollabSupplierDetail', component: () => import('@/views/supplier/Detail.vue'), meta: { title: '供应商详情', hidden: true, permission: 'purchase.supplier' }, props: true },
           // 注: 联系人已合并到供应商库 (V0.6.3)
           // 3. 招标中心 (原 /business/tender 挪过来, 别名兼容老路径)
-          { path: 'tender', name: 'CollabTender', component: () => import('@/views/business/tender/index.vue'), meta: { title: '招标中心' } },
-          { path: 'tender/detail/:id', name: 'CollabTenderDetail', component: () => import('@/views/business/tender/Detail.vue'), meta: { title: '招标详情', hidden: true }, props: true },
+          { path: 'tender', name: 'CollabTender', component: () => import('@/views/business/tender/index.vue'), meta: { title: '招标中心', permission: 'purchase.tender' } },
+          { path: 'tender/detail/:id', name: 'CollabTenderDetail', component: () => import('@/views/business/tender/Detail.vue'), meta: { title: '招标详情', hidden: true, permission: 'purchase.tender' }, props: true },
           // 4. 外部施工招标 (菜单已隐藏, 统一归招标中心)
           { path: 'construction-tender', name: 'CollabConstructionTender', component: () => import('@/views/construction/external-work/index.vue'), meta: { title: '施工招标', hidden: true } },
           { path: 'construction-tender/:id', name: 'CollabConstructionTenderDetail', component: () => import('@/views/construction/external-work/Detail.vue'), meta: { title: '发包详情', hidden: true }, props: true },
           // 5. 供应商门户 (后台配置 - 当前是 portal 首页的 iframe/外链, 这里展示"链接 + 访问记录")
-          { path: 'portal-config', name: 'CollabPortalConfig', component: () => import('@/views/portal/tender/Index.vue'), meta: { title: '门户管理' } }
+          { path: 'portal-config', name: 'CollabPortalConfig', component: () => import('@/views/portal/tender/Index.vue'), meta: { title: '门户管理', permission: 'purchase.portal' } }
         ]
       },
       // ---- 维修中心 (质保期已归项目管理, 巡检归入本菜单) ----

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
 use App\Models\OvertimeRequest;
-use App\Models\PurchaseRequirement;
 use App\Services\ApprovalFlowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -167,7 +166,10 @@ class OperationApprovalController extends Controller
             $approval->save();
 
             if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
-                $this->syncPurchaseRequirementStatus($approval, 'approved', $comment);
+                if (in_array($approval->sub_type, ['purchase_requirement', 'purchase_plan', 'purchase_order'], true)) {
+                    app(\App\Services\PurchaseFlowService::class)
+                        ->syncApprovalBusinessState($approval, $user, 'approved', $comment);
+                }
                 $this->syncOvertimeStatus($approval, 'approved');
             }
 
@@ -176,7 +178,10 @@ class OperationApprovalController extends Controller
             });
         } catch (\Throwable $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
-            return response()->json(['code' => 1002, 'message' => '出库失败：' . $e->getMessage()], 422);
+            $message = $approval->sub_type === 'material-request'
+                ? '物料出库失败：' . $e->getMessage()
+                : '审批处理失败：' . $e->getMessage();
+            return response()->json(['code' => 1002, 'message' => $message], 422);
         }
     }
 
@@ -200,7 +205,10 @@ class OperationApprovalController extends Controller
             $approval->current_approver_id = $result['current_approver_id'];
             $approval->comment = $comment;
             $approval->save();
-            $this->syncPurchaseRequirementStatus($approval, 'rejected', $comment);
+            if (in_array($approval->sub_type, ['purchase_requirement', 'purchase_plan', 'purchase_order'], true)) {
+                app(\App\Services\PurchaseFlowService::class)
+                    ->syncApprovalBusinessState($approval, $request->user(), 'rejected', $comment);
+            }
             $this->syncOvertimeStatus($approval, 'rejected');
 
             return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
@@ -230,25 +238,6 @@ class OperationApprovalController extends Controller
 
             return response()->json(['code' => 0, 'message' => "已转交 {$targetUser->name}"]);
         });
-    }
-
-    private function syncPurchaseRequirementStatus(ApprovalRecord $approval, string $status, ?string $comment = null): void
-    {
-        if ($approval->sub_type !== 'purchase_requirement') {
-            return;
-        }
-
-        $requirementId = $approval->payload['requirement_id'] ?? null;
-        if (!$requirementId) {
-            return;
-        }
-
-        PurchaseRequirement::whereKey($requirementId)->update([
-            'status' => $status,
-            'review_remark' => $comment,
-            'reviewed_by' => request()->user()?->id,
-            'reviewed_at' => now(),
-        ]);
     }
 
     private function syncOvertimeStatus(ApprovalRecord $approval, string $status): void

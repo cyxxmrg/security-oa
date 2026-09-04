@@ -83,7 +83,7 @@ class PurchaseFlowController extends Controller
             'material'     => 'required|string|max:200',
             'spec'         => 'nullable|string|max:200',
             'spec_text'    => 'nullable|string|max:500',
-            'quantity'     => 'required|numeric|min:0',
+            'quantity'     => 'required|numeric|min:0.01',
             'unit'         => 'nullable|string|max:20',
             'budget'       => 'nullable|numeric|min:0',
             'need_date'    => 'nullable|date',
@@ -229,7 +229,7 @@ class PurchaseFlowController extends Controller
     {
         $data = $request->validate([
             'contract_id'  => 'required|integer|exists:purchase_contracts,id',
-            'amount'       => 'required|numeric|min:0',
+            'amount'       => 'required|numeric|min:0.01',
             'payment_type' => 'nullable|in:full,partial,final,deposit',
             'stage_label'  => 'nullable|string|max:50',
             'request_date' => 'nullable|date',
@@ -343,6 +343,7 @@ class PurchaseFlowController extends Controller
     /** 列出合同清单 */
     public function listContractItems(int $id): JsonResponse
     {
+        PurchaseContract::findOrFail($id);
         $rows = \App\Models\PurchaseContractItem::where('contract_id', $id)
             ->orderBy('id')->get();
         return response()->json(['code' => 0, 'data' => $rows]);
@@ -362,7 +363,7 @@ class PurchaseFlowController extends Controller
             'inventory_item_id' => 'nullable|integer|exists:inventory_items,id',
             'material'   => 'required|string|max:200',
             'spec'       => 'nullable|string|max:200',
-            'qty'        => 'required|numeric|min:0',
+            'qty'        => 'required|numeric|min:0.01',
             'unit'       => 'nullable|string|max:20',
             'unit_price' => 'required|numeric|min:0',
             'remark'     => 'nullable|string|max:500',
@@ -378,7 +379,7 @@ class PurchaseFlowController extends Controller
             'inventory_item_id' => 'nullable|integer|exists:inventory_items,id',
             'material'   => 'nullable|string|max:200',
             'spec'       => 'nullable|string|max:200',
-            'qty'        => 'nullable|numeric|min:0',
+            'qty'        => 'nullable|numeric|min:0.01',
             'unit'       => 'nullable|string|max:20',
             'unit_price' => 'nullable|numeric|min:0',
             'remark'     => 'nullable|string|max:500',
@@ -485,7 +486,34 @@ class PurchaseFlowController extends Controller
         $q = \DB::table('purchase_status_logs');
         if ($request->filled('entity_type')) $q->where('entity_type', $request->entity_type);
         if ($request->filled('entity_id'))   $q->where('entity_id', $request->entity_id);
-        $rows = $q->orderBy('created_at', 'desc')->limit($request->input('limit', 200))->get();
+        $scopedEntities = [
+            PurchaseRequirement::class => PurchaseRequirement::query()->select('id'),
+            PurchasePlan::class => PurchasePlan::query()->select('id'),
+            PurchaseOrder::class => PurchaseOrder::query()->select('id'),
+            PurchaseContract::class => PurchaseContract::query()->select('id'),
+            PurchasePaymentRequest::class => PurchasePaymentRequest::query()->select('id'),
+            PurchasePayment::class => PurchasePayment::query()->select('id'),
+            PurchaseShipment::class => PurchaseShipment::query()->select('id'),
+        ];
+        $entityTypes = [
+            PurchaseFlowService::ENTITY_REQUIREMENT => PurchaseRequirement::class,
+            PurchaseFlowService::ENTITY_PLAN => PurchasePlan::class,
+            PurchaseFlowService::ENTITY_ORDER => PurchaseOrder::class,
+            PurchaseFlowService::ENTITY_CONTRACT => PurchaseContract::class,
+            PurchaseFlowService::ENTITY_PAYMENT_REQ => PurchasePaymentRequest::class,
+            PurchaseFlowService::ENTITY_PAYMENT => PurchasePayment::class,
+            PurchaseFlowService::ENTITY_SHIPMENT => PurchaseShipment::class,
+        ];
+        $q->where(function ($scope) use ($entityTypes, $scopedEntities): void {
+            foreach ($entityTypes as $type => $modelClass) {
+                $scope->orWhere(function ($branch) use ($type, $modelClass, $scopedEntities): void {
+                    $branch->where('entity_type', $type)
+                        ->whereIn('entity_id', $scopedEntities[$modelClass]);
+                });
+            }
+        });
+        $limit = max(1, min((int) $request->input('limit', 200), 200));
+        $rows = $q->orderBy('created_at', 'desc')->limit($limit)->get();
         return response()->json(['code' => 0, 'data' => $rows]);
     }
 
@@ -508,7 +536,8 @@ class PurchaseFlowController extends Controller
         }
         if ($request->filled('status')) $q->where('status', $request->status);
         if ($request->filled('project_id')) $q->where('project_id', $request->project_id);
-        $rows = $q->orderBy('id', 'desc')->limit($request->input('per_page', 200))->get();
+        $limit = max(1, min((int) $request->input('per_page', 200), 200));
+        $rows = $q->orderBy('id', 'desc')->limit($limit)->get();
         return response()->json(['code' => 0, 'data' => $rows]);
     }
 
@@ -529,7 +558,8 @@ class PurchaseFlowController extends Controller
         }
         if ($request->filled('status')) $q->where('status', $request->status);
         if ($request->filled('project_id')) $q->where('project_id', $request->project_id);
-        $rows = $q->orderBy('id', 'desc')->limit($request->input('per_page', 200))->get();
+        $limit = max(1, min((int) $request->input('per_page', 200), 200));
+        $rows = $q->orderBy('id', 'desc')->limit($limit)->get();
         return response()->json(['code' => 0, 'data' => $rows]);
     }
 
@@ -549,7 +579,8 @@ class PurchaseFlowController extends Controller
         }
         if ($request->filled('status')) $q->where('status', $request->status);
         if ($request->filled('project_id')) $q->where('project_id', $request->project_id);
-        $rows = $q->orderBy('id', 'desc')->limit($request->input('per_page', 200))->get();
+        $limit = max(1, min((int) $request->input('per_page', 200), 200));
+        $rows = $q->orderBy('id', 'desc')->limit($limit)->get();
         return response()->json(['code' => 0, 'data' => $rows]);
     }
 
@@ -566,7 +597,7 @@ class PurchaseFlowController extends Controller
         }
         $data = $request->validate([
             'material'  => 'required|string|max:200',
-            'quantity'  => 'required|numeric|min:0',
+            'quantity'  => 'required|numeric|min:0.01',
             'unit'      => 'nullable|string|max:20',
             'spec'      => 'nullable|string|max:200',
             'budget'    => 'nullable|numeric|min:0',
@@ -591,7 +622,7 @@ class PurchaseFlowController extends Controller
         $w = ExternalConstructionWork::findOrFail($workId);
         $data = $request->validate([
             'material' => 'required|string|max:200',
-            'quantity' => 'required|numeric|min:0',
+            'quantity' => 'required|numeric|min:0.01',
             'unit'     => 'nullable|string|max:20',
             'spec'     => 'nullable|string|max:200',
             'budget'   => 'nullable|numeric|min:0',
