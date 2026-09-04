@@ -351,6 +351,9 @@ class InventoryService
             $rules['total_amount'] = 'nullable|numeric|min:0';
         }
         $data = $request->validate($rules);
+        if (($data['project_id'] ?? null) !== null) {
+            \App\Models\Project::findOrFail((int) $data['project_id']);
+        }
 
         $itemsPayload = $hasItems
             ? $data['items']
@@ -507,6 +510,9 @@ class InventoryService
             $rules['total_amount'] = 'nullable|numeric|min:0';
         }
         $data = $request->validate($rules);
+        if (($data['project_id'] ?? null) !== null) {
+            \App\Models\Project::findOrFail((int) $data['project_id']);
+        }
 
         $itemsPayload = $hasItems
             ? $data['items']
@@ -635,7 +641,7 @@ class InventoryService
      */
     public function paginateStockRecords(Request $request)
     {
-        $base = DB::table('stock_records')
+        $base = StockRecord::query()
             ->select([
                 'record_no',
                 'type',
@@ -1042,7 +1048,7 @@ class InventoryService
         $fullPrefix = "{$prefix}-{$today}-";
         $next = NumberSequenceService::next(
             "stock-record:{$prefix}:{$today}",
-            fn () => (int) StockRecord::where('record_no', 'like', $fullPrefix . '%')
+            fn () => (int) StockRecord::allData()->where('record_no', 'like', $fullPrefix . '%')
                 ->pluck('record_no')
                 ->map(fn (string $recordNo): int => (int) substr($recordNo, strlen($fullPrefix)))
                 ->max()

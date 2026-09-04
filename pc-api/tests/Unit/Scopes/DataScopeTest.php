@@ -150,6 +150,16 @@ class DataScopeTest extends TestCase
         }
     }
 
+    public function test_stock_records_keep_shared_and_operator_records_visible(): void
+    {
+        $clauses = \App\Scopes\DataScope::tableClauses('stock_records', 86);
+        $this->assertCount(2, $clauses);
+        $this->assertSame(['operator_id', '=', 86], $clauses[0]);
+        $this->assertSame('__raw__', $clauses[1][0]);
+        $this->assertStringContainsString('stock_records.project_id IS NULL', $clauses[1][1]);
+        $this->assertStringContainsString('stock_records.project_id', $clauses[1][1]);
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);

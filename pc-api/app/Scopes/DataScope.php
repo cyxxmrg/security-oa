@@ -204,6 +204,16 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'stock_records':
+                // 共享流水可见；项目流水按项目权限隔离；本人操作的流水始终可见
+                return [
+                    ['operator_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(stock_records.project_id IS NULL OR %s)",
+                        $myProjects
+                    )],
+                ];
+
             case 'tender_projects':
                 return [
                     ['created_by', '=', $userId],

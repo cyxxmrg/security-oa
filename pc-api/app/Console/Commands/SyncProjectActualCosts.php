@@ -20,7 +20,7 @@ class SyncProjectActualCosts extends Command
         $count = 0;
 
         // 1. 采购入库
-        StockRecord::where('type', 'in')
+        StockRecord::allData()->where('type', 'in')
             ->where('created_at', '>=', $since)
             ->whereNotNull('project_id')
             ->chunk(100, function ($records) use ($service, &$count) {
@@ -40,7 +40,7 @@ class SyncProjectActualCosts extends Command
             });
 
         // 2. 领料出库
-        StockRecord::where('type', 'out')
+        StockRecord::allData()->where('type', 'out')
             ->where('created_at', '>=', $since)
             ->whereNotNull('project_id')
             ->chunk(100, function ($records) use ($service, &$count) {

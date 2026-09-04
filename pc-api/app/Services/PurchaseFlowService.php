@@ -850,10 +850,10 @@ class PurchaseFlowService
                 throw new \RuntimeException("收货单当前状态 {$sh->status} 不可生成入库流水");
             }
             if ($sh->stock_record_id) {
-                return StockRecord::findOrFail($sh->stock_record_id);
+                return StockRecord::allData()->findOrFail($sh->stock_record_id);
             }
 
-            $existing = StockRecord::where('related_type', 'purchase_shipment')
+            $existing = StockRecord::allData()->where('related_type', 'purchase_shipment')
                 ->where('related_id', $sh->id)
                 ->orderBy('id')
                 ->first();

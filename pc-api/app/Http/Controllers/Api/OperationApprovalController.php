@@ -150,7 +150,7 @@ class OperationApprovalController extends Controller
 
                     $today = date('Ymd');
                     $sequence = \App\Services\NumberSequenceService::next("material-request-stock:{$today}", static function () use ($today): int {
-                        return \App\Models\StockRecord::where('record_no', 'like', "MR-{$today}-%")
+                        return \App\Models\StockRecord::allData()->where('record_no', 'like', "MR-{$today}-%")
                             ->pluck('record_no')
                             ->map(static function (string $recordNo): int {
                                 $parts = explode('-', $recordNo);
