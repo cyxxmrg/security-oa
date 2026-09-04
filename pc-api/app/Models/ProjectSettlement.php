@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectSettlement extends Model
 {
-    use HasFactory;
+    use HasFactory, HasDataScope;
 
     protected $fillable = ['project_id', 'total_income', 'total_cost', 'cost_labor', 'cost_material', 'cost_outsource', 'cost_other', 'profit', 'profit_rate', 'settlement_date', 'status', 'notes'];
 

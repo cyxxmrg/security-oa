@@ -140,6 +140,16 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('project_stage_logs.project_id', $stageLogs[0][1]);
     }
 
+    public function test_project_finance_children_follow_project_access(): void
+    {
+        foreach (['project_contracts', 'project_materials', 'project_settlements'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertCount(1, $clauses);
+            $this->assertSame('__raw__', $clauses[0][0]);
+            $this->assertStringContainsString("FROM projects p WHERE p.id = {$table}.project_id", $clauses[0][1]);
+        }
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);
