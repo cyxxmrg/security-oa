@@ -23,7 +23,7 @@ class ProjectBudgetService
         $prefix = "BUD-{$year}-";
         $next = NumberSequenceService::next(
             "project-budget:{$year}",
-            fn () => (int) ProjectBudget::where('code', 'like', $prefix . '%')
+            fn () => (int) ProjectBudget::allData()->where('code', 'like', $prefix . '%')
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'BUD-[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
         );
