@@ -119,17 +119,15 @@ class WorkOrderController extends Controller
 
         // V0.5.7 块1 — 项目阶段校验: 只有结算/质保阶段才能创建售后工单
         if (!empty($data['project_id'])) {
-            $project = \App\Models\Project::find($data['project_id']);
-            if ($project) {
-                $stage = is_object($project->stage) ? $project->stage->value : $project->stage;
-                if (!in_array($stage, ['settlement', 'warranty'], true)) {
-        $this->clearListCache('work_orders:index');
-                    return response()->json([
-                        'code' => 422,
-                        'message' => "项目 #{$project->id} 当前阶段为「{$stage}」, 需进入「结算」或「质保」阶段后才能创建售后工单",
-                        'data' => ['project_id' => $project->id, 'current_stage' => $stage],
-                    ], 422);
-                }
+            $project = \App\Models\Project::findOrFail($data['project_id']);
+            $stage = is_object($project->stage) ? $project->stage->value : $project->stage;
+            if (!in_array($stage, ['settlement', 'warranty'], true)) {
+                $this->clearListCache('work_orders:index');
+                return response()->json([
+                    'code' => 422,
+                    'message' => "项目 #{$project->id} 当前阶段为「{$stage}」, 需进入「结算」或「质保」阶段后才能创建售后工单",
+                    'data' => ['project_id' => $project->id, 'current_stage' => $stage],
+                ], 422);
             }
         }
 

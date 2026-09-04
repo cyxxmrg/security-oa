@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use App\Enums\WorkOrderPriority;
 use App\Enums\WorkOrderStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class WorkOrder extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasDataScope, SoftDeletes;
 
     protected $table = 'work_orders';
 
