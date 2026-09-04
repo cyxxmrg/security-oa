@@ -305,6 +305,61 @@ class DataScope implements Scope
                     ['__raw__', $myProjects],
                 ];
 
+            case 'repair_attachments':
+                return [
+                    ['uploaded_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM repair_orders ro WHERE ro.id = repair_attachments.repair_order_id AND (%s)))",
+                        self::repairOrderAccessSql($userId, 'ro')
+                    )],
+                ];
+
+            case 'repair_methods':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM repair_orders ro WHERE ro.id = repair_methods.repair_order_id AND (%s)))",
+                        self::repairOrderAccessSql($userId, 'ro')
+                    )],
+                ];
+
+            case 'repair_progress_logs':
+                return [
+                    ['action_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM repair_orders ro WHERE ro.id = repair_progress_logs.repair_order_id AND (%s)))",
+                        self::repairOrderAccessSql($userId, 'ro')
+                    )],
+                ];
+
+            case 'repair_shipments':
+                return [
+                    ['created_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM repair_orders ro WHERE ro.id = repair_shipments.repair_order_id AND (%s)))",
+                        self::repairOrderAccessSql($userId, 'ro')
+                    )],
+                ];
+
+            case 'repair_step_photos':
+                return [
+                    ['uploaded_by', '=', $userId],
+                    ['__raw__', sprintf(
+                        "((repair_step_photos.target_type = 'repair_order' AND EXISTS (SELECT 1 FROM repair_orders ro WHERE ro.id = repair_step_photos.target_id AND (%s))) OR (repair_step_photos.target_type = 'work_order' AND EXISTS (SELECT 1 FROM work_orders wo WHERE wo.id = repair_step_photos.target_id AND (%s))))",
+                        self::repairOrderAccessSql($userId, 'ro'),
+                        self::workOrderAccessSql($userId, 'wo')
+                    )],
+                ];
+
+            case 'warranty_deposit_logs':
+                return [
+                    ['operator_id', '=', $userId],
+                    ['__raw__', sprintf(
+                        "(EXISTS (SELECT 1 FROM warranty_deposits wd WHERE wd.id = warranty_deposit_logs.deposit_id AND (%s)))",
+                        self::warrantyDepositAccessSql($userId, 'wd')
+                    )],
+                ];
+
             case 'work_orders':
                 return [
                     ['created_by', '=', $userId],
@@ -666,6 +721,48 @@ class DataScope implements Scope
             $alias,
             $userId,
             $alias,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function repairOrderAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR %s.received_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function workOrderAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR %s.assigned_to = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $alias,
+            $userId,
+            $userId
+        );
+    }
+
+    private static function warrantyDepositAccessSql(int $userId, string $alias): string
+    {
+        return sprintf(
+            "(%s.created_by = %d OR %s.approved_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
+            $alias,
+            $userId,
             $alias,
             $userId,
             $userId

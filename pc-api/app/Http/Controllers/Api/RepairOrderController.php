@@ -595,7 +595,7 @@ class RepairOrderController extends Controller
         $year = now()->format('Y');
         $next = \App\Services\NumberSequenceService::next(
             "repair-order:{$year}",
-            fn () => (int) RepairOrder::where('code', 'like', "RN{$year}-%")
+            fn () => (int) RepairOrder::allData()->where('code', 'like', "RN{$year}-%")
                 ->selectRaw("COALESCE(MAX(CAST(SUBSTRING(code FROM 'RN[0-9]{4}-([0-9]+)') AS INTEGER)), 0) as seq")
                 ->value('seq')
         );

@@ -182,6 +182,23 @@ class DataScopeTest extends TestCase
         $this->assertStringContainsString('FROM stock_records sr', $serials[0][1]);
     }
 
+    public function test_repair_children_and_warranty_deposit_logs_follow_parent_access(): void
+    {
+        foreach (['repair_attachments', 'repair_methods', 'repair_progress_logs', 'repair_shipments'] as $table) {
+            $clauses = \App\Scopes\DataScope::tableClauses($table, 86);
+            $this->assertStringContainsString('FROM repair_orders ro', $clauses[1][1]);
+            $this->assertStringContainsString('ro.project_id', $clauses[1][1]);
+        }
+
+        $photos = \App\Scopes\DataScope::tableClauses('repair_step_photos', 86);
+        $this->assertStringContainsString('target_type', $photos[1][1]);
+        $this->assertStringContainsString('FROM work_orders wo', $photos[1][1]);
+
+        $logs = \App\Scopes\DataScope::tableClauses('warranty_deposit_logs', 86);
+        $this->assertSame(['operator_id', '=', 86], $logs[0]);
+        $this->assertStringContainsString('FROM warranty_deposits wd', $logs[1][1]);
+    }
+
     public function test_repair_orders_clauses_cover_owner_and_project_access(): void
     {
         $clauses = \App\Scopes\DataScope::tableClauses('repair_orders', 86);

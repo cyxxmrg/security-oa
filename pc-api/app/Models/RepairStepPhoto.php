@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use Illuminate\Database\Eloquent\Model;
 
 class RepairStepPhoto extends Model
 {
+    use HasDataScope;
+
     protected $table = 'repair_step_photos';
     public $timestamps = false;
 

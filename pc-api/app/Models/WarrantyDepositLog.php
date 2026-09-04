@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\HasDataScope;
 use App\Models\FinanceAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class WarrantyDepositLog extends Model
 {
+    use HasDataScope;
+
     public const UPDATED_AT = null;
     public const CREATED_AT = 'created_at';
 

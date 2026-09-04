@@ -16,6 +16,8 @@ use App\Models\Notification;
 use App\Models\Payable;
 use App\Models\Project;
 use App\Models\Receivable;
+use App\Models\RepairMethod;
+use App\Models\RepairOrder;
 use App\Models\ServiceOrder;
 use App\Models\User;
 use App\Support\AuthScope;
@@ -146,15 +148,15 @@ class DashboardService
             ->count();
         $convRate = $woThisWeek > 0 ? round($woConvertedThisWeek / $woThisWeek * 100, 1) : 0.0;
 
-        $roInRepair = (int) DB::table('repair_orders')->where('status', 'in_repair')->count();
-        $roRepaired = (int) DB::table('repair_orders')->where('status', 'repaired')->count();
-        $roSentBack = (int) DB::table('repair_orders')->where('status', 'sent_back')->count();
-        $roClosedThisMonth = (int) DB::table('repair_orders')
+        $roInRepair = (int) RepairOrder::query()->where('status', 'in_repair')->count();
+        $roRepaired = (int) RepairOrder::query()->where('status', 'repaired')->count();
+        $roSentBack = (int) RepairOrder::query()->where('status', 'sent_back')->count();
+        $roClosedThisMonth = (int) RepairOrder::query()
             ->where('status', 'closed')
             ->where('updated_at', '>=', now()->subDays(30)->toDateString() . ' 00:00:00')
             ->count();
 
-        $avgDays = DB::table('repair_orders')
+        $avgDays = RepairOrder::query()
             ->where('status', 'closed')
             ->whereNotNull('received_at')
             ->whereNotNull('updated_at')
@@ -162,24 +164,24 @@ class DashboardService
             ->value('avg_d');
         $avgDays = $avgDays !== null ? round((float) $avgDays, 1) : 0.0;
 
-        $monthlyCost = (float) DB::table('repair_methods')
+        $monthlyCost = (float) RepairMethod::query()
             ->whereIn('method_type', ['paid_repair', 'paid_replace'])
             ->where('created_at', '>=', now()->startOfMonth()->toDateTimeString())
             ->sum('actual_cost');
 
         // V0.5.7 块4 — 维修成本归集 (本月/历史)
-        $thisMonthCost = (float) DB::table('repair_orders')
+        $thisMonthCost = (float) RepairOrder::query()
             ->whereIn('status', ['completed', 'closed', 'shipped_back'])
             ->whereRaw("DATE_TRUNC('month', received_at) = DATE_TRUNC('month', CURRENT_DATE)")
             ->sum('total_cost');
 
-        $thisMonthWarranty = (float) DB::table('repair_orders')
+        $thisMonthWarranty = (float) RepairOrder::query()
             ->whereIn('status', ['completed', 'closed', 'shipped_back'])
             ->where('is_warranty', true)
             ->whereRaw("DATE_TRUNC('month', received_at) = DATE_TRUNC('month', CURRENT_DATE)")
             ->sum('total_cost');
 
-        $thisMonthPaid = (float) DB::table('repair_orders')
+        $thisMonthPaid = (float) RepairOrder::query()
             ->whereIn('status', ['completed', 'closed', 'shipped_back'])
             ->where('is_warranty', false)
             ->whereRaw("DATE_TRUNC('month', received_at) = DATE_TRUNC('month', CURRENT_DATE)")
@@ -192,7 +194,7 @@ class DashboardService
 
         $costRatio = $totalContract > 0 ? round($thisMonthCost / $totalContract * 100, 2) : 0.0;
 
-        $byMethod = DB::table('repair_methods')
+        $byMethod = RepairMethod::query()
             ->select('method_type', DB::raw('count(*) as cnt'))
             ->groupBy('method_type')
             ->pluck('cnt', 'method_type')
