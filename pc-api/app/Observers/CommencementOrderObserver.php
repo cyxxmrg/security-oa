@@ -14,8 +14,8 @@ use App\Models\WorkProcessProgress;
  *  - status 变 cancelled:  关闭日报需求
  *
  * V0.4.4 修复:
- *  - work_process_progress 表无 commencement_order_id 列 → 改用 project_id 激活
- *  - 取消 actual_start_date/actual_end_date 列 (project_commencement_orders 表无)
+ *  - work_process_progress 表无 commencement_order_id 列 → 按 project_id + team_id 激活
+ *  - project_commencement_orders 仅使用数据库实际存在的日期字段
  */
 class CommencementOrderObserver
 {
@@ -28,10 +28,10 @@ class CommencementOrderObserver
         $newStatus = $order->status;
 
         if ($newStatus === ProjectCommencementOrder::STATUS_IN_PROGRESS) {
-            // 兜底激活 (V0.4.4: 改用 project_id, work_process_progress 表无 commencement_order_id 列)
             WorkProcessProgress::where('project_id', $order->project_id)
-                ->where('status', WorkProcessProgress::STATUS_NOT_STARTED ?? 'not_started')
-                ->update(['status' => WorkProcessProgress::STATUS_IN_PROGRESS ?? 'in_progress']);
+                ->where('team_id', $order->team_id)
+                ->where('status', WorkProcessProgress::STATUS_PENDING)
+                ->update(['status' => WorkProcessProgress::STATUS_IN_PROGRESS]);
         }
 
         if ($newStatus === ProjectCommencementOrder::STATUS_CANCELLED) {

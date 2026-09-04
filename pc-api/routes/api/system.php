@@ -302,6 +302,7 @@ Route::prefix('construction/teams')->middleware(['auth:sanctum', 'ensure_busines
 Route::prefix('construction/commencement-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
     Route::get('/', [CommencementOrderController::class, 'index']);
     Route::post('/', [CommencementOrderController::class, 'store'])->middleware('permission:project.edit');
+    Route::post('/{id}/submit', [CommencementOrderController::class, 'submitForApproval'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::post('/{id}/approve', [CommencementOrderController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::post('/{id}/start', [CommencementOrderController::class, 'startWork'])->where('id', '[0-9]+')->middleware('permission:project.edit');
     Route::post('/{id}/complete', [CommencementOrderController::class, 'complete'])->where('id', '[0-9]+')->middleware('permission:project.edit');

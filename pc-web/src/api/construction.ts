@@ -30,6 +30,7 @@ export const commencementApi = {
   show:     (id: number) => get(`/construction/commencement-orders/${id}`),
   create:   (data: unknown) => post('/construction/commencement-orders', data),
   update:   (id: number, data: unknown) => put(`/construction/commencement-orders/${id}`, data),
+  submit:   (id: number) => post(`/construction/commencement-orders/${id}/submit`),
   approve:  (id: number) => post(`/construction/commencement-orders/${id}/approve`),
   start:    (id: number) => post(`/construction/commencement-orders/${id}/start`),
   complete: (id: number) => post(`/construction/commencement-orders/${id}/complete`),

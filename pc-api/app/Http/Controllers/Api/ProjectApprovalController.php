@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
 use App\Services\ApprovalFlowService;
+use App\Services\CommencementOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -73,7 +74,8 @@ class ProjectApprovalController extends Controller
             'cc'           => $data['cc'] ?? [],
             ]);
             });
-        } catch (\DomainException $e) {
+        } catch (\Throwable $e) {
+            \Log::error('创建项目审批失败', ['applicant_id' => $applicant->id, 'err' => $e->getMessage()]);
             return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
         }
 
@@ -112,10 +114,20 @@ class ProjectApprovalController extends Controller
             $approval->comment = $comment;
             $approval->save();
 
+            if ($result['status'] === ApprovalRecord::STATUS_APPROVED
+                && $approval->sub_type === 'commencement') {
+                app(CommencementOrderService::class)->syncApprovalBusinessState(
+                    $approval,
+                    $request->user(),
+                    ApprovalRecord::STATUS_APPROVED
+                );
+            }
+
             $msg = $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已通过（全部节点已完成）' : '已通过，已转交下一节点';
             return response()->json(['code' => 0, 'message' => $msg, 'data' => ['status' => $approval->status]]);
             });
-        } catch (\DomainException $e) {
+        } catch (\Throwable $e) {
+            \Log::error('项目审批处理失败', ['approval_id' => $approval->id, 'err' => $e->getMessage()]);
             return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
         }
     }
@@ -125,24 +137,37 @@ class ProjectApprovalController extends Controller
         abort_unless($approval->type === 'project', 404, '资源不存在或参数错误');
         $request->validate(['comment' => 'required|string|max:500']);
         $comment = $request->input('comment');
-        return \DB::transaction(function () use ($request, $approval, $comment) {
-            $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
-            if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
-                return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
-            }
-            if (!$this->canCurrentUserApprove($approval)) {
-                return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
-            }
+        try {
+            return \DB::transaction(function () use ($request, $approval, $comment) {
+                $approval = ApprovalRecord::lockForUpdate()->findOrFail($approval->id);
+                if ($approval->status !== ApprovalRecord::STATUS_PENDING) {
+                    return response()->json(['code' => 1, 'message' => '该审批已结束，无法操作'], 422);
+                }
+                if (!$this->canCurrentUserApprove($approval)) {
+                    return response()->json(['code' => 1, 'message' => '当前用户无权审批该单 (申请人不能审批自己的单)'], 403);
+                }
 
-            $result = app(ApprovalFlowService::class)->rejectFlow($approval, $request->user(), $comment);
-            $approval->flow = $result['flow'];
-            $approval->status = $result['status'];
-            $approval->current_approver_id = $result['current_approver_id'];
-            $approval->comment = $comment;
-            $approval->save();
+                $result = app(ApprovalFlowService::class)->rejectFlow($approval, $request->user(), $comment);
+                $approval->flow = $result['flow'];
+                $approval->status = $result['status'];
+                $approval->current_approver_id = $result['current_approver_id'];
+                $approval->comment = $comment;
+                $approval->save();
 
-            return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
-        });
+                if ($approval->sub_type === 'commencement') {
+                    app(CommencementOrderService::class)->syncApprovalBusinessState(
+                        $approval,
+                        $request->user(),
+                        ApprovalRecord::STATUS_REJECTED
+                    );
+                }
+
+                return response()->json(['code' => 0, 'message' => '已驳回', 'data' => ['status' => $approval->status]]);
+            });
+        } catch (\Throwable $e) {
+            \Log::error('项目审批驳回失败', ['approval_id' => $approval->id, 'err' => $e->getMessage()]);
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+        }
     }
 
     public function forward(Request $request, ApprovalRecord $approval): JsonResponse

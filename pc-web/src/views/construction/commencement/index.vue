@@ -70,15 +70,15 @@
         </el-table-column>
         <el-table-column label="团队" width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.team?.name || row.team_id || '-' }}
+            {{ row.team?.team_name || row.team?.name || row.team_id || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="计划" width="220" align="center">
           <template #default="{ row }">
             <div class="date-cell">
-              <span>{{ row.planned_start || '-' }}</span>
+              <span>{{ formatDate(row.commencement_date) }}</span>
               <span class="arrow">→</span>
-              <span>{{ row.planned_end || '-' }}</span>
+              <span>{{ formatDate(row.planned_end_date) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -174,7 +174,9 @@ const router = useRouter()
 // 状态：draft/approved/in_progress/completed/cancelled
 const statusOptions = [
   { value: 'draft',       label: '草稿' },
+  { value: 'pending_approval', label: '待审批' },
   { value: 'approved',    label: '已审批' },
+  { value: 'rejected',    label: '已驳回' },
   { value: 'in_progress', label: '施工中' },
   { value: 'completed',   label: '已完工' },
   { value: 'cancelled',   label: '已取消' },
@@ -189,11 +191,9 @@ interface CommencementOrder {
   project_id?: number | null
   project?: { id: number; name?: string; code?: string } | null
   team_id?: number | null
-  team?: { id: number; name?: string } | null
-  planned_start?: string | null
-  planned_end?: string | null
-  worker_count?: number
-  estimated_hours?: number
+  team?: { id: number; name?: string; team_name?: string } | null
+  commencement_date?: string | null
+  planned_end_date?: string | null
   remark?: string | null
   created_at?: string
   [key: string]: unknown
@@ -205,7 +205,8 @@ interface TeamOption { id: number; name?: string; [key: string]: unknown }
 const statusLabel = (s: string) => statusOptions.find(x => x.value === s)?.label || s || '-'
 const statusTagType = (s: string): ElTagType => {
   const map: Record<string, ElTagType> = {
-    draft: 'info', approved: 'success', in_progress: 'warning', completed: 'success', cancelled: 'danger',
+    draft: 'info', pending_approval: 'warning', approved: 'success', rejected: 'danger',
+    in_progress: 'warning', completed: 'success', cancelled: 'danger',
   }
   return map[s] || 'info'
 }
@@ -241,6 +242,8 @@ const pagedList = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filteredList.value.slice(start, start + pageSize.value)
 })
+
+const formatDate = (value?: string | null) => value?.slice(0, 10) || '-'
 
 const kpis = computed(() => {
   const total = list.value.length
@@ -344,7 +347,7 @@ const handleSubmitForApproval = async (row: CommencementOrder) => {
     )
   } catch { return }
   try {
-      await commencementApi.approve(row.id)
+      await commencementApi.submit(row.id)
     ElMessage.success('已提交审批, 请前往审批中心处理')
     await loadList()
   } catch { /* 拦截器已提示 */ }

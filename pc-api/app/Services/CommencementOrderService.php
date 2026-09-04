@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ProjectCommencementOrder;
 use App\Models\RectificationDailyRequired;
+use App\Models\ConstructionTeam;
 use App\Models\WorkProcess;
 use App\Models\WorkProcessProgress;
 use App\Models\ApprovalRecord;
@@ -45,11 +46,9 @@ class CommencementOrderService
      */
     public function createOrder(int $projectId, array $data, int $userId): ProjectCommencementOrder
     {
-        // V0.4.4: 默认 status = pending_approval (V0.4.3 留 draft, 但下游无 draft 流程, 故默认直接进审批队列)
-        if (!isset($data['status'])) {
-            $data['status'] = ProjectCommencementOrder::STATUS_PENDING_APPROVAL;
-        }
         return DB::transaction(function () use ($projectId, $data, $userId) {
+            $this->validateTeam($projectId, $data['team_id'] ?? null);
+
             $order = ProjectCommencementOrder::create([
                 'project_id'           => $projectId,
                 'team_id'              => $data['team_id']              ?? null,
@@ -57,9 +56,13 @@ class CommencementOrderService
                 'commencement_date'    => $data['commencement_date']    ?? $data['planned_start_date'] ?? now()->toDateString(),
                 'planned_end_date'     => $data['planned_end_date']     ?? null,
                 'work_content'         => $data['work_content']         ?? $data['work_scope']         ?? '',
-                'quality_requirements' => $data['work_standard']        ?? null,
+                'work_location'        => $data['work_location']        ?? null,
+                'quality_requirements' => $data['quality_requirements'] ?? $data['work_standard'] ?? null,
                 'safety_requirements'  => $data['safety_requirements']  ?? null,
-                'status'               => $data['status'],
+                'on_site_contacts'     => $data['on_site_contacts']     ?? null,
+                'attachments'          => $data['attachments']          ?? null,
+                'remark'               => $data['remark']               ?? null,
+                'status'               => ProjectCommencementOrder::STATUS_DRAFT,
                 'created_by'           => $userId,
             ]);
 
@@ -71,8 +74,57 @@ class CommencementOrderService
             // 2) 强制日报需求 (开工单创建即生成 — 大哥拍板)
             $this->generateDailyRequired($order);
 
-            // V1.2.5: 同步创建审批中心记录 (project/commencement)
-            $this->syncApproval($order, 'submit');
+            $this->syncApproval($order, $userId);
+            $order->update(['status' => ProjectCommencementOrder::STATUS_PENDING_APPROVAL]);
+
+            return $order->fresh(['team', 'project']);
+        });
+    }
+
+    /**
+     * 更新草稿开工单
+     */
+    public function updateOrder(int $orderId, array $data): ProjectCommencementOrder
+    {
+        return DB::transaction(function () use ($orderId, $data) {
+            $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
+            if ($order->status !== ProjectCommencementOrder::STATUS_DRAFT) {
+                throw new \RuntimeException('只有草稿状态可编辑');
+            }
+
+            $this->validateTeam($order->project_id, $data['team_id'] ?? $order->team_id);
+            $updateData = [];
+            foreach ([
+                'team_id', 'planned_end_date', 'work_location',
+                'quality_requirements', 'safety_requirements',
+                'on_site_contacts', 'attachments', 'remark',
+            ] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $updateData[$field] = $data[$field];
+                }
+            }
+            if (array_key_exists('commencement_date', $data) || array_key_exists('planned_start_date', $data)) {
+                $updateData['commencement_date'] = $data['commencement_date'] ?? $data['planned_start_date'];
+            }
+            if (array_key_exists('work_content', $data) || array_key_exists('work_scope', $data)) {
+                $updateData['work_content'] = $data['work_content'] ?? $data['work_scope'];
+            }
+            if (!array_key_exists('quality_requirements', $data) && array_key_exists('work_standard', $data)) {
+                $updateData['quality_requirements'] = $data['work_standard'];
+            }
+            $order->update($updateData);
+
+            if (array_key_exists('processes', $data)) {
+                $this->syncProcesses($order, $data['processes'] ?? []);
+            }
+            if (array_key_exists('commencement_date', $data)
+                || array_key_exists('planned_start_date', $data)
+                || array_key_exists('planned_end_date', $data)) {
+                RectificationDailyRequired::where('commencement_order_id', $order->id)
+                    ->where('status', RectificationDailyRequired::STATUS_PENDING)
+                    ->delete();
+                $this->generateDailyRequired($order->fresh());
+            }
 
             return $order->fresh(['team', 'project']);
         });
@@ -84,36 +136,42 @@ class CommencementOrderService
     public function syncProcesses(ProjectCommencementOrder $order, array $processes): void
     {
         DB::transaction(function () use ($order, $processes) {
-            // 删除老工序 & 进度 (仅 draft 可调)
             if ($order->status !== ProjectCommencementOrder::STATUS_DRAFT) {
                 throw new \RuntimeException('只有草稿状态可同步工序');
             }
-            $order->processes()->delete();
-            $order->processes()->get()->each(function ($p) {
-                WorkProcessProgress::where('process_id', $p->id)->delete();
-            });
+            if (!$order->team_id && $processes !== []) {
+                throw new \RuntimeException('配置工序前必须选择施工团队');
+            }
 
             $sort = 0;
             foreach ($processes as $row) {
-                $proc = WorkProcess::create([
-                    'project_id'            => $order->project_id,
-                    'name'                  => $row['name'],
-                    'sequence'              => $row['sequence']            ?? $sort++,
-                    'description'           => $row['description']         ?? null,
-                    'estimated_hours'       => $row['estimated_hours']     ?? null,
-                    'status'                => $row['status']              ?? 'active',
+                $name = trim((string) ($row['name'] ?? ''));
+                if ($name === '') {
+                    throw new \InvalidArgumentException('工序名称不能为空');
+                }
+                $process = WorkProcess::updateOrCreate([
+                    'project_id' => $order->project_id,
+                    'name' => $name,
+                ], [
+                    'sequence' => $row['sequence'] ?? $sort++,
+                    'description' => $row['description'] ?? null,
+                    'estimated_hours' => $row['estimated_hours'] ?? null,
+                    'status' => $row['status'] ?? 'active',
                 ]);
 
-                // 创建对应 progress 记录 (completed=0)
-                WorkProcessProgress::create([
-                    'process_id'            => $proc->id,
-                    'project_id'            => $order->project_id,
-                    'team_id'               => $order->team_id,
-                    'planned_quantity'      => $row['planned_quantity'] ?? 0,
-                    'completed_quantity'    => 0,
-                    'progress_percentage'   => 0,
-                    'status'                => WorkProcessProgress::STATUS_NOT_STARTED ?? 'pending',
+                $progress = WorkProcessProgress::firstOrNew([
+                    'process_id' => $process->id,
+                    'project_id' => $order->project_id,
+                    'team_id' => $order->team_id,
                 ]);
+                $progress->planned_quantity = $row['planned_quantity'] ?? $progress->planned_quantity;
+                $progress->unit = $row['unit'] ?? $progress->unit;
+                if (!$progress->exists) {
+                    $progress->completed_quantity = 0;
+                    $progress->progress_percentage = 0;
+                    $progress->status = WorkProcessProgress::STATUS_PENDING;
+                }
+                $progress->save();
             }
         });
     }
@@ -123,7 +181,7 @@ class CommencementOrderService
      */
     private function generateDailyRequired(ProjectCommencementOrder $order): void
     {
-        $start = \Carbon\Carbon::parse($order->planned_start_date)->startOfDay();
+        $start = \Carbon\Carbon::parse($order->commencement_date)->startOfDay();
         $end   = \Carbon\Carbon::parse($order->planned_end_date)->startOfDay();
 
         if ($end->lt($start)) {
@@ -163,8 +221,11 @@ class CommencementOrderService
             }
             $order->update(['status' => ProjectCommencementOrder::STATUS_PENDING_APPROVAL]);
 
-            // V1.2.5: 同步创建审批中心记录 (draft → submit 时触发)
-            $this->syncApproval($order, 'submit');
+            $applicantId = (int) Auth::id();
+            if ($applicantId < 1) {
+                throw new \RuntimeException('无法识别当前申请人');
+            }
+            $this->syncApproval($order, $applicantId);
 
             return $order->fresh();
         });
@@ -176,18 +237,34 @@ class CommencementOrderService
     public function approve(int $orderId, int $approverId, ?string $comment = null): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $approverId, $comment) {
+            $approval = ApprovalRecord::where('type', 'project')
+                ->where('sub_type', 'commencement')
+                ->whereJsonContains('payload->order_id', $orderId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+            if (!$approval) {
+                throw new \RuntimeException('未找到有效的开工审批中心记录');
+            }
             $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
                 throw new \RuntimeException('只有待审批状态可审批');
             }
-            $order->update([
-                'status'      => ProjectCommencementOrder::STATUS_APPROVED,
-                'approved_by' => $approverId,
-                'approved_at' => now(),
-            ]);
-
-            // V1.2.5: 同步更新审批中心记录
-            $this->syncApproval($order, 'approve', $comment);
+            $operator = User::findOrFail($approverId);
+            $result = app(ApprovalFlowService::class)->advanceFlow($approval, $operator, $comment ?? '审批通过');
+            $approval->forceFill([
+                'status' => $result['status'],
+                'current_approver_id' => $result['current_approver_id'],
+                'flow' => $result['flow'],
+                'comment' => $comment ?? '审批通过',
+            ])->save();
+            if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
+                $order->update([
+                    'status' => ProjectCommencementOrder::STATUS_APPROVED,
+                    'approved_by' => $approverId,
+                    'approved_at' => now(),
+                ]);
+            }
 
             return $order->fresh();
         });
@@ -199,22 +276,33 @@ class CommencementOrderService
     public function reject(int $orderId, int $approverId, string $reason): ProjectCommencementOrder
     {
         return DB::transaction(function () use ($orderId, $approverId, $reason) {
+            if (trim($reason) === '') {
+                throw new \InvalidArgumentException('驳回原因不能为空');
+            }
+            $approval = ApprovalRecord::where('type', 'project')
+                ->where('sub_type', 'commencement')
+                ->whereJsonContains('payload->order_id', $orderId)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+            if (!$approval) {
+                throw new \RuntimeException('未找到有效的开工审批中心记录');
+            }
             $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
             if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
                 throw new \RuntimeException('只有待审批状态可驳回');
             }
-            if (trim($reason) === '') {
-                throw new \InvalidArgumentException('驳回原因不能为空');
-            }
+            $operator = User::findOrFail($approverId);
+            $result = app(ApprovalFlowService::class)->rejectFlow($approval, $operator, $reason);
+            $approval->forceFill([
+                'status' => $result['status'],
+                'current_approver_id' => $result['current_approver_id'],
+                'flow' => $result['flow'],
+                'comment' => $reason,
+            ])->save();
             $order->update([
                 'status'          => ProjectCommencementOrder::STATUS_REJECTED,
-                'approver_id'     => $approverId,
-                'approved_at'     => now(),
-                'rejected_reason' => $reason,
             ]);
-
-            // V1.2.5: 同步更新审批中心记录
-            $this->syncApproval($order, 'reject', $reason);
 
             return $order->fresh();
         });
@@ -236,8 +324,8 @@ class CommencementOrderService
             $order->update([
                 'status' => ProjectCommencementOrder::STATUS_IN_PROGRESS,
             ]);
-            // 激活该项目下 pending 工序进度 (V0.4.4 实际: work_process_progress 无 commencement_order_id 列, 走 project_id 激活)
             WorkProcessProgress::where('project_id', $order->project_id)
+                ->where('team_id', $order->team_id)
                 ->where('status', WorkProcessProgress::STATUS_PENDING)
                 ->update(['status' => WorkProcessProgress::STATUS_IN_PROGRESS]);
             return $order->fresh();
@@ -255,7 +343,8 @@ class CommencementOrderService
                 throw new \RuntimeException('只有施工中状态可完工');
             }
             $order->update([
-                'status'           => ProjectCommencementOrder::STATUS_COMPLETED,
+                'status' => ProjectCommencementOrder::STATUS_COMPLETED,
+                'actual_end_date' => $data['actual_end_date'] ?? now()->toDateString(),
             ]);
             return $order->fresh();
         });
@@ -288,70 +377,99 @@ class CommencementOrderService
         });
     }
 
+    public function syncApprovalBusinessState(
+        ApprovalRecord $approval,
+        User $operator,
+        string $status
+    ): ProjectCommencementOrder {
+        if ($approval->type !== 'project' || $approval->sub_type !== 'commencement') {
+            throw new \InvalidArgumentException('审批记录不是开工审批');
+        }
+        $orderId = (int) (($approval->payload ?? [])['order_id'] ?? 0);
+        if ($orderId < 1) {
+            throw new \RuntimeException('开工审批缺少业务单编号');
+        }
+
+        $order = ProjectCommencementOrder::lockForUpdate()->findOrFail($orderId);
+        if ($order->status !== ProjectCommencementOrder::STATUS_PENDING_APPROVAL) {
+            throw new \RuntimeException('开工单状态已变更，审批结果未同步');
+        }
+        if ($status === ApprovalRecord::STATUS_APPROVED) {
+            $order->update([
+                'status' => ProjectCommencementOrder::STATUS_APPROVED,
+                'approved_by' => $operator->id,
+                'approved_at' => now(),
+            ]);
+        } elseif ($status === ApprovalRecord::STATUS_REJECTED) {
+            $order->update(['status' => ProjectCommencementOrder::STATUS_REJECTED]);
+        } else {
+            throw new \InvalidArgumentException('不支持的开工审批结果');
+        }
+
+        return $order->fresh();
+    }
+
     /**
      * V1.2.5: 同步开工单审批到审批中心 (project/commencement)
      */
-    private function syncApproval(ProjectCommencementOrder $order, string $action, ?string $comment = null): void
+    private function syncApproval(ProjectCommencementOrder $order, int $applicantId): void
     {
         try {
-            if ($action === 'submit') {
-                $code = \App\Services\ApprovalNumberService::next('PRJ');
-                $applicant = User::find(Auth::id());
-
-                $exists = ApprovalRecord::where('type', 'project')
-                    ->where('sub_type', 'commencement')
-                    ->where('payload->order_id', $order->id)
-                    ->exists();
-                if ($exists) return;
-
-                ApprovalRecord::create([
-                    'code'         => $code,
-                    'type'         => 'project',
-                    'sub_type'     => 'commencement',
-                    'title'        => '[开工令] ' . ($order->code ?? '#' . $order->id) . ' 开工审批',
-                    'priority'     => 'high',
-                    'status'       => ApprovalRecord::STATUS_PENDING,
-                    'start_date'   => $order->commencement_date,
-                    'end_date'     => $order->planned_end_date,
-                    'applicant_id' => Auth::id() ?? $order->created_by,
-                    'current_approver_id' => 1,
-                    'payload'      => [
-                        'order_id'           => $order->id,
-                        'code'               => $order->code,
-                        'project_id'         => $order->project_id,
-                        'commencement_date'  => $order->commencement_date,
-                        'planned_end_date'   => $order->planned_end_date,
-                        'work_content'       => $order->work_content,
-                    ],
-                    'flow'         => [[
-                        'operator' => $applicant?->name ?? '—',
-                        'action'   => 'submit',
-                        'time'     => now()->toDateTimeString(),
-                        'comment'  => '提交开工令审批',
-                    ]],
-                ]);
-            } else {
-                $approval = ApprovalRecord::where('type', 'project')
-                    ->where('sub_type', 'commencement')
-                    ->where('payload->order_id', $order->id)
-                    ->first();
-                if (!$approval) return;
-
-                $flow = is_array($approval->flow) ? $approval->flow : [];
-                $operatorName = User::find(Auth::id())?->name ?? '—';
-                if ($action === 'approve') {
-                    $flow[] = ['operator' => $operatorName, 'action' => 'approve', 'time' => now()->toDateTimeString(), 'comment' => $comment ?? '审批通过'];
-                    $approval->status = ApprovalRecord::STATUS_APPROVED;
-                } elseif ($action === 'reject') {
-                    $flow[] = ['operator' => $operatorName, 'action' => 'reject', 'time' => now()->toDateTimeString(), 'comment' => $comment ?? '驳回'];
-                    $approval->status = ApprovalRecord::STATUS_REJECTED;
-                }
-                $approval->flow = $flow;
-                $approval->comment = $comment;
-                $approval->save();
+            $applicant = User::find($applicantId);
+            if (!$applicant) {
+                throw new \RuntimeException('当前申请人不存在');
             }
+            $existing = ApprovalRecord::where('type', 'project')
+                ->where('sub_type', 'commencement')
+                ->whereJsonContains('payload->order_id', $order->id)
+                ->whereIn('status', [ApprovalRecord::STATUS_PENDING, ApprovalRecord::STATUS_APPROVED])
+                ->first();
+            if ($existing?->status === ApprovalRecord::STATUS_PENDING) {
+                return;
+            }
+            if ($existing) {
+                throw new \RuntimeException('该开工单已经完成审批，不能重复提交');
+            }
+            $code = \App\Services\ApprovalNumberService::next('PRJ');
+            $flowService = app(ApprovalFlowService::class);
+            $template = $flowService->resolveTemplate('commencement', 'project');
+            if (!$template) {
+                throw new \RuntimeException('未找到开工对应的启用项目审批流程');
+            }
+            $flowData = $flowService->initFlow($template, $applicant, '提交开工令审批');
+            ApprovalRecord::create([
+                'code' => $code,
+                'type' => 'project',
+                'sub_type' => 'commencement',
+                'title' => '[开工令] ' . ($order->code ?? '#' . $order->id) . ' 开工审批',
+                'priority' => 'high',
+                'status' => ApprovalRecord::STATUS_PENDING,
+                'start_date' => $order->commencement_date,
+                'end_date' => $order->planned_end_date,
+                'applicant_id' => $applicant->id,
+                'current_approver_id' => $flowData['current_approver_id'],
+                'payload' => [
+                    'order_id' => $order->id,
+                    'code' => $order->code,
+                    'project_id' => $order->project_id,
+                    'commencement_date' => $order->commencement_date,
+                    'planned_end_date' => $order->planned_end_date,
+                    'work_content' => $order->work_content,
+                    '_approval_flow' => $flowData['definition'],
+                ],
+                'flow' => $flowData['flow'],
+            ]);
         } catch (\Throwable $e) {
-            Log::error('CommencementOrderService::syncApproval failed', ['msg' => $e->getMessage(), 'action' => $action, 'order_id' => $order->id]);
+            Log::error('CommencementOrderService::syncApproval failed', ['msg' => $e->getMessage(), 'order_id' => $order->id]);
+            throw $e;
         }
+    }
+
+    private function validateTeam(int $projectId, mixed $teamId): void
+    {
+        if ($teamId === null || $teamId === '') {
+            return;
+        }
+        ConstructionTeam::where('project_id', $projectId)->findOrFail((int) $teamId);
     }
 }

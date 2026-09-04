@@ -15,6 +15,7 @@ export interface ProjectRef {
 export interface TeamRef {
   id?: number
   name?: string | null
+  team_name?: string | null
   leader?: { name?: string | null } | null
   [key: string]: unknown
 }
@@ -195,24 +196,18 @@ export interface Commencement {
   project?: ProjectRef | null
   team_id?: number | string | null
   team?: TeamRef | null
-  planned_start?: string | null
-  planned_end?: string | null
-  worker_count?: number | string | null
-  estimated_hours?: number | string | null
-  actual_hours?: number | string | null
-  work_scope?: string | null
+  commencement_date?: string | null
+  planned_end_date?: string | null
+  actual_end_date?: string | null
+  work_content?: string | null
+  work_location?: string | null
+  quality_requirements?: string | null
+  safety_requirements?: string | null
   remark?: string | null
   status: string
   creator?: { name?: string | null } | null
   created_at?: string | null
   updated_at?: string | null
-  // 打印字段
-  commencement_date?: string | null
-  planned_end_date?: string | null
-  work_content?: string | null
-  work_location?: string | null
-  safety_requirements?: string | null
-  remarks?: string | null
   [key: string]: unknown
 }
 

@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -18,28 +17,24 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ProjectCommencementOrder extends Model
 {
-    use SoftDeletes;
-
     protected $table = 'project_commencement_orders';
 
     protected $fillable = [
         'project_id', 'team_id', 'code',
-        'commencement_date', 'planned_start_date', 'planned_end_date',
-        'actual_start_date', 'actual_end_date',
-        'work_content', 'work_scope', 'work_location',
-        'work_standard', 'quality_requirements', 'safety_requirements',
+        'commencement_date', 'planned_end_date', 'actual_end_date',
+        'work_content', 'work_location',
+        'quality_requirements', 'safety_requirements',
         'on_site_contacts', 'attachments',
-        'status', 'approver_id', 'approved_by', 'approved_at', 'rejected_reason',
-        'created_by', 'remark',
+        'status', 'approved_by', 'approved_at', 'created_by', 'remark',
     ];
 
     protected $casts = [
         'commencement_date'  => 'date',
-        'planned_start_date' => 'date',
         'planned_end_date'   => 'date',
-        'actual_start_date'  => 'date',
         'actual_end_date'    => 'date',
         'approved_at'        => 'datetime',
+        'on_site_contacts'   => 'array',
+        'attachments'        => 'array',
     ];
 
     /** 状态 */
@@ -65,7 +60,7 @@ class ProjectCommencementOrder extends Model
 
     public function approver(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'approver_id');
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function creator(): BelongsTo
@@ -75,8 +70,7 @@ class ProjectCommencementOrder extends Model
 
     public function processes(): HasMany
     {
-        // work_processes 表无 commencement_order_id 列 — 通过 work_process_progress 反查
-        return $this->hasManyThrough(WorkProcess::class, WorkProcessProgress::class, 'commencement_order_id', 'id', 'id', 'process_id');
+        return $this->hasMany(WorkProcess::class, 'project_id', 'project_id');
     }
 
     public function logs(): HasMany

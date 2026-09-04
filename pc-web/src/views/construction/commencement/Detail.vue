@@ -39,19 +39,20 @@
               {{ order.project?.name || order.project?.code || order.project_id || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="团队">
-              {{ order.team?.name || order.team_id || '-' }}
+              {{ order.team?.team_name || order.team?.name || order.team_id || '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="计划开工">{{ order.planned_start || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="计划完工">{{ order.planned_end || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="计划开工">{{ formatDate(order.commencement_date) }}</el-descriptions-item>
+            <el-descriptions-item label="计划完工">{{ formatDate(order.planned_end_date) }}</el-descriptions-item>
             <el-descriptions-item label="工期">
               {{ durationDays }} 天
             </el-descriptions-item>
-            <el-descriptions-item label="工人数量">{{ order.worker_count || 0 }} 人</el-descriptions-item>
-            <el-descriptions-item label="工时预估">{{ order.estimated_hours || 0 }} 人时</el-descriptions-item>
-            <el-descriptions-item label="实际工时">{{ order.actual_hours || 0 }} 人时</el-descriptions-item>
+            <el-descriptions-item label="施工地点" :span="2">{{ order.work_location || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="实际完工">{{ formatDate(order.actual_end_date) }}</el-descriptions-item>
             <el-descriptions-item label="施工内容" :span="3">
-              <div style="white-space: pre-wrap">{{ order.work_scope || '-' }}</div>
+              <div style="white-space: pre-wrap">{{ order.work_content || '-' }}</div>
             </el-descriptions-item>
+            <el-descriptions-item label="质量要求" :span="3">{{ order.quality_requirements || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="安全要求" :span="3">{{ order.safety_requirements || '-' }}</el-descriptions-item>
             <el-descriptions-item v-if="order.remark" label="备注" :span="3">{{ order.remark }}</el-descriptions-item>
             <el-descriptions-item label="创建人">{{ order.creator?.name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ order.created_at || '-' }}</el-descriptions-item>
@@ -63,7 +64,7 @@
         <el-card shadow="never" class="info-card">
           <template #header><span class="card-title">关联日志（{{ logs.length }}）</span></template>
           <el-table :data="logs" v-loading="logsLoading" border size="small" stripe>
-            <el-table-column prop="date" label="日期" width="120" align="center" />
+            <el-table-column prop="work_date" label="日期" width="120" align="center" />
             <el-table-column prop="weather" label="天气" width="80" align="center" />
             <el-table-column label="工序" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
@@ -106,7 +107,9 @@ const logsLoading = ref(false)
 
 const statusMap: Record<string, { label: string; tagType: 'primary' | 'success' | 'warning' | 'info' | 'danger'; step: number }> = {
   draft:       { label: '草稿',     tagType: 'info',    step: 0 },
+  pending_approval: { label: '待审批', tagType: 'warning', step: 0 },
   approved:    { label: '已审批',   tagType: 'success', step: 1 },
+  rejected:    { label: '已驳回',   tagType: 'danger',  step: 0 },
   in_progress: { label: '施工中',   tagType: 'warning', step: 2 },
   completed:   { label: '已完工',   tagType: 'success', step: 3 },
   cancelled:   { label: '已取消',   tagType: 'danger',  step: 0 },
@@ -119,9 +122,9 @@ const orderId = computed(() => Number(route.params.id))
 
 const durationDays = computed(() => {
   const o = order.value
-  if (!o?.planned_start || !o?.planned_end) return 0
-  const d1 = new Date(o.planned_start).getTime()
-  const d2 = new Date(o.planned_end).getTime()
+  if (!o?.commencement_date || !o?.planned_end_date) return 0
+  const d1 = new Date(o.commencement_date).getTime()
+  const d2 = new Date(o.planned_end_date).getTime()
   if (Number.isNaN(d1) || Number.isNaN(d2)) return 0
   return Math.max(0, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1)
 })
@@ -144,7 +147,7 @@ const loadLogs = async () => {
   if (!orderId.value) return
   logsLoading.value = true
   try {
-    const res = await logApi.list({ commencement_id: orderId.value, per_page: 100 })
+    const res = await logApi.list({ commencement_order_id: orderId.value, per_page: 100 })
     logs.value = unwrapList(res)
   } catch {
     logs.value = []
@@ -154,6 +157,7 @@ const loadLogs = async () => {
 }
 
 const goBack = () => router.push('/construction/commencement')
+const formatDate = (value?: string | null) => value?.slice(0, 10) || '-'
 const handlePrint = () => {
   if (!order.value) {
     ElMessage.warning('开工单未加载')
@@ -171,7 +175,7 @@ const handlePrint = () => {
     ['工作地点', o.work_location || '-'],
     ['安全要求', o.safety_requirements || '-'],
     ['状态', o.status || '-'],
-    ['备注', o.remarks || '-'],
+    ['备注', o.remark || '-'],
   ]
   printTable(`开工单 - ${o.code || o.id || ''}`, headers, rows as unknown as Record<string, unknown>[][], { orientation: 'portrait' })
 }

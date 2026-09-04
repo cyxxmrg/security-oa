@@ -30,8 +30,9 @@ class WorkProcessProgress extends Model
     protected $fillable = [
         'process_id', 'project_id', 'team_id',
         'planned_quantity', 'completed_quantity',
-        'progress_percentage', 'status',
-        'last_log_id', 'last_log_date', 'updated_by', 'remark',
+        'unit', 'progress_percentage', 'status',
+        'start_date', 'end_date', 'block_reason',
+        'last_log_id', 'last_log_date', 'updated_by',
     ];
 
     protected $casts = [
@@ -39,10 +40,12 @@ class WorkProcessProgress extends Model
         'completed_quantity'  => 'decimal:2',
         'progress_percentage' => 'decimal:2',
         'last_log_date'       => 'date',
+        'start_date'          => 'date',
+        'end_date'            => 'date',
     ];
 
     public const STATUS_PENDING     = 'pending';
-    public const STATUS_NOT_STARTED = 'not_started';
+    public const STATUS_NOT_STARTED = self::STATUS_PENDING;
     public const STATUS_IN_PROGRESS = 'in_progress';
     public const STATUS_COMPLETED   = 'completed';
 
@@ -56,11 +59,6 @@ class WorkProcessProgress extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
-    }
-
-    public function commencementOrder(): BelongsTo
-    {
-        return $this->belongsTo(ProjectCommencementOrder::class, 'commencement_order_id');
     }
 
     public function updater(): BelongsTo
