@@ -43,7 +43,7 @@ class RoleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Role::query()->with('permissions:id,name');
+        $query = Role::where('guard_name', 'web')->with('permissions:id,name');
 
         if ($request->filled('keyword')) {
             $kw = $request->keyword;
@@ -96,7 +96,7 @@ class RoleController extends Controller
     public function show(string $role): JsonResponse
     {
         $r = is_numeric($role)
-            ? Role::findOrFail((int) $role)
+            ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
         $r->load('permissions:id,name');
         return response()->json([
@@ -153,14 +153,17 @@ class RoleController extends Controller
     public function update(Request $request, string $role): JsonResponse
     {
         $r = is_numeric($role)
-            ? Role::findOrFail((int) $role)
+            ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
         $data = $request->validate([
             'name'         => ['sometimes', 'required', 'string', 'max:64', Rule::unique('roles', 'name')->where('guard_name', 'web')->ignore($r->id)],
             'description'  => ['nullable', 'string', 'max:255'],
             'color'        => ['nullable', 'string', 'max:16'],
             'permissions'  => ['array'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'permissions.*' => [
+                'string',
+                Rule::exists('permissions', 'name')->where(fn ($query) => $query->where('guard_name', 'web')),
+            ],
         ]);
 
         $r->fill([
@@ -187,7 +190,7 @@ class RoleController extends Controller
     public function destroy(string $role): JsonResponse
     {
         $r = is_numeric($role)
-            ? Role::findOrFail((int) $role)
+            ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
 
         // 系统保护: system / system_admin 是 system 账号绑定的角色, 不能删
@@ -233,7 +236,7 @@ class RoleController extends Controller
     public function assignPermissions(AssignPermissionsRequest $request, string $role): JsonResponse
     {
         $r = is_numeric($role)
-            ? Role::findOrFail((int) $role)
+            ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
         $data = $request->validated();
         $perms = $data['permissions'] ?? [];
@@ -284,7 +287,7 @@ class RoleController extends Controller
         }
 
         // 已知 perm 集合 (用于前端显示 "perm 不存在" 警告)
-        $allPermNames = Permission::pluck('name')->flip()->all();
+        $allPermNames = Permission::where('guard_name', 'web')->pluck('name')->flip()->all();
 
         $menus = $this->buildMenuTree();
         // V1.2.10: 给没有 perm_key 的叶子自动生成权限名 + 确保 permissions 表有记录
@@ -312,7 +315,9 @@ class RoleController extends Controller
         unset($menu);
         // 批量创建缺失的权限记录
         if (!empty($autoPermsToCreate)) {
-            $existing = Permission::whereIn('name', array_column($autoPermsToCreate, 'name'))->pluck('name')->all();
+            $existing = Permission::where('guard_name', 'web')
+                ->whereIn('name', array_column($autoPermsToCreate, 'name'))
+                ->pluck('name')->all();
             $newPerms = array_filter($autoPermsToCreate, fn($p) => !in_array($p['name'], $existing));
             if (!empty($newPerms)) {
                 Permission::insertOrIgnore($newPerms);
@@ -344,7 +349,7 @@ class RoleController extends Controller
     public function saveMenuPermissions(Request $request, string $role): JsonResponse
     {
         $r = is_numeric($role)
-            ? Role::findOrFail((int) $role)
+            ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
 
         $data = $request->validate([
@@ -355,6 +360,17 @@ class RoleController extends Controller
 
         // V1.2.10: 前端直接传 perm_key 列表, 不再需要 buildMenuTree 映射
         $perms = array_values(array_unique($selectedLeaves));
+        $validPerms = Permission::where('guard_name', 'web')
+            ->whereIn('name', $perms)
+            ->pluck('name')
+            ->all();
+        $invalidPerms = array_values(array_diff($perms, $validPerms));
+        if ($invalidPerms) {
+            return response()->json([
+                'code' => 422,
+                'message' => '权限点不存在或 guard 不匹配: ' . implode(',', $invalidPerms),
+            ], 422);
+        }
 
         $r->syncPermissions($perms);
         \App\Support\PermissionInheritance::propagateToChildren($r->name, $perms);
@@ -539,7 +555,7 @@ class RoleController extends Controller
         $roles = Role::where('guard_name', 'web')->orderBy('id')->get(['id', 'name', 'description', 'color']);
 
         // 全部权限按 module 分组
-        $perms = Permission::orderBy('module')->orderBy('id')
+        $perms = Permission::where('guard_name', 'web')->orderBy('module')->orderBy('id')
             ->get(['id', 'name', 'module', 'description', 'display_name']);
 
         // 角色 -> 权限集合
@@ -607,7 +623,7 @@ class RoleController extends Controller
             // ignore
         }
         if (in_array('admin', $userRoles, true)) {
-            $list = Permission::orderBy('module')->orderBy('id')->get(['name', 'module', 'display_name', 'description'])
+            $list = Permission::where('guard_name', 'web')->orderBy('module')->orderBy('id')->get(['name', 'module', 'display_name', 'description'])
                 ->map(fn($p) => [
                     'name' => $p->name,
                     'module' => $p->module,
@@ -617,7 +633,7 @@ class RoleController extends Controller
         }
 
         $activePermissionNames = $user->activePermissionNames();
-        $list = Permission::query()
+        $list = Permission::where('guard_name', 'web')
             ->whereIn('name', $activePermissionNames)
             ->orderBy('module')
             ->orderBy('id')
@@ -636,7 +652,7 @@ class RoleController extends Controller
      */
     public function permissionIndex(): JsonResponse
     {
-        $list = Permission::orderBy('id')->get(['id', 'name', 'module', 'description'])->map(function ($p) {
+        $list = Permission::where('guard_name', 'web')->orderBy('id')->get(['id', 'name', 'module', 'description'])->map(function ($p) {
             return [
                 'id'          => $p->id,
                 'name'        => $p->name,
@@ -732,9 +748,14 @@ class RoleController extends Controller
      */
     public function usersSyncRoles(Request $request, \App\Models\User $user): JsonResponse
     {
-        $roleNames = (array) $request->input('roles', []);
+        $data = $request->validate([
+            'roles' => ['array'],
+            'roles.*' => ['string', 'max:100'],
+        ]);
+        $roleNames = array_values(array_unique($data['roles'] ?? []));
         // 校验所有 role name 都存在
-        $valid = \Spatie\Permission\Models\Role::whereIn('name', $roleNames)->pluck('name')->all();
+        $valid = \Spatie\Permission\Models\Role::where('guard_name', 'web')
+            ->whereIn('name', $roleNames)->pluck('name')->all();
         if (count($valid) !== count($roleNames)) {
             $invalid = array_diff($roleNames, $valid);
             return response()->json([
@@ -743,11 +764,11 @@ class RoleController extends Controller
             ], 422);
         }
         // 记录原角色 (audit 用)
-        $oldRoles = $user->roles->pluck('name')->sort()->values()->all();
+        $oldRoles = $user->roles()->where('guard_name', 'web')->pluck('name')->sort()->values()->all();
         $newRoles = collect($valid)->sort()->values()->all();
         // V0.5.2 修: User::getDefaultGuardName 已返回 'web', 直接 syncRoles 即可
         $user->syncRoles($valid);
-        $freshRoles = $user->fresh()->roles->pluck('name')->all();
+        $freshRoles = $user->fresh()->roles()->where('guard_name', 'web')->pluck('name')->all();
 
         // V0.5.2: 写 audit log (action=role_changed)
         if ($oldRoles !== $newRoles) {
@@ -781,9 +802,14 @@ class RoleController extends Controller
      */
     public function usersBulkAssignRole(Request $request): JsonResponse
     {
-        $userIds = (array) $request->input('user_ids', []);
-        $roleName = (string) $request->input('role', '');
-        if (!$roleName || !Role::where('name', $roleName)->exists()) {
+        $data = $request->validate([
+            'user_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+            'role' => ['required', 'string', 'max:100'],
+        ]);
+        $userIds = $data['user_ids'];
+        $roleName = $data['role'];
+        if (!Role::where('name', $roleName)->where('guard_name', 'web')->exists()) {
             return response()->json(['code' => 422, 'message' => '角色不存在'], 422);
         }
         $count = 0;

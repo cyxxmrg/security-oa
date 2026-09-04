@@ -22,7 +22,10 @@ class StoreRoleRequest extends BaseFormRequest
             'description'   => ['nullable', 'string', 'max:255'],
             'color'         => ['nullable', 'string', 'max:16', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'permissions'   => ['nullable', 'array'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'permissions.*' => [
+                'string',
+                Rule::exists('permissions', 'name')->where(fn ($query) => $query->where('guard_name', 'web')),
+            ],
         ];
     }
 

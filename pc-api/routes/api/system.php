@@ -144,10 +144,10 @@ Route::prefix('users')->middleware(['auth:sanctum'])->group(function () {
 Route::middleware(['auth:sanctum', 'permission:system.role'])->group(function () {
     Route::get('roles/matrix', [RoleController::class, 'matrix'])->withoutMiddleware('ensure_business');
     Route::get('permissions/inheritance', [RoleController::class, 'inheritanceGraph'])->withoutMiddleware('ensure_business');
-    Route::put('users/{user}/roles', [RoleController::class, 'usersSyncRoles'])->whereNumber('user')->withoutMiddleware('ensure_business');
-    Route::post('users/bulk-assign-role', [RoleController::class, 'usersBulkAssignRole'])->withoutMiddleware('ensure_business');
-    Route::post('users/{user}/roles/temporary', [RoleController::class, 'usersGrantTemporary'])->whereNumber('user')->withoutMiddleware('ensure_business');
-    Route::delete('users/{user}/roles/{role}', [RoleController::class, 'usersRevokeRole'])->whereNumber('user')->withoutMiddleware('ensure_business');
+    Route::put('users/{user}/roles', [RoleController::class, 'usersSyncRoles'])->whereNumber('user')->withoutMiddleware('ensure_business')->middleware('permission:user.manage');
+    Route::post('users/bulk-assign-role', [RoleController::class, 'usersBulkAssignRole'])->withoutMiddleware('ensure_business')->middleware('permission:user.manage');
+    Route::post('users/{user}/roles/temporary', [RoleController::class, 'usersGrantTemporary'])->whereNumber('user')->withoutMiddleware('ensure_business')->middleware('permission:user.manage');
+    Route::delete('users/{user}/roles/{role}', [RoleController::class, 'usersRevokeRole'])->whereNumber('user')->withoutMiddleware('ensure_business')->middleware('permission:user.manage');
 });
 
 // ========== 字段脱敏规则管理 ==========

@@ -17,7 +17,10 @@ class AssignPermissionsRequest extends BaseFormRequest
     {
         return [
             'permissions'   => ['required', 'array', 'min:0'],
-            'permissions.*' => ['string', 'exists:permissions,name'],
+            'permissions.*' => [
+                'string',
+                Rule::exists('permissions', 'name')->where(fn ($query) => $query->where('guard_name', 'web')),
+            ],
         ];
     }
 
