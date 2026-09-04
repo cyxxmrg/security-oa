@@ -246,10 +246,12 @@ class TenderService
     /**
      * 标记已收保证金（财务手动确认）
      */
-    public function markDepositPaid(int $depositId, ?string $voucherPath = null): TenderDeposit
+    public function markDepositPaid(int $tenderId, int $depositId, ?string $voucherPath = null): TenderDeposit
     {
-        return DB::transaction(function () use ($depositId, $voucherPath) {
-            $d = TenderDeposit::lockForUpdate()->findOrFail($depositId);
+        return DB::transaction(function () use ($tenderId, $depositId, $voucherPath) {
+            $d = TenderDeposit::where('tender_project_id', $tenderId)
+                ->lockForUpdate()
+                ->findOrFail($depositId);
             if ($d->status !== TenderDeposit::STATUS_PENDING) {
                 throw new RuntimeException("当前状态 [{$d->status_label}] 不能标记已收 (要求 pending)");
             }
@@ -265,10 +267,12 @@ class TenderService
     /**
      * 退还保证金（未中标方 / 中标方合同签后退）
      */
-    public function refundDeposit(int $depositId, float $refundAmount, string $method, string $reason, ?string $voucherPath = null): TenderDeposit
+    public function refundDeposit(int $tenderId, int $depositId, float $refundAmount, string $method, string $reason, ?string $voucherPath = null): TenderDeposit
     {
-        return DB::transaction(function () use ($depositId, $refundAmount, $method, $reason, $voucherPath) {
-            $d = TenderDeposit::lockForUpdate()->findOrFail($depositId);
+        return DB::transaction(function () use ($tenderId, $depositId, $refundAmount, $method, $reason, $voucherPath) {
+            $d = TenderDeposit::where('tender_project_id', $tenderId)
+                ->lockForUpdate()
+                ->findOrFail($depositId);
             if ($d->status !== TenderDeposit::STATUS_PAID) {
                 throw new RuntimeException("当前状态 [{$d->status_label}] 不能退款 (要求 paid)");
             }
@@ -293,10 +297,12 @@ class TenderService
     /**
      * 没收保证金（流标 / 中标方不签合同）
      */
-    public function forfeitDeposit(int $depositId, string $reason): TenderDeposit
+    public function forfeitDeposit(int $tenderId, int $depositId, string $reason): TenderDeposit
     {
-        return DB::transaction(function () use ($depositId, $reason) {
-            $d = TenderDeposit::lockForUpdate()->findOrFail($depositId);
+        return DB::transaction(function () use ($tenderId, $depositId, $reason) {
+            $d = TenderDeposit::where('tender_project_id', $tenderId)
+                ->lockForUpdate()
+                ->findOrFail($depositId);
             if (!in_array($d->status, [TenderDeposit::STATUS_PAID, TenderDeposit::STATUS_PENDING], true)) {
                 throw new RuntimeException("当前状态 [{$d->status_label}] 不能没收 (要求 paid 或 pending)");
             }
@@ -327,6 +333,7 @@ class TenderService
             } else {
                 // 其他供应商：自动发起退款（amount = 全额）
                 $this->refundDeposit(
+                    $tenderId,
                     $d->id,
                     (float) $d->amount,
                     'bank_transfer',
@@ -377,6 +384,8 @@ class TenderService
      */
     public function listDeposits(int $tenderId)
     {
+        TenderProject::query()->findOrFail($tenderId);
+
         return TenderDeposit::where('tender_project_id', $tenderId)
             ->with(['supplier:id,name,code,account_name,legal_person', 'markedPaidByUser:id,name', 'refundedByUser:id,name', 'forfeitedByUser:id,name'])
             ->orderBy('id')

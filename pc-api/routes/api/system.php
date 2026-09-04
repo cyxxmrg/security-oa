@@ -46,17 +46,17 @@ Route::prefix('dashboard')->middleware(['auth:sanctum', 'ensure_business'])->gro
 });
 
 // ========== 售后服务 ==========
-Route::prefix('service')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.view'])->group(function () {
-    Route::get('stats', [ServiceController::class, 'stats']);
-    Route::get('maintenance-contracts', [ServiceController::class, 'maintenanceContracts']);
-    Route::get('orders', [ServiceController::class, 'index']);
-    Route::post('orders', [ServiceController::class, 'store'])->middleware('permission:project.edit');
-    Route::get('orders/stats', [ServiceController::class, 'stats']);
-    Route::get('orders/{serviceOrder}', [ServiceController::class, 'show']);
-    Route::post('orders/{serviceOrder}/assign', [ServiceController::class, 'assign'])->middleware('permission:project.assign');
-    Route::post('orders/{serviceOrder}/start', [ServiceController::class, 'startRepair'])->middleware('permission:project.edit');
-    Route::post('orders/{serviceOrder}/complete', [ServiceController::class, 'completeRepair'])->middleware('permission:project.edit');
-    Route::post('orders/{serviceOrder}/confirm', [ServiceController::class, 'confirmByCustomer'])->middleware('permission:project.edit');
+Route::prefix('service')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::get('stats', [ServiceController::class, 'stats'])->middleware('permission:service.view|warranty.view');
+    Route::get('maintenance-contracts', [ServiceController::class, 'maintenanceContracts'])->middleware('permission:service.view|warranty.view');
+    Route::get('orders', [ServiceController::class, 'index'])->middleware('permission:service.view|warranty.view');
+    Route::post('orders', [ServiceController::class, 'store'])->middleware('permission:service.create');
+    Route::get('orders/stats', [ServiceController::class, 'stats'])->middleware('permission:service.view|warranty.view');
+    Route::get('orders/{serviceOrder}', [ServiceController::class, 'show'])->middleware('permission:service.view|warranty.view');
+    Route::post('orders/{serviceOrder}/assign', [ServiceController::class, 'assign'])->middleware('permission:service.dispatch');
+    Route::post('orders/{serviceOrder}/start', [ServiceController::class, 'startRepair'])->middleware('permission:service.edit');
+    Route::post('orders/{serviceOrder}/complete', [ServiceController::class, 'completeRepair'])->middleware('permission:service.edit');
+    Route::post('orders/{serviceOrder}/confirm', [ServiceController::class, 'confirmByCustomer'])->middleware('permission:service.edit');
 });
 
 // ========== 系统管理 (V1.1: 仅 system 可写) ==========
@@ -254,15 +254,15 @@ Route::prefix('warranties')->middleware(['auth:sanctum', 'ensure_business', 'per
 });
 
 // 质保期服务工单
-Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.view'])->group(function () {
-    Route::get('technician-stats', [WarrantyServiceOrderController::class, 'technicianStats']);
-    Route::get('/', [WarrantyServiceOrderController::class, 'index']);
-    Route::post('/', [WarrantyServiceOrderController::class, 'store']);
-    Route::post('/{id}/assign', [WarrantyServiceOrderController::class, 'assign'])->where('id', '[0-9]+');
-    Route::post('/{id}/start', [WarrantyServiceOrderController::class, 'start'])->where('id', '[0-9]+');
-    Route::post('/{id}/complete', [WarrantyServiceOrderController::class, 'complete'])->where('id', '[0-9]+');
-    Route::post('/{id}/cancel', [WarrantyServiceOrderController::class, 'cancel'])->where('id', '[0-9]+');
-    Route::get('/{id}', [WarrantyServiceOrderController::class, 'show'])->where('id', '[0-9]+');
+Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::get('technician-stats', [WarrantyServiceOrderController::class, 'technicianStats'])->middleware('permission:service.view|warranty.view');
+    Route::get('/', [WarrantyServiceOrderController::class, 'index'])->middleware('permission:service.view|warranty.view');
+    Route::post('/', [WarrantyServiceOrderController::class, 'store'])->middleware('permission:service.create');
+    Route::post('/{id}/assign', [WarrantyServiceOrderController::class, 'assign'])->where('id', '[0-9]+')->middleware('permission:service.dispatch');
+    Route::post('/{id}/start', [WarrantyServiceOrderController::class, 'start'])->where('id', '[0-9]+')->middleware('permission:service.edit');
+    Route::post('/{id}/complete', [WarrantyServiceOrderController::class, 'complete'])->where('id', '[0-9]+')->middleware('permission:service.edit');
+    Route::post('/{id}/cancel', [WarrantyServiceOrderController::class, 'cancel'])->where('id', '[0-9]+')->middleware('permission:service.edit');
+    Route::get('/{id}', [WarrantyServiceOrderController::class, 'show'])->where('id', '[0-9]+')->middleware('permission:service.view|warranty.view');
 });
 
 // 质保期保证金

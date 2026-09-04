@@ -14,38 +14,37 @@ use App\Http\Controllers\Api\ExternalQuoteController;
 use Illuminate\Support\Facades\Route;
 
 // ========== 招标中心 ==========
-// V1.2.10 补 permission 中间件 (admin 角色有所有权限, 不影响业务管理员)
-Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business', 'permission:purchase.tender'])->group(function () {
-    Route::get('/', [TenderController::class, 'index']);
-    Route::post('/', [TenderController::class, 'store']);
-    Route::get('pending-review', [TenderController::class, 'pendingReview']);
-    Route::post('{id}/publish', [TenderController::class, 'publish'])->whereNumber('id');
-    Route::post('{id}/close', [TenderController::class, 'close'])->whereNumber('id');
-    Route::post('{id}/cancel', [TenderController::class, 'cancel'])->whereNumber('id');
-    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->whereNumber('id');
-    Route::post('{id}/award', [TenderController::class, 'award'])->whereNumber('id');
-    Route::post('{id}/submit-review', [TenderController::class, 'submitReview'])->whereNumber('id');
-    Route::post('{id}/approve', [TenderController::class, 'approve'])->whereNumber('id');
-    Route::post('{id}/reject', [TenderController::class, 'reject'])->whereNumber('id');
-    Route::post('{id}/withdraw', [TenderController::class, 'withdraw'])->whereNumber('id');
-    Route::post('{id}/cancel-v2', [TenderController::class, 'cancelV2'])->whereNumber('id');
-    Route::put('{id}/deposit-rule', [TenderController::class, 'setDepositRule'])->whereNumber('id');
-    Route::get('{id}/deposits', [TenderController::class, 'listDeposits'])->whereNumber('id');
-    Route::post('{id}/deposits', [TenderController::class, 'createDeposit'])->whereNumber('id');
-    Route::post('{id}/deposits/{depositId}/mark-paid', [TenderController::class, 'markDepositPaid'])->whereNumber('id')->whereNumber('depositId');
-    Route::post('{id}/deposits/{depositId}/refund', [TenderController::class, 'refundDeposit'])->whereNumber('id')->whereNumber('depositId');
-    Route::post('{id}/deposits/{depositId}/forfeit', [TenderController::class, 'forfeitDeposit'])->whereNumber('id')->whereNumber('depositId');
-    Route::get('{id}/downstream', [TenderController::class, 'downstream'])->whereNumber('id');
-    Route::get('{id}/bids', [TenderController::class, 'bids'])->whereNumber('id');
-    Route::post('{id}/bids', [TenderController::class, 'storeBid'])->whereNumber('id');
-    Route::get('{id}/attachments', [TenderController::class, 'listAttachments'])->whereNumber('id');
-    Route::post('{id}/attachments', [TenderController::class, 'uploadAttachment'])->whereNumber('id');
+Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+    Route::get('/', [TenderController::class, 'index'])->middleware('permission:tender.view|tender.approve|deposit.manage');
+    Route::post('/', [TenderController::class, 'store'])->middleware('permission:tender.create');
+    Route::get('pending-review', [TenderController::class, 'pendingReview'])->middleware('permission:tender.approve');
+    Route::post('{id}/publish', [TenderController::class, 'publish'])->whereNumber('id')->middleware('permission:tender.submit');
+    Route::post('{id}/close', [TenderController::class, 'close'])->whereNumber('id')->middleware('permission:tender.cancel');
+    Route::post('{id}/cancel', [TenderController::class, 'cancel'])->whereNumber('id')->middleware('permission:tender.cancel');
+    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->whereNumber('id')->middleware('permission:tender.award');
+    Route::post('{id}/award', [TenderController::class, 'award'])->whereNumber('id')->middleware('permission:tender.award');
+    Route::post('{id}/submit-review', [TenderController::class, 'submitReview'])->whereNumber('id')->middleware('permission:tender.submit');
+    Route::post('{id}/approve', [TenderController::class, 'approve'])->whereNumber('id')->middleware('permission:tender.approve');
+    Route::post('{id}/reject', [TenderController::class, 'reject'])->whereNumber('id')->middleware('permission:tender.approve');
+    Route::post('{id}/withdraw', [TenderController::class, 'withdraw'])->whereNumber('id')->middleware('permission:tender.withdraw');
+    Route::post('{id}/cancel-v2', [TenderController::class, 'cancelV2'])->whereNumber('id')->middleware('permission:tender.cancel');
+    Route::put('{id}/deposit-rule', [TenderController::class, 'setDepositRule'])->whereNumber('id')->middleware('permission:deposit.manage');
+    Route::get('{id}/deposits', [TenderController::class, 'listDeposits'])->whereNumber('id')->middleware('permission:tender.view|tender.approve|deposit.manage');
+    Route::post('{id}/deposits', [TenderController::class, 'createDeposit'])->whereNumber('id')->middleware('permission:deposit.manage');
+    Route::post('{id}/deposits/{depositId}/mark-paid', [TenderController::class, 'markDepositPaid'])->whereNumber('id')->whereNumber('depositId')->middleware('permission:deposit.manage');
+    Route::post('{id}/deposits/{depositId}/refund', [TenderController::class, 'refundDeposit'])->whereNumber('id')->whereNumber('depositId')->middleware('permission:deposit.manage');
+    Route::post('{id}/deposits/{depositId}/forfeit', [TenderController::class, 'forfeitDeposit'])->whereNumber('id')->whereNumber('depositId')->middleware('permission:deposit.manage');
+    Route::get('{id}/downstream', [TenderController::class, 'downstream'])->whereNumber('id')->middleware('permission:tender.view|tender.approve');
+    Route::get('{id}/bids', [TenderController::class, 'bids'])->whereNumber('id')->middleware('permission:tender.view|tender.award');
+    Route::post('{id}/bids', [TenderController::class, 'storeBid'])->whereNumber('id')->middleware('permission:tender.create');
+    Route::get('{id}/attachments', [TenderController::class, 'listAttachments'])->whereNumber('id')->middleware('permission:tender.view|tender.award');
+    Route::post('{id}/attachments', [TenderController::class, 'uploadAttachment'])->whereNumber('id')->middleware('permission:tender.create');
     Route::get('{id}/attachments/{attId}/download', [TenderController::class, 'downloadAttachment'])
-        ->whereNumber('id')->whereNumber('attId')->name('tenders.attachments.download');
-    Route::delete('{id}/attachments/{attId}', [TenderController::class, 'deleteAttachment'])->whereNumber('id');
-    Route::get('{id}', [TenderController::class, 'show'])->whereNumber('id');
-    Route::put('{id}', [TenderController::class, 'update'])->whereNumber('id');
-    Route::delete('{id}', [TenderController::class, 'destroy'])->whereNumber('id');
+        ->whereNumber('id')->whereNumber('attId')->name('tenders.attachments.download')->middleware('permission:tender.view|tender.award');
+    Route::delete('{id}/attachments/{attId}', [TenderController::class, 'deleteAttachment'])->whereNumber('id')->middleware('permission:tender.create');
+    Route::get('{id}', [TenderController::class, 'show'])->whereNumber('id')->middleware('permission:tender.view|tender.approve|deposit.manage');
+    Route::put('{id}', [TenderController::class, 'update'])->whereNumber('id')->middleware('permission:tender.create');
+    Route::delete('{id}', [TenderController::class, 'destroy'])->whereNumber('id')->middleware('permission:tender.create');
 });
 
 // ========== 采购协同 8 步流转 ==========

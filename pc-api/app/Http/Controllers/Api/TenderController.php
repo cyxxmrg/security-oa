@@ -713,6 +713,7 @@ class TenderController extends Controller
     /** POST /api/tenders/{id}/deposits  创建一条 pending 记录（邀请供应商时） */
     public function createDeposit(Request $request, int $id): JsonResponse
     {
+        TenderProject::query()->findOrFail($id);
         $data = $request->validate([
             'supplier_id' => 'required|integer|exists:suppliers,id',
             'amount'      => 'nullable|numeric|min:0',
@@ -731,7 +732,7 @@ class TenderController extends Controller
     {
         $data = $request->validate(['voucher_path' => 'nullable|string|max:500']);
         try {
-            $d = app(TenderService::class)->markDepositPaid($depositId, $data['voucher_path'] ?? null);
+            $d = app(TenderService::class)->markDepositPaid($id, $depositId, $data['voucher_path'] ?? null);
             return response()->json(['code' => 0, 'message' => '已确认收款', 'data' => $d]);
         } catch (\RuntimeException $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
@@ -750,6 +751,7 @@ class TenderController extends Controller
         ]);
         try {
             $d = app(TenderService::class)->refundDeposit(
+                $id,
                 $depositId,
                 (float) $data['refund_amount'],
                 $data['method'],
@@ -768,7 +770,7 @@ class TenderController extends Controller
     {
         $data = $request->validate(['reason' => 'required|string|max:500']);
         try {
-            $d = app(TenderService::class)->forfeitDeposit($depositId, $data['reason']);
+            $d = app(TenderService::class)->forfeitDeposit($id, $depositId, $data['reason']);
             return response()->json(['code' => 0, 'message' => '已没收', 'data' => $d]);
         } catch (\RuntimeException $e) {
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
