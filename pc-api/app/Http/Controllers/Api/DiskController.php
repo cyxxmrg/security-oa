@@ -211,7 +211,7 @@ class DiskController extends Controller
                 'parent_id'    => $projectRoot->id,
                 'name'         => $project->name,
                 'path'         => $projectRoot->path,
-                'created_by'   => $request->user()?->id ?? 1,
+                'created_by'   => $request->user()->id,
                 'is_system'    => false,
                 'scope'        => DiskFolder::SCOPE_NONE,
                 'is_protected' => false,

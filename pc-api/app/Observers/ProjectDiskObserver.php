@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\DiskFolder;
 use App\Models\Project;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * V1.0 项目 Observer — 创建项目时自动建网盘子目录
@@ -25,12 +26,17 @@ class ProjectDiskObserver
             return;
         }
 
+        $createdBy = $project->manager_id ?: Auth::id();
+        if (!$createdBy) {
+            return;
+        }
+
         // 1. 建项目文件夹
         $projectFolder = DiskFolder::create([
             'parent_id'     => $projectRoot->id,
             'name'          => $project->name,
             'path'          => $projectRoot->path, // 先占位，下方更新
-            'created_by'    => $project->manager_id ?? 1,
+            'created_by'    => $createdBy,
             'is_system'     => true,
             'project_id'    => $project->id,
             'scope'         => DiskFolder::SCOPE_NONE,
@@ -46,7 +52,7 @@ class ProjectDiskObserver
                 'parent_id'     => $projectFolder->id,
                 'name'          => $subName,
                 'path'          => $projectFolder->path,
-                'created_by'    => $project->manager_id ?? 1,
+                'created_by'    => $createdBy,
                 'is_system'     => false,
                 'project_id'    => $project->id,
                 'scope'         => DiskFolder::SCOPE_NONE,

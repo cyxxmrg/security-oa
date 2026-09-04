@@ -117,7 +117,7 @@ class ProjectController extends Controller
                             'parent_id'    => $projectRoot->id,
                             'name'         => $project->name,
                             'path'         => $projectRoot->path,
-                            'created_by'   => $data['manager_id'] ?? ($request->user()->id ?? 1),
+                            'created_by'   => $data['manager_id'] ?? $request->user()->id,
                             'is_system'    => false,
                             'scope'        => 'none',
                             'is_protected' => false,
