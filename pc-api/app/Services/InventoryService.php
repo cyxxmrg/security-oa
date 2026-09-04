@@ -9,6 +9,7 @@ use App\Models\Tool;
 use App\Models\FixedAsset;
 use App\Models\Warehouse;
 use App\Models\User;
+use App\Models\Project;
 use App\Models\FinanceAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -698,7 +699,7 @@ class InventoryService
 
         $operators  = $operatorIds ? DB::table('users')->whereIn('id', $operatorIds)->select('id','name')->get()->keyBy('id') : collect();
         $warehouses = $allWhIds ? DB::table('warehouses')->whereIn('id', $allWhIds)->select('id','name')->get()->keyBy('id') : collect();
-        $projects   = $projectIds ? DB::table('projects')->whereIn('id', $projectIds)->select('id','name')->get()->keyBy('id') : collect();
+        $projects   = $projectIds ? Project::query()->whereIn('id', $projectIds)->get(['id', 'name'])->keyBy('id') : collect();
         // V1.2.14p fix: 用 array 累积, merge collection 会丢失 keyBy 状态, 必须自己 dict
         $partyMap = [];
         foreach ($rows->pluck('party_type')->filter()->unique() as $pt) {
@@ -798,7 +799,7 @@ class InventoryService
         // V1.2.16: 调拨单也要返回源/目标仓库
         $sourceWh  = $first->source_warehouse_id ? DB::table('warehouses')->where('id', $first->source_warehouse_id)->select('id','name')->first() : null;
         $targetWh  = $first->target_warehouse_id ? DB::table('warehouses')->where('id', $first->target_warehouse_id)->select('id','name')->first() : null;
-        $project   = $first->project_id   ? DB::table('projects')->where('id', $first->project_id)->select('id','name')->first() : null;
+        $project   = $first->project_id   ? Project::query()->find($first->project_id) : null;
         $party     = null;
         if ($first->party_id) {
             $tbl = $first->party_type === 'supplier' ? 'suppliers' : ($first->party_type === 'customer' ? 'customers' : null);
