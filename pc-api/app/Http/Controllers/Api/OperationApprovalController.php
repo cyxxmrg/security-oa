@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\HandlesApproval;
 use App\Models\ApprovalRecord;
+use App\Models\EmployeeResignation;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeRequest;
 use App\Services\ApprovalFlowService;
@@ -171,6 +172,7 @@ class OperationApprovalController extends Controller
                     app(\App\Services\PurchaseFlowService::class)
                         ->syncApprovalBusinessState($approval, $user, 'approved', $comment);
                 }
+                $this->syncResignationStatus($approval, 'approved');
                 $this->syncLeaveStatus($approval, 'approved');
                 $this->syncOvertimeStatus($approval, 'approved');
             }
@@ -211,6 +213,7 @@ class OperationApprovalController extends Controller
                 app(\App\Services\PurchaseFlowService::class)
                     ->syncApprovalBusinessState($approval, $request->user(), 'rejected', $comment);
             }
+            $this->syncResignationStatus($approval, 'rejected');
             $this->syncLeaveStatus($approval, 'rejected');
             $this->syncOvertimeStatus($approval, 'rejected');
 
@@ -277,6 +280,25 @@ class OperationApprovalController extends Controller
             'approver_id' => request()->user()?->id,
             'approved_at' => now(),
             'reject_reason' => $status === 'rejected' ? $approval->comment : null,
+        ]);
+    }
+
+    private function syncResignationStatus(ApprovalRecord $approval, string $status): void
+    {
+        if ($approval->sub_type !== 'resignation') {
+            return;
+        }
+
+        $resignationId = $approval->payload['resignation_id'] ?? null;
+        if (!$resignationId) {
+            return;
+        }
+
+        EmployeeResignation::whereKey($resignationId)->update([
+            'status' => $status === 'approved' ? 'approved' : 'cancelled',
+            'approved_by' => $status === 'approved' ? request()->user()?->id : null,
+            'approved_at' => now(),
+            'remark' => $status === 'rejected' ? $approval->comment : null,
         ]);
     }
 }

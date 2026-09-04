@@ -188,37 +188,45 @@ class EmployeeResignationController extends Controller
      */
     public function approve(EmployeeResignation $resignation): JsonResponse
     {
-        if ($resignation->status !== 'pending') {
-            return response()->json(['code' => 1001, 'message' => '仅待审批状态可审批'], 422);
-        }
-        $resignation->update([
-            'status' => 'approved',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
-        ]);
+        return DB::transaction(function () use ($resignation) {
+            $resignation = EmployeeResignation::lockForUpdate()->findOrFail($resignation->id);
+            if ($resignation->status !== 'pending') {
+                return response()->json(['code' => 1001, 'message' => '仅待审批状态可审批'], 422);
+            }
 
-        // 使用 ApprovalFlowService 推进审批流
-        try {
-            $flowService = app(ApprovalFlowService::class);
             $approval = ApprovalRecord::where('type', 'operation')
                 ->where('sub_type', 'resignation')
-                ->where('payload->resignation_id', $resignation->id)
+                ->whereJsonContains('payload->resignation_id', $resignation->id)
+                ->where('status', ApprovalRecord::STATUS_PENDING)
+                ->lockForUpdate()
                 ->first();
-            if ($approval) {
-                $operator = User::find(Auth::id());
-                if ($operator) {
-                    $result = $flowService->advanceFlow($approval, $operator, '审批通过');
-                    $approval->status = $result['status'];
-                    $approval->current_approver_id = $result['current_approver_id'];
-                    $approval->flow = $result['flow'];
-                    $approval->save();
-                }
+            if (!$approval) {
+                return response()->json(['code' => 1001, 'message' => '未找到有效的审批中心记录'], 409);
             }
-        } catch (\Throwable $e) {
-            Log::error('EmployeeResignationController::approve advanceFlow failed', ['msg' => $e->getMessage()]);
-        }
 
-        return response()->json(['code' => 0, 'message' => '已审批', 'data' => $resignation]);
+            $operator = User::findOrFail(Auth::id());
+            $result = app(ApprovalFlowService::class)->advanceFlow($approval, $operator, '审批通过');
+            $approval->forceFill([
+                'status' => $result['status'],
+                'current_approver_id' => $result['current_approver_id'],
+                'flow' => $result['flow'],
+                'comment' => '审批通过',
+            ])->save();
+
+            if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
+                $resignation->update([
+                    'status' => 'approved',
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                ]);
+            }
+
+            return response()->json([
+                'code' => 0,
+                'message' => $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已审批' : '已通过，已转交下一节点',
+                'data' => $resignation->fresh(),
+            ]);
+        });
     }
 
     /**

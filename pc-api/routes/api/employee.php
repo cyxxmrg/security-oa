@@ -42,7 +42,7 @@ Route::prefix('employees')->middleware(['auth:sanctum', 'ensure_business'])->gro
 });
 
 // ========== 员工入职档案 ==========
-Route::prefix('employee-onboardings')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('employee-onboardings')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.create'])->group(function () {
     Route::get('/', [EmployeeOnboardingController::class, 'index']);
     Route::post('/', [EmployeeOnboardingController::class, 'store'])->middleware('permission:employee.create');
     Route::get('{onboarding}', [EmployeeOnboardingController::class, 'show']);
@@ -51,7 +51,7 @@ Route::prefix('employee-onboardings')->middleware(['auth:sanctum', 'ensure_busin
 });
 
 // ========== 员工离职记录 ==========
-Route::prefix('employee-resignations')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('employee-resignations')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.create'])->group(function () {
     Route::get('/', [EmployeeResignationController::class, 'index']);
     Route::post('/', [EmployeeResignationController::class, 'store'])->middleware('permission:employee.create');
     Route::get('settlement-preview', [EmployeeResignationController::class, 'settlementPreview']);
