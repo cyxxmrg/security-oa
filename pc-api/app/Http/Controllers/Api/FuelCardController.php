@@ -21,7 +21,7 @@ class FuelCardController extends Controller
             $q->where('card_no', 'like', "%{$request->keyword}%")
               ->orWhere('card_name', 'like', "%{$request->keyword}%");
         });
-        $perPage = $request->per_page ?? 15;
+        $perPage = min(max($request->integer('per_page', 15), 1), 100);
         return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($perPage)]);
     }
 
@@ -30,12 +30,12 @@ class FuelCardController extends Controller
         $data = $request->validate([
             'card_no' => 'required|string|max:50|unique:fuel_cards,card_no',
             'card_name' => 'nullable|string|max:100',
-            'vehicle_id' => 'nullable|exists:vehicles,id',
+            'vehicle_id' => 'nullable|integer|exists:vehicles,id',
             'balance' => 'nullable|numeric|min:0',
             'status' => 'nullable|in:active,lost,expired',
             'issue_date' => 'nullable|date',
             'expire_date' => 'nullable|date|after:issue_date',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
         ]);
         $data['balance'] = $data['balance'] ?? 0;
         $data['status'] = $data['status'] ?? 'active';
@@ -45,23 +45,43 @@ class FuelCardController extends Controller
 
     public function update(Request $request, FuelCard $card): JsonResponse
     {
+        if ($request->exists('balance')) {
+            return response()->json(['code' => 422, 'message' => '油卡余额只能通过充值流水维护'], 422);
+        }
         $data = $request->validate([
             'card_no' => 'sometimes|string|max:50|unique:fuel_cards,card_no,' . $card->id,
             'card_name' => 'nullable|string|max:100',
-            'vehicle_id' => 'nullable|exists:vehicles,id',
-            'balance' => 'nullable|numeric|min:0',
+            'vehicle_id' => 'nullable|integer|exists:vehicles,id',
             'status' => 'sometimes|in:active,lost,expired',
             'issue_date' => 'nullable|date',
             'expire_date' => 'nullable|date',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
         ]);
+        if (array_key_exists('card_no', $data)) {
+            $data['card_no'] = trim($data['card_no']);
+        }
+        $issueDate = $data['issue_date'] ?? optional($card->issue_date)->toDateString();
+        $expireDate = $data['expire_date'] ?? optional($card->expire_date)->toDateString();
+        if ($issueDate && $expireDate && $expireDate <= $issueDate) {
+            return response()->json(['code' => 422, 'message' => '油卡到期日期必须晚于发卡日期'], 422);
+        }
         $card->update($data);
         return response()->json(['code' => 0, 'message' => '已更新', 'data' => $card->load('vehicle')]);
     }
 
     public function destroy(FuelCard $card): JsonResponse
     {
-        $card->delete();
+        try {
+            DB::transaction(function () use ($card) {
+                $current = FuelCard::lockForUpdate()->findOrFail($card->id);
+                if ($current->recharges()->exists() || (float) $current->balance > 0) {
+                    throw new \DomainException('已有余额或充值流水的油卡不能删除，请改为停用');
+                }
+                $current->delete();
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 422, 'message' => $e->getMessage()], 422);
+        }
         return response()->json(['code' => 0, 'message' => '已删除']);
     }
 
@@ -80,41 +100,55 @@ class FuelCardController extends Controller
             $q->where('voucher_no', 'like', "%{$request->keyword}%")
               ->orWhere('operator', 'like', "%{$request->keyword}%");
         });
-        $perPage = $request->per_page ?? 15;
+        $perPage = min(max($request->integer('per_page', 15), 1), 100);
         return response()->json(['code' => 0, 'data' => $query->orderBy('recharge_date', 'desc')->orderBy('id', 'desc')->paginate($perPage)]);
     }
 
     public function storeRecharge(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'card_id' => 'required|exists:fuel_cards,id',
+            'card_id' => 'required|integer|exists:fuel_cards,id',
             'amount' => 'required|numeric|min:0.01',
             'recharge_date' => 'required|date',
             'payment_method' => 'nullable|string|max:50',
             'operator' => 'nullable|string|max:50',
             'voucher_no' => 'nullable|string|max:100',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
         ]);
         // 事务: 增加记录 + 同步余额
-        $row = DB::transaction(function () use ($data) {
-            $r = FuelCardRecharge::create($data);
-            $card = FuelCard::lockForUpdate()->findOrFail($data['card_id']);
-            $card->balance = round(((float) $card->balance) + (float) $data['amount'], 2);
-            $card->save();
-            return $r;
-        });
+        try {
+            $row = DB::transaction(function () use ($data) {
+                $card = FuelCard::lockForUpdate()->findOrFail($data['card_id']);
+                if ($card->status !== 'active') {
+                    throw new \DomainException('非启用状态的油卡不能充值');
+                }
+                $r = FuelCardRecharge::create($data);
+                $card->balance = round(((float) $card->balance) + (float) $data['amount'], 2);
+                $card->save();
+                return $r;
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 422, 'message' => $e->getMessage()], 422);
+        }
         return response()->json(['code' => 0, 'message' => '充值已记录', 'data' => $row->load('card')]);
     }
 
     public function destroyRecharge(FuelCardRecharge $recharge): JsonResponse
     {
-        DB::transaction(function () use ($recharge) {
-            $recharge = FuelCardRecharge::lockForUpdate()->findOrFail($recharge->id);
-            $card = FuelCard::lockForUpdate()->findOrFail($recharge->card_id);
-            $card->balance = max(0, round(((float) $card->balance) - (float) $recharge->amount, 2));
-            $card->save();
-            $recharge->delete();
-        });
+        try {
+            DB::transaction(function () use ($recharge) {
+                $recharge = FuelCardRecharge::lockForUpdate()->findOrFail($recharge->id);
+                $card = FuelCard::lockForUpdate()->findOrFail($recharge->card_id);
+                if ((float) $card->balance + 0.0001 < (float) $recharge->amount) {
+                    throw new \DomainException('删除该充值记录会导致油卡余额为负，已拒绝操作');
+                }
+                $card->balance = round(((float) $card->balance) - (float) $recharge->amount, 2);
+                $card->save();
+                $recharge->delete();
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['code' => 422, 'message' => $e->getMessage()], 422);
+        }
         return response()->json(['code' => 0, 'message' => '已删除']);
     }
 
