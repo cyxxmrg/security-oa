@@ -215,7 +215,7 @@ class PortalController extends Controller
      *
      *  - 前端必须先用 supplierInfo / invitations 拿到 access_token (签发时校验后 4 位)
      *  - 投标/上传/查我方投标 都必须同时带 access_token + phone_suffix
-     *  - token 通过验证后立即烧掉 (used_at), 防止重放
+     *  - token 在有效期内可复用，但必须绑定 supplier_id + 手机号后 4 位
      */
     private function verifySupplierAccess(Request $request, int $supplierId): ?JsonResponse
     {
@@ -229,14 +229,14 @@ class PortalController extends Controller
             return response()->json(['code' => 1005, 'message' => '供应商身份无效'], 404);
         }
 
-        $token = (string) $request->input('access_token', '');
+        $token = (string) ($request->input('access_token') ?: $request->header('X-Portal-Access-Token', ''));
         if ($token === '') {
             return response()->json(['code' => 1007, 'message' => '缺少 access_token, 请先调用 access 端点获取'], 401);
         }
 
         /** @var PortalInviteService $inviter */
         $inviter = app(PortalInviteService::class);
-        $resolved = $inviter->verify($request, (string) $supplierId, $suffix);
+        $resolved = $inviter->checkAccess($request, (string) $supplierId, $suffix);
         if (!$resolved || $resolved->id !== $supplier->id) {
             return response()->json(['code' => 1006, 'message' => '供应商身份校验失败 (token 无效或已过期)'], 403);
         }
@@ -266,6 +266,7 @@ class PortalController extends Controller
             'code' => 0,
             'data' => [
                 'access_token' => $issued['token'],
+                'supplier_id'   => $issued['supplier_id'],
                 'expires_in'   => $issued['ttl_minutes'] * 60,
                 'expires_at'   => $issued['expires_at']->toIso8601String(),
                 'ttl_minutes'  => $issued['ttl_minutes'],
@@ -280,14 +281,16 @@ class PortalController extends Controller
      */
     public function invitations(Request $request): JsonResponse
     {
-        $phone = $request->input('phone');
-        if (!$phone) {
-            return response()->json(['code' => 1001, 'message' => '请提供手机号'], 422);
-        }
-        // 找供应商 (按联系人手机号匹配, 简化用 supplier.phone)
-        $supplier = Supplier::where('phone', $phone)->first();
+        $data = $request->validate([
+            'phone'        => 'required|string|max:32',
+            'supplier_id'  => 'required|integer|exists:suppliers,id',
+            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+        ]);
+        $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
+        if ($verify) return $verify;
+        $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
         if (!$supplier) {
-            return response()->json(['code' => 0, 'data' => ['supplier' => null, 'invitations' => []]]);
+            return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
         }
         // 该供应商被邀请的招标 (在 invited_supplier_ids 数组中)
         $list = TenderProject::allData()->whereJsonContains('invited_supplier_ids', $supplier->id)
@@ -298,7 +301,7 @@ class PortalController extends Controller
         $phoneMasked = $this->maskPhone($supplier->phone);
         return response()->json(['code' => 0, 'data' => [
             'supplier' => [
-                // P1-7: 删除 'id' (已脱敏), 仅暴露名称 + 打码手机号
+                'id'     => $supplier->id,
                 'name'  => $supplier->name,
                 'phone' => $phoneMasked,
             ],
@@ -320,13 +323,16 @@ class PortalController extends Controller
      */
     public function supplierInfo(Request $request): JsonResponse
     {
-        $phone = $request->input('phone');
-        if (!$phone) {
-            return response()->json(['code' => 1001, 'message' => '请提供手机号'], 422);
-        }
-        $supplier = Supplier::where('phone', $phone)->first();
+        $data = $request->validate([
+            'phone'        => 'required|string|max:32',
+            'supplier_id'  => 'required|integer|exists:suppliers,id',
+            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+        ]);
+        $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
+        if ($verify) return $verify;
+        $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
         if (!$supplier) {
-            return response()->json(['code' => 0, 'data' => ['supplier' => null, 'bids' => [], 'stats' => []]]);
+            return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
         }
 
         // 历史投标 (脱敏: 只返回 id/status/created_at, 不返回 total_amount/tender_id)

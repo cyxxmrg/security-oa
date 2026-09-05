@@ -83,14 +83,24 @@ const onQuery = async () => {
   }
   loading.value = true
   try {
-    result.value = await portalApi.listInvitations(form.phone)
-    sessionStorage.setItem('portal_phone_suffix', form.phone.slice(-4))
+    const suffix = form.phone.slice(-4)
+    const access = await portalApi.access(form.phone, suffix)
+    sessionStorage.setItem('portal_phone_suffix', suffix)
+    sessionStorage.setItem('portal_access_token', access.access_token)
+    sessionStorage.setItem('portal_supplier_id', String(access.supplier_id))
+    result.value = await portalApi.listInvitations(form.phone, access.supplier_id, access.access_token, suffix)
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '查询失败')
   } finally { loading.value = false }
 }
 
-const onReset = () => { result.value = null; form.phone = '' }
+const onReset = () => {
+  result.value = null
+  form.phone = ''
+  sessionStorage.removeItem('portal_phone_suffix')
+  sessionStorage.removeItem('portal_access_token')
+  sessionStorage.removeItem('portal_supplier_id')
+}
 
 const goBid = (inv: Invitation) => {
   router.push(`/portal/tender/${inv.public_token}?supplier=${result.value?.supplier?.id}`)

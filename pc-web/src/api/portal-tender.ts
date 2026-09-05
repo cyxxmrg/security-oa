@@ -25,8 +25,8 @@ async function postJson<T = any>(url: string, data?: ApiPayload): Promise<T> {
   return json.data
 }
 
-async function getJson<T = any>(url: string): Promise<T> {
-  const res = await fetch(url, { method: 'GET' })
+async function getJson<T = any>(url: string, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(url, { method: 'GET', headers })
   const json = await res.json()
   if (json.code !== 0) {
     const err = new Error(json.message || '请求失败') as Error & { code?: number; data?: unknown }
@@ -71,9 +71,20 @@ export const portalApi = {
   /** 通过 token 拿招标公开信息 */
   getTender: (token: string) => getJson<PublicTender>(`/api/portal/t/${token}`),
 
+  /** 供应商凭手机号和后四位换取短期门户会话 */
+  access: (phone: string, phoneSuffix: string) => postJson<{
+    access_token: string
+    supplier_id: number
+    expires_in: number
+    expires_at: string
+    ttl_minutes: number
+  }>('/api/portal/access', { phone, phone_suffix: phoneSuffix }),
+
   /** 我方对该招标的投标 (cookie/session 关联 supplier_id) */
   myBid: (token: string, supplierId: number) =>
-    getJson<PublicBid>(`/api/portal/t/${token}/my-bid?supplier_id=${supplierId}&phone_suffix=${encodeURIComponent(sessionStorage.getItem('portal_phone_suffix') || '')}`),
+    getJson<PublicBid>(`/api/portal/t/${token}/my-bid?supplier_id=${supplierId}&phone_suffix=${encodeURIComponent(sessionStorage.getItem('portal_phone_suffix') || '')}`, {
+      'X-Portal-Access-Token': sessionStorage.getItem('portal_access_token') || '',
+    }),
 
   /** 提交/更新投标 */
   submitBid: (token: string, data: {
@@ -87,18 +98,23 @@ export const portalApi = {
   }) => postJson<PublicBid>(`/api/portal/t/${token}/bids`, {
     ...data,
     phone_suffix: data.phone_suffix || sessionStorage.getItem('portal_phone_suffix') || '',
+    access_token: sessionStorage.getItem('portal_access_token') || '',
   }),
 
   /** 供应商用手机号查自己的邀请 */
-  listInvitations: (phone: string) => getJson<{
+  listInvitations: (phone: string, supplierId: number, accessToken: string, phoneSuffix: string) => getJson<{
     supplier: { id: number; name: string; phone: string } | null
     invitations: Array<{ id: number; code: string; name: string; status: string; deadline: string; public_token: string }>
-  }>(`/api/portal/invitations?phone=${encodeURIComponent(phone)}`),
+  }>(`/api/portal/invitations?phone=${encodeURIComponent(phone)}&supplier_id=${supplierId}&phone_suffix=${encodeURIComponent(phoneSuffix)}`, {
+    'X-Portal-Access-Token': accessToken,
+  }),
 
   /** V0.6.3 供应商门户首页: 供应商档案 + 历史投标 + 简报 */
-  supplierInfo: (phone: string) => getJson<{
+  supplierInfo: (phone: string, supplierId: number, accessToken: string, phoneSuffix: string) => getJson<{
     supplier: { id: number; code: string; name: string; phone: string; email?: string; type?: string; status?: string; rating?: number } | null
     stats: { invitation_count: number; bid_count: number; won_count: number; active_tender: number }
     bids: Array<{ id: number; tender_id: number; total_amount: number; status: string; created_at: string }>
-  }>(`/api/portal/supplier/info?phone=${encodeURIComponent(phone)}`),
+  }>(`/api/portal/supplier/info?phone=${encodeURIComponent(phone)}&supplier_id=${supplierId}&phone_suffix=${encodeURIComponent(phoneSuffix)}`, {
+    'X-Portal-Access-Token': accessToken,
+  }),
 }
