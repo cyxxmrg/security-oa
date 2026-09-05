@@ -478,6 +478,10 @@ async function handleSubmit() {
   await formRef.value.validate()
   const validItems = form.items.filter(i=>i.item)
   if (validItems.length === 0) { ElMessage.warning("请至少选择一种物料"); return }
+  if (form.payment_method === 'cash' && !form.account_id) {
+    ElMessage.warning("现金付款必须选择付款账户")
+    return
+  }
 
   submitting.value = true
   try {

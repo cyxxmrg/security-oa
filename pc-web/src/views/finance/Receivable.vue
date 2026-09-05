@@ -209,6 +209,10 @@ const openReceive = (row: Receivable) => {
 }
 const confirmReceive = async () => {
   if (!receiveRow.value) return
+  if (!receiveForm.account_id) {
+    ElMessage.error('请选择收款账户')
+    return
+  }
   receiving.value = true
   try {
     await post(`/finance/receivables/${receiveRow.value.id}/payments`, {

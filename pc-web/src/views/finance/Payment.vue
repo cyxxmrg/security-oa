@@ -237,6 +237,7 @@ const formRules: FormRules = {
     }, trigger: 'change',
   }],
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
+  account_id: [{ required: true, message: '请选择付款账户', trigger: 'change' }],
   payment_date: [{ required: true, message: '请选择付款日期', trigger: 'change' }],
 }
 

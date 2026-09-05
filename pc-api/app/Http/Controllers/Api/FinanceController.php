@@ -77,7 +77,7 @@ class FinanceController extends Controller
             'method'       => 'nullable|string|max:50',
             'payment_no'   => 'nullable|string|max:100',
             'project_id'   => 'nullable|integer|exists:projects,id',
-            'account_id'   => 'nullable|integer|exists:finance_accounts,id',
+            'account_id'   => 'required|integer|exists:finance_accounts,id',
             'handler'      => 'nullable|string|max:50',
             'notes'        => 'nullable|string|max:2000',
             'supplier_id'  => 'nullable|integer|exists:suppliers,id',
@@ -102,10 +102,8 @@ class FinanceController extends Controller
             ]);
 
             // V1.2.12o: 自动扣减资金账户余额
-            if (!empty($data['account_id'])) {
-                $account = $this->lockAccountForDebit((int) $data['account_id'], (float) $data['amount']);
-                $account->decrement('balance', (float) $data['amount']);
-            }
+            $account = $this->lockAccountForDebit((int) $data['account_id'], (float) $data['amount']);
+            $account->decrement('balance', (float) $data['amount']);
 
         // V1.2.16: 更新供应商应付账款 (两表同步: payables + supplier_payables)
             if (!empty($data['supplier_id']) && $data['amount'] > 0) {
@@ -249,8 +247,15 @@ class FinanceController extends Controller
             'due_date' => 'sometimes|required|date',
             'notes' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? $receivable->project_id);
         $updated = DB::transaction(function () use ($data, $receivable) {
             $locked = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            if ((float) $locked->received_amount > 0
+                && array_intersect(['customer_id', 'project_id'], array_keys($data))) {
+                throw ValidationException::withMessages([
+                    'customer_id' => '已有收款记录的应收单不能修改客户或项目归属',
+                ]);
+            }
             $amount = (float) ($data['amount'] ?? $locked->amount);
             if ($amount + 0.0001 < (float) $locked->received_amount) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -272,11 +277,17 @@ class FinanceController extends Controller
 
     public function destroyReceivable(ReceivableModel $receivable): JsonResponse
     {
-        if ($receivable->received_amount > 0) {
+        DB::transaction(function () use ($receivable) {
+            $locked = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
+            if ((float) $locked->received_amount > 0
+                || FinancePayment::where('receivable_id', $locked->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'receivable' => '该应收单已有收款记录，不允许删除',
+                ]);
+            }
+            $locked->delete();
+        });
         $this->clearListCache('receivables:index');
-            return response()->json(['code' => 1001, 'message' => '该应收单已有收款记录，不允许删除'], 422);
-        }
-        $receivable->delete();
         return response()->json(['code' => 0, 'message' => '已删除']);
     }
 
@@ -332,8 +343,15 @@ class FinanceController extends Controller
             'payment_term' => 'nullable|string',
             'notes' => 'nullable|string',
         ]);
+        $this->assertProjectAccessible($data['project_id'] ?? $payable->project_id);
         $updated = DB::transaction(function () use ($data, $payable) {
             $locked = PayableModel::lockForUpdate()->findOrFail($payable->id);
+            if ((float) $locked->paid_amount > 0
+                && array_intersect(['supplier_id', 'project_id'], array_keys($data))) {
+                throw ValidationException::withMessages([
+                    'supplier_id' => '已有付款记录的应付单不能修改供应商或项目归属',
+                ]);
+            }
             $amount = (float) ($data['amount'] ?? $locked->amount);
             if ($amount + 0.0001 < (float) $locked->paid_amount) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -355,10 +373,16 @@ class FinanceController extends Controller
 
     public function destroyPayable(PayableModel $payable): JsonResponse
     {
-        if ($payable->paid_amount > 0) {
-            return response()->json(['code' => 1001, 'message' => '该应付单已有付款记录，不允许删除'], 422);
-        }
-        $payable->delete();
+        DB::transaction(function () use ($payable) {
+            $locked = PayableModel::lockForUpdate()->findOrFail($payable->id);
+            if ((float) $locked->paid_amount > 0
+                || FinancePayment::where('payable_id', $locked->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'payable' => '该应付单已有付款记录，不允许删除',
+                ]);
+            }
+            $locked->delete();
+        });
         return response()->json(['code' => 0, 'message' => '已删除']);
     }
 
@@ -371,7 +395,7 @@ class FinanceController extends Controller
         $data = $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'account_id' => 'nullable|exists:finance_accounts,id',
+            'account_id' => 'required|integer|exists:finance_accounts,id',
             'method' => 'nullable|string|max:50',
             'voucher_no' => 'nullable|string|max:100',
             'operator' => 'nullable|string|max:50',
@@ -411,10 +435,8 @@ class FinanceController extends Controller
                 'received_date' => $newRemaining <= 0.0001 ? ($receivable->received_date ?? $data['payment_date']) : $receivable->received_date,
             ]);
             // 入账到指定资金账户
-            if (!empty($data['account_id'])) {
-                $account = $this->lockActiveAccount((int) $data['account_id']);
-                $account->increment('balance', $amount);
-            }
+            $account = $this->lockActiveAccount((int) $data['account_id']);
+            $account->increment('balance', $amount);
             return $payment;
         });
         return response()->json(['code' => 0, 'data' => $payment->load('account'), 'message' => '收款已登记']);
@@ -451,6 +473,11 @@ class FinanceController extends Controller
             $receivable = ReceivableModel::lockForUpdate()->findOrFail($receivable->id);
             $amount = (float) $receivable->remaining_amount;
             if ($amount > 0) {
+                if (empty($data['account_id'])) {
+                    throw ValidationException::withMessages([
+                        'account_id' => '结清应收必须选择入账账户',
+                    ]);
+                }
                 if (!empty($data['voucher_no'])) {
                     $existing = FinancePayment::where('receivable_id', $receivable->id)
                         ->where('voucher_no', $data['voucher_no'])
@@ -470,10 +497,8 @@ class FinanceController extends Controller
                     'operator' => $data['operator'] ?? null,
                     'remark' => $data['remark'] ?? '一次性收完',
                 ]);
-                if (!empty($data['account_id'])) {
-                    $account = $this->lockActiveAccount((int) $data['account_id']);
-                    $account->increment('balance', $amount);
-                }
+                $account = $this->lockActiveAccount((int) $data['account_id']);
+                $account->increment('balance', $amount);
             }
             $receivable->update([
                 'received_amount' => $receivable->amount,
@@ -491,7 +516,7 @@ class FinanceController extends Controller
         $data = $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'account_id' => 'nullable|exists:finance_accounts,id',
+            'account_id' => 'required|integer|exists:finance_accounts,id',
             'method' => 'nullable|string|max:50',
             'voucher_no' => 'nullable|string|max:100',
             'operator' => 'nullable|string|max:50',
@@ -531,10 +556,8 @@ class FinanceController extends Controller
                 'paid_date' => $newRemaining <= 0.0001 ? ($payable->paid_date ?? $data['payment_date']) : $payable->paid_date,
             ]);
             // 出账从资金账户扣减
-            if (!empty($data['account_id'])) {
-                $account = $this->lockAccountForDebit((int) $data['account_id'], $amount);
-                $account->decrement('balance', $amount);
-            }
+            $account = $this->lockAccountForDebit((int) $data['account_id'], $amount);
+            $account->decrement('balance', $amount);
             return $payment;
         });
         return response()->json(['code' => 0, 'data' => $payment->load('account'), 'message' => '付款已登记']);
