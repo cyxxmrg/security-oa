@@ -352,6 +352,7 @@ class InventoryService
             $rules['total_amount'] = 'nullable|numeric|min:0';
         }
         $data = $request->validate($rules);
+        $this->validateStockFinancialContext($data, 'in');
         if (($data['project_id'] ?? null) !== null) {
             \App\Models\Project::findOrFail((int) $data['project_id']);
         }
@@ -370,8 +371,13 @@ class InventoryService
             $recordNo = $this->nextRecordNo('IN');
             $records  = [];
             $lastItem = null;
+            $totalAmount = 0.0;
             foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                $unitCost = array_key_exists('unit_cost', $it) && $it['unit_cost'] !== null
+                    ? round((float) $it['unit_cost'], 2)
+                    : round((float) $item->cost_price, 2);
+                $lineAmount = round((int) $it['quantity'] * $unitCost, 2);
                 $warehouseId = !empty($data['warehouse_id'])
                     ? (int) $data['warehouse_id']
                     : ($item->warehouse_id ? (int) $item->warehouse_id : null);
@@ -393,8 +399,8 @@ class InventoryService
                     'warehouse_id'      => $warehouseId,
                     'type'              => $data['type'] ?? 'in',
                     'quantity'          => $it['quantity'],
-                    'unit_cost'         => $it['unit_cost']    ?? null,
-                    'total_amount'      => $it['total_amount'] ?? null,
+                    'unit_cost'         => $unitCost,
+                    'total_amount'      => $lineAmount,
                     'payment_method'    => $data['payment_method'] ?? null,
                     'account_id'        => $data['account_id']     ?? null,
                     'party_type'        => $data['party_type']     ?? null,
@@ -406,13 +412,13 @@ class InventoryService
                     'remark'            => $data['remark']    ?? null,
                     'operator_id'       => $request->user()->id,
                 ]);
+                $totalAmount += $lineAmount;
                 $lastItem = $item->fresh();
             }
 
             // V1.2.14p: 入库单入库后联动财务
             //   - 现金付款 (cash + account_id): 创建 FinancePayment + 扣减资金账户余额
             //   - 应付款   (credit + party_id): 创建 Payable + 关联 FinancePayment
-            $totalAmount = array_sum(array_column($itemsPayload, 'total_amount'));
             $paymentMethod = $data['payment_method'] ?? null;
             $accountId     = $data['account_id'] ?? null;
             $partyType     = $data['party_type'] ?? null;
@@ -434,6 +440,7 @@ class InventoryService
                     'ref_no'            => $recordNo,
                     'description'       => '入库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
                     'payment_term'      => 30,
+                    'source'            => 'inventory',
                 ]);
                 $payableId = $payable->id;
             }
@@ -443,6 +450,8 @@ class InventoryService
                 $account = $this->lockAccountForDebit((int) $accountId, $totalAmount);
                 $fp = \App\Models\FinancePayment::create([
                         'account_id'   => $accountId,
+                        'supplier_id'  => $partyId,
+                        'project_id'   => $projectId,
                         'payable_id'   => $payableId,
                         'amount'       => $totalAmount,
                         'payment_date' => now()->toDateString(),
@@ -451,19 +460,6 @@ class InventoryService
                         'remark'       => '入库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
                 ]);
                 $financePaymentId = $fp->id;
-                $account->decrement('balance', $totalAmount);
-            } elseif ($paymentMethod === 'credit' && $payableId && $accountId && $totalAmount > 0) {
-                // 应付款也支持立即部分付款 (用同一账户), 记录 FinancePayment
-                $account = $this->lockAccountForDebit((int) $accountId, $totalAmount);
-                \App\Models\FinancePayment::create([
-                        'account_id'   => $accountId,
-                        'payable_id'   => $payableId,
-                        'amount'       => $totalAmount,
-                        'payment_date' => now()->toDateString(),
-                        'method'       => '现金',
-                        'operator'     => $request->user()->name ?? '',
-                        'remark'       => '入库单: ' . $recordNo . ' 即时付款',
-                ]);
                 $account->decrement('balance', $totalAmount);
             }
 
@@ -511,6 +507,7 @@ class InventoryService
             $rules['total_amount'] = 'nullable|numeric|min:0';
         }
         $data = $request->validate($rules);
+        $this->validateStockFinancialContext($data, 'out');
         if (($data['project_id'] ?? null) !== null) {
             \App\Models\Project::findOrFail((int) $data['project_id']);
         }
@@ -529,8 +526,13 @@ class InventoryService
             $recordNo = $this->nextRecordNo('OUT');
             $records  = [];
             $lastItem = null;
+            $totalAmount = 0.0;
             foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
+                $unitPrice = array_key_exists('unit_price', $it) && $it['unit_price'] !== null
+                    ? round((float) $it['unit_price'], 2)
+                    : round((float) $item->sell_price, 2);
+                $lineAmount = round((int) $it['quantity'] * $unitPrice, 2);
                 if ($item->warehouse_id !== null && (int) $item->warehouse_id !== (int) $data['warehouse_id']) {
                     throw new RuntimeException("物料「{$item->name}」不属于出库仓库");
                 }
@@ -549,8 +551,8 @@ class InventoryService
                     'warehouse_id'      => $data['warehouse_id'],
                     'type'              => $data['type'] ?? 'out',
                     'quantity'          => $it['quantity'],
-                    'unit_cost'         => $it['unit_price']   ?? null,   // V1.2.14p: 字段统一
-                    'total_amount'      => $it['total_amount'] ?? null,
+                    'unit_cost'         => $unitPrice,
+                    'total_amount'      => $lineAmount,
                     'remaining_stock'   => $item->current_stock,
                     'order_no'          => $data['order_no']         ?? null,
                     'logistics_company' => $data['logistics_company']?? null,
@@ -565,13 +567,13 @@ class InventoryService
                     'remark'            => $data['remark']           ?? null,
                     'operator_id'       => $request->user()->id,
                 ]);
+                $totalAmount += $lineAmount;
                 $lastItem = $item->fresh();
             }
 
             // V1.2.14p: 出库联动财务 (进账)
             //   - 现金收款 (cash + account_id): 账户余额 + 增加
             //   - 应收款   (receivable + customer): 创建 Receivable
-            $totalAmount = array_sum(array_column($itemsPayload, 'total_amount'));
             $paymentMethod = $data['payment_method'] ?? null;
             $accountId     = $data['account_id'] ?? null;
             $partyId       = $data['party_id'] ?? null;
@@ -590,6 +592,7 @@ class InventoryService
                     'due_date'          => now()->addDays(30)->toDateString(),
                     'status'            => 'pending',
                     'notes'             => '出库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
+                    'source'            => 'inventory',
                 ]);
                 $receivableId = $recv->id;
             }
@@ -599,6 +602,7 @@ class InventoryService
                 $account = $this->lockActiveAccount((int) $accountId);
                 $fp = \App\Models\FinancePayment::create([
                         'account_id'    => $accountId,
+                        'project_id'    => $projectId,
                         'receivable_id' => $receivableId,
                         'amount'        => $totalAmount,
                         'payment_date'  => now()->toDateString(),
@@ -607,19 +611,6 @@ class InventoryService
                         'remark'        => '出库单: ' . $recordNo . ($data['remark'] ? ' - ' . $data['remark'] : ''),
                 ]);
                 $financePaymentId = $fp->id;
-                $account->increment('balance', $totalAmount);
-            } elseif ($paymentMethod === 'receivable' && $receivableId && $accountId && $totalAmount > 0) {
-                // 应收款 + 立即收款 (用同一账户), 记录 FinancePayment
-                $account = $this->lockActiveAccount((int) $accountId);
-                \App\Models\FinancePayment::create([
-                        'account_id'    => $accountId,
-                        'receivable_id' => $receivableId,
-                        'amount'        => $totalAmount,
-                        'payment_date'  => now()->toDateString(),
-                        'method'        => '现金',
-                        'operator'      => $request->user()->name ?? '',
-                        'remark'        => '出库单: ' . $recordNo . ' 即时收款',
-                ]);
                 $account->increment('balance', $totalAmount);
             }
 
@@ -1579,6 +1570,64 @@ class InventoryService
                 ['示例物料', 'DEMO-001', '安防设备', '4K 红外', '台', 5, 10, 20, 800, 1200, '主仓', 'A-01'],
             ],
         ];
+    }
+
+    private function validateStockFinancialContext(array $data, string $direction): void
+    {
+        $paymentMethod = $data['payment_method'] ?? null;
+        $hasAccount = array_key_exists('account_id', $data) && $data['account_id'] !== null;
+        $hasParty = array_key_exists('party_id', $data) && $data['party_id'] !== null;
+        $partyType = $data['party_type'] ?? null;
+
+        if ($hasAccount && $paymentMethod !== 'cash') {
+            throw ValidationException::withMessages([
+                'account_id' => '只有现金收付款方式可以关联资金账户',
+            ]);
+        }
+
+        if ($paymentMethod === 'cash' && !$hasAccount) {
+            throw ValidationException::withMessages([
+                'account_id' => '现金收付款必须选择资金账户',
+            ]);
+        }
+
+        if ($direction === 'in' && $paymentMethod === 'credit') {
+            if (!$hasParty || $partyType !== 'supplier') {
+                throw ValidationException::withMessages([
+                    'party_id' => '供应商应付款必须关联供应商',
+                ]);
+            }
+        }
+
+        if ($direction === 'out' && $paymentMethod === 'receivable') {
+            if (!$hasParty || $partyType !== 'customer') {
+                throw ValidationException::withMessages([
+                    'party_id' => '应收账款必须关联客户',
+                ]);
+            }
+        }
+
+        if ($hasParty !== ($partyType !== null)) {
+            throw ValidationException::withMessages([
+                'party_id' => '往来单位类型和往来单位必须同时提供',
+            ]);
+        }
+
+        if (!$hasParty) {
+            return;
+        }
+
+        $partyExists = match ($partyType) {
+            'supplier' => \App\Models\Supplier::whereKey($data['party_id'])->exists(),
+            'customer' => \App\Models\Customer::whereKey($data['party_id'])->exists(),
+            default => false,
+        };
+
+        if (!$partyExists) {
+            throw ValidationException::withMessages([
+                'party_id' => '往来单位不存在或类型不匹配',
+            ]);
+        }
     }
 
     private function lockActiveAccount(int $accountId): FinanceAccount
