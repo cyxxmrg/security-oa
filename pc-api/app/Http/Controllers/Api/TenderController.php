@@ -276,6 +276,13 @@ class TenderController extends Controller
             if (!$bid) {
                 throw new \RuntimeException('投标不属于该项目');
             }
+            if (!in_array($bid->status, ['submitted', 'shortlisted'], true)) {
+                throw new \RuntimeException('只有已提交或入围的投标可以定标');
+            }
+            $eligibility = app(TenderService::class)->checkBidEligibility($t->id, (int) $bid->supplier_id);
+            if (!$eligibility['eligible']) {
+                throw new \RuntimeException('中标方保证金不符合要求: ' . $eligibility['reason']);
+            }
 
             // 1) 中标 — bid & tender 状态
             $bid->status = 'awarded';
@@ -290,6 +297,7 @@ class TenderController extends Controller
             // 2) 自动落账: PO (让 PurchaseOrder booted hook 生成 PO{YYYYMMDD}{4位})
             //    path=bid 表明这条 PO 来自招标
             $po = PurchaseOrder::create([
+                'project_id'     => $t->project_id,
                 'supplier_id'    => $bid->supplier_id,
                 'tender_id'      => $t->id,
                 'title'          => "招标中标: {$t->name}",
@@ -339,6 +347,8 @@ class TenderController extends Controller
             // 6) 写审计 (purchase_status_logs) — 复用 PurchaseFlowService 的 log
             $flow->log('order', $po->id, null, $po->status, 'create_from_tender', $user, "从招标 #{$t->id} ({$t->code}) 中标生成, 复制 {$itemsCopied} 行物料");
             $flow->log('payable', $payable->id, null, $payable->status, 'create_from_tender', $user, "从 PO #{$po->id} 自动建应付 ¥{$payable->amount}");
+            $tenderService = app(TenderService::class);
+            $tenderService->onTenderAward($t->id, $bid->supplier_id);
 
             return [
                 'tender'       => $t->fresh(),
@@ -357,21 +367,12 @@ class TenderController extends Controller
         $bid = $award['bid'];
         $result = $award['result'];
 
-        // V0.6.5 Sprint 4: 联动保证金 — winner 留 paid (待合同后退)，其他自动 refund
-        $depositResult = null;
-        try {
-            $tenderService->onTenderAward($t->id, $bid->supplier_id);
-            $deposits = $tenderService->listDeposits($t->id);
-            $depositResult = [
-                'winner_deposit_status'    => optional($deposits->firstWhere('supplier_id', $bid->supplier_id))->status,
-                'refunded_supplier_count'  => $deposits->where('status', 'refunded')->count(),
-                'total_deposits'           => $deposits->count(),
-            ];
-        } catch (\Throwable $e) {
-            \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
-            // 保证金联动失败不影响主流程
-            $depositResult = ['error' => $e->getMessage()];
-        }
+        $deposits = $tenderService->listDeposits($t->id);
+        $depositResult = [
+            'winner_deposit_status'    => optional($deposits->firstWhere('supplier_id', $bid->supplier_id))->status,
+            'refunded_supplier_count'  => $deposits->where('status', 'refunded')->count(),
+            'total_deposits'           => $deposits->count(),
+        ];
 
         return response()->json([
             'code'    => 0,

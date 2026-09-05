@@ -322,7 +322,7 @@ class TenderService
     public function onTenderAward(int $tenderId, int $winnerSupplierId, string $winnerReason = '中标方保证金待合同签订后退还'): void
     {
         $deposits = TenderDeposit::where('tender_project_id', $tenderId)
-            ->whereIn('status', [TenderDeposit::STATUS_PAID, TenderDeposit::STATUS_PENDING])
+            ->where('status', TenderDeposit::STATUS_PAID)
             ->get();
 
         foreach ($deposits as $d) {
