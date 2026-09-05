@@ -286,7 +286,7 @@ class PurchaseFlowController extends Controller
     public function updateShipmentStatus(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'status' => 'required|in:pending,shipped,in_transit,arrived,received,inspected,inbounded',
+            'status' => 'required|in:pending,shipped,in_transit,arrived,received,inspected',
             'remark' => 'nullable|string|max:500',
         ]);
         return response()->json(['code' => 0, 'data' => $this->flow->updateShipmentStatus($id, $data['status'], $request->user(), $data['remark'] ?? '')]);
@@ -650,7 +650,13 @@ class PurchaseFlowController extends Controller
         if (in_array((int) $user->id, array_map('intval', array_filter($ownerIds)), true)) {
             return;
         }
-        if ($projectId && Project::query()->whereKey($projectId)->exists()) {
+        if ($projectId && Project::query()->whereKey($projectId)->where(function ($query) use ($user): void {
+            $query->where('manager_id', $user->id)
+                ->orWhereHas('members', function ($memberQuery) use ($user): void {
+                    $memberQuery->whereKey($user->id)
+                        ->where('project_members.status', 'active');
+                });
+        })->exists()) {
             return;
         }
         abort(403, '无权从该来源发起采购');

@@ -24,7 +24,9 @@ use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
 use App\Models\ExternalQuote;
 use App\Models\Project;
+use App\Models\ProjectContract;
 use App\Models\TenderProject;
+use App\Support\AuthScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -113,9 +115,11 @@ class PurchaseFlowService
             if ((float) ($data['quantity'] ?? 0) <= 0) {
                 throw new \DomainException('采购需求数量必须大于 0');
             }
-            if (!empty($data['project_id'])) {
-                Project::findOrFail((int) $data['project_id']);
+            $projectId = !empty($data['project_id']) ? (int) $data['project_id'] : null;
+            if ($projectId !== null) {
+                $this->assertUserAccess($user, $projectId, [], '无权在该项目创建采购需求');
             }
+            $this->assertRequirementSourceAccess($data, $user, $projectId);
             $req = PurchaseRequirement::create([
                 'name'        => $data['name'] ?? null,
                 'project_id'  => $data['project_id'] ?? null,
@@ -184,6 +188,9 @@ class PurchaseFlowService
     public function createPlan(array $data, ?User $user = null, array $requirementIds = []): PurchasePlan
     {
         return DB::transaction(function () use ($data, $user, $requirementIds) {
+            if (!$user) {
+                throw new \DomainException('创建人不能为空');
+            }
             $requirements = collect();
             foreach (array_values(array_unique(array_map('intval', $requirementIds))) as $requirementId) {
                 $requirement = PurchaseRequirement::lockForUpdate()->findOrFail($requirementId);
@@ -196,6 +203,7 @@ class PurchaseFlowService
             $projectId = $data['project_id'] ?? null;
             if ($projectId) {
                 Project::findOrFail($projectId);
+                $this->assertUserAccess($user, (int) $projectId, [], '无权在该项目创建采购计划');
             }
             $requirementProjectIds = $requirements->pluck('project_id')->filter()->unique()->values();
             if ($projectId && $requirementProjectIds->contains(fn ($id) => (int) $id !== (int) $projectId)) {
@@ -238,6 +246,7 @@ class PurchaseFlowService
                 throw new \DomainException('提交人不能为空');
             }
             $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            $this->assertUserAccess($user, $plan->project_id, [$plan->created_by], '无权提交该采购计划');
             if ($plan->status !== self::STATUS_PLAN_DRAFT) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可提交");
             }
@@ -319,9 +328,22 @@ class PurchaseFlowService
     public function planToOrder(int $planId, array $data, string $path = 'manual', ?User $user = null): PurchaseOrder
     {
         return DB::transaction(function () use ($planId, $data, $path, $user) {
+            if (!$user) {
+                throw new \DomainException('创建人不能为空');
+            }
             $plan = PurchasePlan::lockForUpdate()->findOrFail($planId);
+            $this->assertUserAccess($user, $plan->project_id, [$plan->created_by, $plan->submitter_id], '无权操作该采购计划');
             if ($plan->status !== self::STATUS_PLAN_APPROVED) {
                 throw new \RuntimeException("计划当前状态 {$plan->status} 不可生成采购单");
+            }
+            if (!in_array($path, ['quote', 'bid', 'manual'], true)) {
+                throw new \InvalidArgumentException('采购路径无效');
+            }
+            if (PurchaseOrder::allData()
+                ->where('plan_id', $plan->id)
+                ->whereNotIn('status', [self::STATUS_ORDER_REJECTED, self::STATUS_ORDER_CANCELLED])
+                ->exists()) {
+                throw new \RuntimeException('该采购计划已生成有效采购单');
             }
             $totalAmount = (float) $data['total_amount'];
             if ($totalAmount <= 0 || ((float) $plan->total_amount > 0 && $totalAmount - (float) $plan->total_amount > 0.0001)) {
@@ -486,8 +508,15 @@ class PurchaseFlowService
     {
         return DB::transaction(function () use ($orderId, $data, $user) {
             $po = PurchaseOrder::lockForUpdate()->findOrFail($orderId);
+            $this->assertUserAccess($user, $po->project_id, [$po->created_by, $po->approved_by], '无权操作该采购单');
             if ($po->status !== self::STATUS_ORDER_APPROVED) {
                 throw new \RuntimeException("采购单当前状态 {$po->status} 不可生成合同");
+            }
+            if (PurchaseContract::allData()
+                ->where('purchase_order_id', $po->id)
+                ->whereNotIn('status', [self::STATUS_CONTRACT_CANCELLED])
+                ->exists()) {
+                throw new \RuntimeException('该采购单已存在有效合同');
             }
             if (array_key_exists('total_amount', $data)
                 && abs((float) $data['total_amount'] - (float) $po->total_amount) > 0.0001) {
@@ -523,7 +552,11 @@ class PurchaseFlowService
     public function signContract(int $contractId, ?User $user = null): PurchaseContract
     {
         return DB::transaction(function () use ($contractId, $user) {
+            if (!$user) {
+                throw new \DomainException('签署人不能为空');
+            }
             $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertUserAccess($user, $c->project_id, [$c->signer_id], '无权签署该采购合同');
             if (!in_array($c->status, [self::STATUS_CONTRACT_DRAFT, self::STATUS_CONTRACT_SIGNING], true)) {
                 throw new \RuntimeException("合同当前状态 {$c->status} 不可签署");
             }
@@ -550,6 +583,7 @@ class PurchaseFlowService
                 throw new \DomainException('申请人不能为空');
             }
             $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertUserAccess($user, $c->project_id, [$c->signer_id], '无权操作该采购合同');
             if (!in_array($c->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
                 throw new \RuntimeException("合同当前状态 {$c->status} 不可申请付款");
             }
@@ -578,7 +612,9 @@ class PurchaseFlowService
                 'applicant'    => $user?->name,
                 'applicant_id' => $user->id,
                 'reason'       => $data['reason'] ?? null,
-                'payable_id'   => $c->purchaseOrder?->id ? Payable::allData()->where('po_id', $c->purchase_order_id)->value('id') : null,
+                'payable_id'   => $c->purchase_order_id
+                    ? Payable::allData()->where('po_id', $c->purchase_order_id)->value('id')
+                    : null,
             ]);
             $this->log(self::ENTITY_PAYMENT_REQ, $req->id, null, self::STATUS_PAYREQ_PENDING, 'submit', $user, $req->stage_label ? "[{$req->stage_label}] 付款申请" : '付款申请');
             $this->syncPaymentRequestApprovalRecord($req, $user);
@@ -703,7 +739,12 @@ class PurchaseFlowService
     public function executePayment(int $reqId, array $data, ?User $user = null): PurchasePayment
     {
         return DB::transaction(function () use ($reqId, $data, $user) {
+            if (!$user) {
+                throw new \DomainException('付款人不能为空');
+            }
             $req = PurchasePaymentRequest::allData()->with('payments')->lockForUpdate()->findOrFail($reqId);
+            $contract = PurchaseContract::allData()->findOrFail($req->contract_id);
+            $this->assertUserAccess($user, $contract->project_id, [$req->applicant_id, $contract->signer_id], '无权操作该付款申请');
             if ($req->status !== self::STATUS_PAYREQ_APPROVED) {
                 throw new \RuntimeException('付款申请未审批或已付款，不能执行付款');
             }
@@ -788,7 +829,11 @@ class PurchaseFlowService
     public function createShipment(int $contractId, array $data, ?User $user = null): PurchaseShipment
     {
         return DB::transaction(function () use ($contractId, $data, $user) {
+            if (!$user) {
+                throw new \DomainException('发货人不能为空');
+            }
             $c = PurchaseContract::lockForUpdate()->findOrFail($contractId);
+            $this->assertUserAccess($user, $c->project_id, [$c->signer_id], '无权操作该采购合同');
             if (!in_array($c->status, [self::STATUS_CONTRACT_SIGNED, self::STATUS_CONTRACT_EFFECTIVE], true)) {
                 throw new \RuntimeException("合同当前状态 {$c->status} 不可创建收货单");
             }
@@ -811,7 +856,14 @@ class PurchaseFlowService
     public function updateShipmentStatus(int $shipId, string $newStatus, ?User $user = null, string $remark = ''): PurchaseShipment
     {
         return DB::transaction(function () use ($shipId, $newStatus, $user, $remark) {
+            if (!$user) {
+                throw new \DomainException('操作人不能为空');
+            }
             $sh = PurchaseShipment::lockForUpdate()->findOrFail($shipId);
+            $this->assertUserAccess($user, $sh->contract?->project_id, [$sh->contract?->signer_id], '无权操作该收货单');
+            if ($newStatus === self::STATUS_SHIP_INBOUNDED) {
+                throw new \RuntimeException('已入库状态只能通过确认入库操作');
+            }
             $old = $sh->status;
             if ($old === $newStatus) {
                 return $sh->fresh();
@@ -845,7 +897,11 @@ class PurchaseFlowService
     public function autoCreateInbound(int $shipId, ?User $user = null): StockRecord
     {
         return DB::transaction(function () use ($shipId, $user) {
+            if (!$user) {
+                throw new \DomainException('入库操作人不能为空');
+            }
             $sh = PurchaseShipment::with('contract.itemsList')->lockForUpdate()->findOrFail($shipId);
+            $this->assertUserAccess($user, $sh->contract?->project_id, [$sh->contract?->signer_id], '无权操作该收货单');
             if (!in_array($sh->status, [self::STATUS_SHIP_ARRIVED, self::STATUS_SHIP_RECEIVED], true)) {
                 throw new \RuntimeException("收货单当前状态 {$sh->status} 不可生成入库流水");
             }
@@ -909,13 +965,20 @@ class PurchaseFlowService
     public function confirmInbound(int $shipId, ?User $user = null): PurchaseShipment
     {
         return DB::transaction(function () use ($shipId, $user) {
+            if (!$user) {
+                throw new \DomainException('入库确认人不能为空');
+            }
             $sh = PurchaseShipment::lockForUpdate()->findOrFail($shipId);
+            $this->assertUserAccess($user, $sh->contract?->project_id, [$sh->contract?->signer_id], '无权操作该收货单');
             if ($sh->inbound_confirmed) {
                 return $sh->fresh();
             }
             if (!$sh->stock_record_id) {
                 $this->autoCreateInbound($shipId, $user);
                 $sh->refresh();
+            }
+            if ($sh->status !== self::STATUS_SHIP_INSPECTED) {
+                throw new \RuntimeException("收货单当前状态 {$sh->status} 不可确认入库");
             }
             $sh->update([
                 'status'                => self::STATUS_SHIP_INBOUNDED,
@@ -926,7 +989,11 @@ class PurchaseFlowService
             $this->log(self::ENTITY_SHIPMENT, $sh->id, self::STATUS_SHIP_INSPECTED, self::STATUS_SHIP_INBOUNDED, 'confirm_inbound', $user, '采购员确认入库');
 
             $contract = $sh->contract ? PurchaseContract::lockForUpdate()->find($sh->contract->id) : null;
-            if ($contract && $contract->plan_id) {
+            $hasUnconfirmedShipment = $contract && PurchaseShipment::where('contract_id', $contract->id)
+                ->where('id', '!=', $sh->id)
+                ->where('status', '!=', self::STATUS_SHIP_INBOUNDED)
+                ->exists();
+            if ($contract && $contract->plan_id && !$hasUnconfirmedShipment) {
                 $reqIds = \DB::table('purchase_requirements')->where('merged_plan_id', $contract->plan_id)->pluck('id');
                 PurchaseRequirement::allData()->whereIn('id', $reqIds)->lockForUpdate()->get()->each->update(['status' => self::STATUS_REQ_FULFILLED]);
                 PurchasePlan::allData()->lockForUpdate()->where('id', $contract->plan_id)->update(['status' => self::STATUS_PLAN_FULFILLED]);
@@ -1292,11 +1359,7 @@ class PurchaseFlowService
      */
     private function autoSyncContractItems(PurchaseContract $contract, ?User $user = null): void
     {
-        try {
-            $this->syncContractItems($contract->id, $user);
-        } catch (\Throwable $e) {
-            \Log::warning('autoSyncContractItems failed for contract #' . $contract->id . ': ' . $e->getMessage());
-        }
+        $this->syncContractItems($contract->id, $user);
     }
 
     /**
@@ -1563,5 +1626,75 @@ class PurchaseFlowService
         if (!in_array($contract->status, [self::STATUS_CONTRACT_DRAFT, self::STATUS_CONTRACT_SIGNING], true)) {
             throw new \RuntimeException("合同当前状态 {$contract->status} 不可修改清单");
         }
+    }
+
+    private function assertUserAccess(?User $user, ?int $projectId, array $ownerIds, string $message): void
+    {
+        if (!$user) {
+            throw new \DomainException('操作人不能为空');
+        }
+        if (AuthScope::isUnrestricted($user)
+            || ($user->is_system ?? false) === true
+            || ($user->user_type ?? null) === 'system') {
+            return;
+        }
+        if (in_array((int) $user->id, array_map('intval', array_filter($ownerIds)), true)) {
+            return;
+        }
+        if (!$projectId || !Project::withoutGlobalScope(\App\Scopes\DataScope::class)
+            ->whereKey($projectId)
+            ->where(function ($query) use ($user): void {
+                $query->where('manager_id', $user->id)
+                    ->orWhereExists(function ($memberQuery) use ($user): void {
+                        $memberQuery->selectRaw('1')
+                            ->from('project_members')
+                            ->whereColumn('project_members.project_id', 'projects.id')
+                            ->where('project_members.user_id', $user->id)
+                            ->where('project_members.status', 'active');
+                    });
+            })
+            ->exists()) {
+            throw new \RuntimeException($message);
+        }
+    }
+
+    private function assertRequirementSourceAccess(array $data, User $user, ?int $projectId): void
+    {
+        $sourceType = (string) ($data['source_type'] ?? 'manual');
+        $sourceId = !empty($data['source_id']) ? (int) $data['source_id'] : null;
+        if (!in_array($sourceType, ['work_order', 'external_work', 'project', 'customer_contract'], true)) {
+            return;
+        }
+        if (!$sourceId) {
+            throw new \InvalidArgumentException("采购需求来源 {$sourceType} 必须提供 source_id");
+        }
+
+        $sourceProjectId = null;
+        $ownerIds = [];
+        switch ($sourceType) {
+            case 'work_order':
+                $source = WorkOrder::allData()->findOrFail($sourceId);
+                $sourceProjectId = $source->project_id;
+                $ownerIds = [$source->created_by, $source->assigned_to];
+                break;
+            case 'external_work':
+                $source = ExternalConstructionWork::allData()->findOrFail($sourceId);
+                $sourceProjectId = $source->project_id;
+                $ownerIds = [$source->created_by];
+                break;
+            case 'project':
+                $source = Project::allData()->findOrFail($sourceId);
+                $sourceProjectId = $source->id;
+                break;
+            case 'customer_contract':
+                $source = ProjectContract::allData()->findOrFail($sourceId);
+                $sourceProjectId = $source->project_id;
+                break;
+        }
+
+        if ($projectId !== null && (int) $projectId !== (int) $sourceProjectId) {
+            throw new \InvalidArgumentException('采购需求项目与来源项目不匹配');
+        }
+        $this->assertUserAccess($user, $sourceProjectId, $ownerIds, '无权访问采购需求来源');
     }
 }

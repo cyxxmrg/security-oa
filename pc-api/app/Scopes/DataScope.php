@@ -81,6 +81,7 @@ class DataScope implements Scope
 
             case 'purchase_orders':
                 return [
+                    ['created_by', '=', $userId],
                     ['approved_by', '=', $userId],
                     ['__raw__', $myProjects],
                 ];
@@ -886,7 +887,9 @@ class DataScope implements Scope
     private static function purchaseOrderAccessSql(int $userId, string $alias): string
     {
         return sprintf(
-            "(%s.approved_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            "(%s.created_by = %d OR %s.approved_by = %d OR EXISTS (SELECT 1 FROM projects p WHERE p.id = %s.project_id AND (p.manager_id = %d OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = %d AND pm.status = 'active'))))",
+            $alias,
+            $userId,
             $alias,
             $userId,
             $alias,
