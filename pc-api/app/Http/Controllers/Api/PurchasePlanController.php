@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\PurchaseRequirement;
 use App\Models\PurchasePlan;
+use App\Models\PurchaseOrder;
 use App\Http\Requests\Purchase\StorePurchasePlanRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -115,13 +116,30 @@ class PurchasePlanController extends Controller
         if (!in_array($plan->status, ['draft', 'rejected', 'cancelled'], true)) {
             return response()->json(['code' => 1, 'message' => '只有草稿、驳回或已取消的计划可以删除'], 409);
         }
-        DB::transaction(function () use ($plan) {
+        $result = DB::transaction(function () use ($plan) {
             $locked = PurchasePlan::lockForUpdate()->findOrFail($plan->id);
             if (!in_array($locked->status, ['draft', 'rejected', 'cancelled'], true)) {
-                throw new \RuntimeException('只有草稿、驳回或已取消的计划可以删除');
+                return '只有草稿、驳回或已取消的计划可以删除';
             }
+            if (PurchaseOrder::allData()->where('plan_id', $locked->id)->exists()
+                || $locked->contracts()->exists()) {
+                return '计划已生成采购单或合同，不可删除';
+            }
+            PurchaseRequirement::allData()
+                ->where('merged_plan_id', $locked->id)
+                ->where('status', 'merged')
+                ->lockForUpdate()
+                ->update([
+                    'status' => 'approved',
+                    'merged_plan_id' => null,
+                    'merged_at' => null,
+                ]);
             $locked->delete();
+            return null;
         });
+        if ($result) {
+            return response()->json(['code' => 1, 'message' => $result], 409);
+        }
         return response()->json(['code' => 0, 'data' => ['deleted' => true]]);
     }
 

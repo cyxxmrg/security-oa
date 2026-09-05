@@ -94,9 +94,18 @@ class PurchaseContractController extends Controller
 
         $data['status']    = 'draft';
         $data['signer_id'] = $request->user()->id;
-        $data['signed_at'] = $data['signed_at'] ?? now()->toDateString();
-
-        $contract = DB::transaction(fn () => PurchaseContract::create($data));
+        $contract = DB::transaction(function () use ($data) {
+            if (!empty($data['plan_id'])) {
+                $existing = PurchaseContract::where('plan_id', $data['plan_id'])
+                    ->whereNotIn('status', ['cancelled'])
+                    ->lockForUpdate()
+                    ->first();
+                if ($existing) {
+                    throw new \RuntimeException('该采购计划已存在有效合同');
+                }
+            }
+            return PurchaseContract::create($data);
+        });
         return response()->json(['code' => 0, 'data' => $contract]);
     }
 
@@ -115,7 +124,7 @@ class PurchaseContractController extends Controller
 
         $updated = DB::transaction(function () use ($contract, $data) {
             $locked = PurchaseContract::lockForUpdate()->findOrFail($contract->id);
-            if (in_array($locked->status, ['shipping', 'completed'])) {
+            if (!in_array($locked->status, ['draft', 'signing'], true)) {
                 return null;
             }
             $locked->update($data);
@@ -154,8 +163,8 @@ class PurchaseContractController extends Controller
     {
         $result = DB::transaction(function () use ($contract) {
             $locked = PurchaseContract::lockForUpdate()->findOrFail($contract->id);
-            if ($locked->status === 'completed') {
-                return '已完成的合同不可删除';
+            if (!in_array($locked->status, ['draft', 'cancelled'], true)) {
+                return '只有草稿或已取消的合同可以删除';
             }
             if ($locked->shipments()->exists()) {
                 return '存在关联发货单，请先清理';

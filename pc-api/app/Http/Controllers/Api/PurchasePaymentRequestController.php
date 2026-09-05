@@ -134,8 +134,11 @@ class PurchasePaymentRequestController extends Controller
             if (!$user || (int) $locked->applicant_id !== (int) $user->id) {
                 return '只有申请人可以删除付款申请';
             }
-            if ($locked->status === 'paid' || $locked->payments()->exists()) {
-                return '已付款的申请不可删除';
+            if (!in_array($locked->status, ['pending', 'rejected'], true)) {
+                return '只有待审批或已驳回的付款申请可以删除';
+            }
+            if ($locked->payments()->exists()) {
+                return '已产生付款记录的申请不可删除';
             }
             if ($locked->vouchers()->exists()) {
                 return '存在付款凭证的申请不可删除';

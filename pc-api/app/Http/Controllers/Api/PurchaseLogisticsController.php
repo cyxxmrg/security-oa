@@ -8,6 +8,7 @@ use App\Models\PurchaseShipment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * 采购物流 (Logistics) — 4 端点
@@ -30,20 +31,22 @@ class PurchaseLogisticsController extends Controller
             'operator'    => 'nullable|string|max:50',
         ]);
 
-        $data['shipment_id'] = $shipment->id;
-        $data['tracking_no'] = $data['tracking_no'] ?? $shipment->tracking_no;
-        $data['event_at']    = $data['event_at']    ?? now();
-        $data['operator']    = $request->user()?->name;
+        $log = DB::transaction(function () use ($data, $shipment, $request) {
+            $lockedShipment = PurchaseShipment::lockForUpdate()->findOrFail($shipment->id);
+            $data['shipment_id'] = $lockedShipment->id;
+            $data['tracking_no'] = $data['tracking_no'] ?? $lockedShipment->tracking_no;
+            $data['event_at']    = $data['event_at']    ?? now();
+            $data['operator']    = $request->user()?->name;
 
-        $log = PurchaseLogistics::create($data);
-
-        // 推进 shipment 状态
-        $inferred = $this->inferShipmentStatus($log->status, $log->description, $shipment);
-        if ($inferred && $this->canAdvanceShipment($shipment->status, $inferred)) {
-            $update = ['status' => $inferred];
-            if ($inferred === 'arrived') $update['arrived_at'] = $log->event_at;
-            $shipment->update($update);
-        }
+            $created = PurchaseLogistics::create($data);
+            $inferred = $this->inferShipmentStatus($created->status, $created->description, $lockedShipment);
+            if ($inferred && $this->canAdvanceShipment($lockedShipment->status, $inferred)) {
+                $update = ['status' => $inferred];
+                if ($inferred === 'arrived') $update['arrived_at'] = $created->event_at;
+                $lockedShipment->update($update);
+            }
+            return $created;
+        });
 
         return response()->json(['code' => 0, 'data' => $log]);
     }
@@ -89,8 +92,12 @@ class PurchaseLogisticsController extends Controller
             'operator'    => 'nullable|string|max:50',
         ]);
 
-        $log->update($data);
-        return response()->json(['code' => 0, 'data' => $log->fresh()]);
+        $updated = DB::transaction(function () use ($log, $data) {
+            $locked = PurchaseLogistics::lockForUpdate()->findOrFail($log->id);
+            $locked->update($data);
+            return $locked->fresh();
+        });
+        return response()->json(['code' => 0, 'data' => $updated]);
     }
 
     /**
