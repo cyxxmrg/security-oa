@@ -56,7 +56,11 @@ class AssetController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->store($request)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->store($request)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 422);
+        }
     }
 
     public function show(FixedAsset $asset): JsonResponse
@@ -66,7 +70,11 @@ class AssetController extends Controller
 
     public function update(Request $request, FixedAsset $asset): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->update($request, $asset)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->update($request, $asset)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     public function destroy(FixedAsset $asset): JsonResponse
@@ -102,7 +110,11 @@ class AssetController extends Controller
 
     public function storeMaintenance(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->storeMaintenance($request)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->storeMaintenance($request)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     // ===== 盘点 =====
@@ -113,12 +125,20 @@ class AssetController extends Controller
 
     public function storeInventory(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->storeInventory($request)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->storeInventory($request)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     public function completeInventory(AssetInventory $inventory): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->completeInventory($inventory)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->completeInventory($inventory)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     // ===== 报废处置 =====
@@ -129,7 +149,11 @@ class AssetController extends Controller
 
     public function storeDisposal(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->storeDisposal($request)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->storeDisposal($request)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 
     // ===== 调拨 =====
@@ -140,6 +164,10 @@ class AssetController extends Controller
 
     public function storeTransfer(Request $request): JsonResponse
     {
-        return response()->json(['code' => 0, 'data' => $this->svc->storeTransfer($request)]);
+        try {
+            return response()->json(['code' => 0, 'data' => $this->svc->storeTransfer($request)]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1, 'message' => $e->getMessage()], 409);
+        }
     }
 }

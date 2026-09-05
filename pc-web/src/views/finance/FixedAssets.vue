@@ -300,7 +300,7 @@
                 <el-option label="使用中" value="in_use" />
                 <el-option label="闲置" value="idle" />
                 <el-option label="维修中" value="repair" />
-                <el-option label="已报废" value="scrapped" />
+                <el-option v-if="assetForm.status === 'scrapped'" label="已报废（仅可通过报废处置）" value="scrapped" disabled />
               </el-select>
             </el-form-item>
           </el-col>
@@ -484,8 +484,7 @@
           </el-select>
         </el-form-item>
         <el-row :gutter="12">
-          <el-col :span="12"><el-form-item label="调出地"><el-input v-model="tfForm.from_location" /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="调入地"><el-input v-model="tfForm.to_location" /></el-form-item></el-col>
+          <el-col :span="24"><el-form-item label="调入地"><el-input v-model="tfForm.to_location" /></el-form-item></el-col>
         </el-row>
         <el-form-item label="日期"><el-date-picker v-model="tfForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="tfForm.remark" type="textarea" :rows="2" maxlength="500" /></el-form-item>
@@ -637,7 +636,7 @@ const assetRules = { name: [{ required: true, message: '请输入资产名称', 
 function openAssetDialog(row?: Record<string, unknown>) {
   assetForm.id = row ? Number(row.id) : null
   assetForm.name = row ? String(row.name || '') : ''
-  assetForm.category_id = row ? Number(row.category_id || null) : null
+  assetForm.category_id = row?.category_id ? Number(row.category_id) : null
   assetForm.specification = row ? String(row.specification || '') : ''
   assetForm.unit = row ? String(row.unit || '') : ''
   assetForm.quantity = row ? Number(row.quantity || 1) : 1
@@ -910,7 +909,7 @@ const tfPerPage = 15
 const tfTotal = ref(0)
 const tfDialogVisible = ref(false)
 const tfSubmitting = ref(false)
-const tfForm = reactive({ asset_id: null as number | null, date: null as string | null, from_location: '', to_location: '', remark: '' })
+const tfForm = reactive({ asset_id: null as number | null, date: null as string | null, to_location: '', remark: '' })
 
 async function loadTransfers(page = 1) {
   tfPage.value = page
@@ -924,7 +923,7 @@ async function loadTransfers(page = 1) {
   finally { tfLoading.value = false }
 }
 function openTfDialog() {
-  tfForm.asset_id = null; tfForm.date = null; tfForm.from_location = ''; tfForm.to_location = ''; tfForm.remark = ''
+  tfForm.asset_id = null; tfForm.date = null; tfForm.to_location = ''; tfForm.remark = ''
   assetOptions.value = []
   tfDialogVisible.value = true
 }

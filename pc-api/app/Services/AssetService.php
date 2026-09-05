@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use DateTimeImmutable;
 use App\Models\AssetCategory;
 use App\Models\AssetDepreciation;
 use App\Models\AssetDisposal;
@@ -69,6 +70,9 @@ class AssetService
         if (isset($data['parent_id']) && (int) $data['parent_id'] === $id) {
             throw new RuntimeException('父分类不能是自己');
         }
+        if (isset($data['parent_id']) && in_array((int) $data['parent_id'], $this->categoryDescendantIds($id), true)) {
+            throw new RuntimeException('父分类不能设置为当前分类的子分类');
+        }
         $category->update($data);
         return $category->fresh();
     }
@@ -109,20 +113,25 @@ class AssetService
         if ($request->filled('status'))  $query->where('status', $request->status);
         if ($request->filled('source'))  $query->where('source', $request->source);
 
-        return $query->orderByDesc('created_at')->paginate((int) $request->integer('per_page', 15));
+        return $query->orderByDesc('created_at')->paginate($this->perPage($request));
     }
 
     private function categoryDescendantIds(int $id): array
     {
         $ids = [$id];
+        $visited = [$id => true];
         $all = AssetCategory::pluck('parent_id', 'id')->all();
         $stack = [$id];
         while ($stack) {
             $p = array_pop($stack);
             foreach ($all as $cid => $pid) {
                 if ((int) $pid === $p) {
-                    $ids[] = $cid;
-                    $stack[] = $cid;
+                    $childId = (int) $cid;
+                    if (!isset($visited[$childId])) {
+                        $visited[$childId] = true;
+                        $ids[] = $childId;
+                        $stack[] = $childId;
+                    }
                 }
             }
         }
@@ -132,6 +141,10 @@ class AssetService
     public function store(Request $request): FixedAsset
     {
         $data = $this->validateAsset($request);
+        $this->assertAssetValues($data);
+        if (($data['status'] ?? null) === 'scrapped') {
+            throw new RuntimeException('新增资产不能直接设为已报废, 请通过报废处置操作');
+        }
         return DB::transaction(function () use ($data, $request) {
             $asset = FixedAsset::create([
                 'asset_no'              => $this->inventory->nextAssetNumber(),
@@ -172,31 +185,62 @@ class AssetService
     public function update(Request $request, FixedAsset $asset): FixedAsset
     {
         $data = $this->validateAsset($request, false);
-        $fields = [
-            'category_id', 'name', 'specification', 'unit', 'quantity',
-            'original_value', 'net_residual_value', 'useful_life_months', 'acquisition_date',
-            'status', 'location', 'keeper_id', 'remark',
-        ];
-        $payload = [];
-        foreach ($fields as $f) {
-            if (array_key_exists($f, $data)) $payload[$f] = $data[$f];
-        }
-        // 原值变更时重算净值 (累计折旧不变)
-        if (isset($data['original_value'])) {
-            $payload['net_book_value'] = round((float) $data['original_value'] - (float) $asset->accumulated_depreciation, 2);
-        }
-        $asset->update($payload);
-        return $asset->fresh(['category:id,name', 'keeper:id,name']);
+        return DB::transaction(function () use ($data, $asset) {
+            $lockedAsset = FixedAsset::lockForUpdate()->findOrFail($asset->id);
+            $this->assertAssetValues($data, $lockedAsset);
+
+            if ($lockedAsset->source === 'tool' || $lockedAsset->tool_id !== null) {
+                foreach (['name', 'specification', 'unit', 'quantity'] as $linkedField) {
+                    if (array_key_exists($linkedField, $data)
+                        && (string) $data[$linkedField] !== (string) $lockedAsset->{$linkedField}) {
+                        throw new RuntimeException('工具台账生成的资产不能修改名称、规格、单位或数量');
+                    }
+                }
+            }
+
+            if (($data['status'] ?? null) === 'scrapped' && $lockedAsset->status !== 'scrapped') {
+                throw new RuntimeException('不能直接将资产设为已报废, 请使用报废处置');
+            }
+            if ($lockedAsset->status === 'scrapped' && isset($data['status']) && $data['status'] !== 'scrapped') {
+                throw new RuntimeException('已报废资产不能通过编辑恢复状态');
+            }
+
+            $fields = [
+                'category_id', 'name', 'specification', 'unit', 'quantity',
+                'original_value', 'net_residual_value', 'useful_life_months', 'acquisition_date',
+                'status', 'location', 'keeper_id', 'remark',
+            ];
+            $payload = [];
+            foreach ($fields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $payload[$field] = $data[$field];
+                }
+            }
+            if (array_key_exists('original_value', $data)) {
+                $payload['net_book_value'] = round((float) $data['original_value'] - (float) $lockedAsset->accumulated_depreciation, 2);
+            }
+            $lockedAsset->update($payload);
+            return $lockedAsset->fresh(['category:id,name', 'keeper:id,name']);
+        });
     }
 
     public function destroy(FixedAsset $asset): void
     {
-        foreach (['depreciations', 'maintenances', 'transfers', 'disposals'] as $rel) {
-            if ($asset->{$rel}()->exists()) {
-                throw new RuntimeException('该资产已有折旧/维修/调拨/报废记录, 不能删除');
+        DB::transaction(function () use ($asset) {
+            $lockedAsset = FixedAsset::lockForUpdate()->findOrFail($asset->id);
+            if ($lockedAsset->source === 'tool' || $lockedAsset->tool_id !== null) {
+                throw new RuntimeException('工具台账生成的固定资产不能单独删除');
             }
-        }
-        $asset->delete();
+            foreach (['depreciations', 'maintenances', 'transfers', 'disposals'] as $relation) {
+                if ($lockedAsset->{$relation}()->exists()) {
+                    throw new RuntimeException('该资产已有折旧/维修/调拨/报废记录, 不能删除');
+                }
+            }
+            if (AssetInventoryItem::where('asset_id', $lockedAsset->id)->exists()) {
+                throw new RuntimeException('该资产已有盘点记录, 不能删除');
+            }
+            $lockedAsset->delete();
+        });
     }
 
     private function validateAsset(Request $request, bool $required = true): array
@@ -206,17 +250,31 @@ class AssetService
             'category_id'         => 'nullable|integer|exists:asset_categories,id',
             'specification'       => 'nullable|string|max:255',
             'unit'                => 'nullable|string|max:20',
-            'quantity'            => 'nullable|integer|min:1',
-            'original_value'      => 'nullable|numeric|min:0',
-            'net_residual_value'  => 'nullable|numeric|min:0',
-            'useful_life_months'  => 'nullable|integer|min:1|max:600',
+            'quantity'            => 'sometimes|integer|min:1',
+            'original_value'      => 'sometimes|numeric|min:0',
+            'net_residual_value'  => 'sometimes|numeric|min:0',
+            'useful_life_months'  => 'sometimes|integer|min:1|max:600',
             'acquisition_date'    => 'nullable|date',
-            'status'              => 'nullable|in:in_use,idle,repair,scrapped',
+            'status'              => 'sometimes|in:in_use,idle,repair,scrapped',
             'location'            => 'nullable|string|max:200',
             'keeper_id'           => 'nullable|integer|exists:users,id',
             'remark'              => 'nullable|string|max:1000',
         ];
         return $request->validate($rules);
+    }
+
+    private function assertAssetValues(array $data, ?FixedAsset $asset = null): void
+    {
+        $originalValue = (float) ($data['original_value'] ?? $asset?->original_value ?? 0);
+        $residualValue = (float) ($data['net_residual_value'] ?? $asset?->net_residual_value ?? 0);
+        $accumulated = (float) ($asset?->accumulated_depreciation ?? 0);
+
+        if ($residualValue > $originalValue) {
+            throw new RuntimeException('净残值不能大于资产原值');
+        }
+        if ($accumulated > round($originalValue - $residualValue, 2)) {
+            throw new RuntimeException('原值和净残值变更后不能小于已累计折旧范围');
+        }
     }
 
     // ============================================================
@@ -227,8 +285,12 @@ class AssetService
     public function depreciate(Request $request): array
     {
         $period = (string) $request->input('period');
-        if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        $periodDate = DateTimeImmutable::createFromFormat('!Y-m', $period);
+        if (!$periodDate || $periodDate->format('Y-m') !== $period) {
             throw new RuntimeException('期间格式应为 YYYY-MM');
+        }
+        if ($period > now()->format('Y-m')) {
+            throw new RuntimeException('不能计提未来期间的折旧');
         }
         $count = 0;
         $skipped = 0;
@@ -237,8 +299,10 @@ class AssetService
                 ->lockForUpdate()
                 ->get();
             foreach ($assets as $asset) {
+                if ($asset->acquisition_date && substr((string) $asset->acquisition_date, 0, 7) > $period) { $skipped++; continue; }
                 if ((float) $asset->net_book_value <= (float) $asset->net_residual_value + 0.001) { $skipped++; continue; }
                 if (AssetDepreciation::where('asset_id', $asset->id)->where('period', $period)->exists()) { $skipped++; continue; }
+                if (AssetDepreciation::where('asset_id', $asset->id)->where('period', '>', $period)->exists()) { $skipped++; continue; }
                 $monthly = $asset->monthlyDepreciation();
                 if ($monthly <= 0) { $skipped++; continue; }
                 // 最后一期修正: 不超过 (原值-残值-已累计)
@@ -269,7 +333,7 @@ class AssetService
         if ($request->filled('period')) $query->where('period', $request->period);
         if ($request->filled('asset_id')) $query->where('asset_id', $request->asset_id);
         return $query->orderByDesc('period')->orderByDesc('id')
-            ->paginate((int) $request->integer('per_page', 15));
+            ->paginate($this->perPage($request));
     }
 
     // ============================================================
@@ -281,7 +345,7 @@ class AssetService
         $query = AssetMaintenance::with(['asset:id,asset_no,name', 'handler:id,name']);
         if ($request->filled('asset_id')) $query->where('asset_id', $request->asset_id);
         return $query->orderByDesc('date')->orderByDesc('id')
-            ->paginate((int) $request->integer('per_page', 15));
+            ->paginate($this->perPage($request));
     }
 
     public function storeMaintenance(Request $request): AssetMaintenance
@@ -295,15 +359,21 @@ class AssetService
             'result'      => 'nullable|string|max:1000',
             'handler_id'  => 'nullable|integer|exists:users,id',
         ]);
-        return AssetMaintenance::create([
-            'asset_id'    => $data['asset_id'],
-            'date'        => $data['date'] ?? now()->toDateString(),
-            'type'        => $data['type'] ?? 'repair',
-            'cost'        => $data['cost'] ?? 0,
-            'description' => $data['description'] ?? null,
-            'result'      => $data['result'] ?? null,
-            'handler_id'  => $data['handler_id'] ?? $request->user()->id,
-        ]);
+        return DB::transaction(function () use ($data, $request) {
+            $asset = FixedAsset::lockForUpdate()->findOrFail($data['asset_id']);
+            if ($asset->status === 'scrapped') {
+                throw new RuntimeException('已报废资产不能新增维修保养记录');
+            }
+            return AssetMaintenance::create([
+                'asset_id'    => $asset->id,
+                'date'        => $data['date'] ?? now()->toDateString(),
+                'type'        => $data['type'] ?? 'repair',
+                'cost'        => $data['cost'] ?? 0,
+                'description' => $data['description'] ?? null,
+                'result'      => $data['result'] ?? null,
+                'handler_id'  => $data['handler_id'] ?? $request->user()->id,
+            ]);
+        });
     }
 
     // ============================================================
@@ -313,7 +383,7 @@ class AssetService
     public function inventories(Request $request)
     {
         return AssetInventory::with(['items.asset:id,asset_no,name'])
-            ->orderByDesc('id')->paginate((int) $request->integer('per_page', 15));
+            ->orderByDesc('id')->paginate($this->perPage($request));
     }
 
     public function storeInventory(Request $request): AssetInventory
@@ -342,6 +412,9 @@ class AssetService
                 }
                 $seen[$assetId] = true;
                 $asset = FixedAsset::lockForUpdate()->findOrFail($assetId);
+                if ($asset->status === 'scrapped') {
+                    throw new RuntimeException("已报废资产 #{$assetId} 不能加入盘点单");
+                }
                 $book = (int) $asset->quantity;
                 $actual = (int) $it['actual_qty'];
                 AssetInventoryItem::create([
@@ -359,8 +432,14 @@ class AssetService
 
     public function completeInventory(AssetInventory $inventory): AssetInventory
     {
-        $inventory->update(['status' => 'done']);
-        return $inventory->fresh(['items.asset:id,asset_no,name']);
+        return DB::transaction(function () use ($inventory) {
+            $lockedInventory = AssetInventory::lockForUpdate()->findOrFail($inventory->id);
+            if ($lockedInventory->status !== 'pending') {
+                throw new RuntimeException('该盘点单已经完成');
+            }
+            $lockedInventory->update(['status' => 'done']);
+            return $lockedInventory->fresh(['items.asset:id,asset_no,name']);
+        });
     }
 
     private function nextInventoryNo(): string
@@ -385,7 +464,7 @@ class AssetService
         $query = AssetDisposal::with(['asset:id,asset_no,name', 'handler:id,name']);
         if ($request->filled('asset_id')) $query->where('asset_id', $request->asset_id);
         return $query->orderByDesc('date')->orderByDesc('id')
-            ->paginate((int) $request->integer('per_page', 15));
+            ->paginate($this->perPage($request));
     }
 
     public function storeDisposal(Request $request): AssetDisposal
@@ -426,7 +505,7 @@ class AssetService
         $query = AssetTransfer::with(['asset:id,asset_no,name']);
         if ($request->filled('asset_id')) $query->where('asset_id', $request->asset_id);
         return $query->orderByDesc('date')->orderByDesc('id')
-            ->paginate((int) $request->integer('per_page', 15));
+            ->paginate($this->perPage($request));
     }
 
     public function storeTransfer(Request $request): AssetTransfer
@@ -434,9 +513,7 @@ class AssetService
         $data = $request->validate([
             'asset_id'        => 'required|integer|exists:fixed_assets,id',
             'date'            => 'nullable|date',
-            'from_location'   => 'nullable|string|max:200',
             'to_location'     => 'nullable|string|max:200',
-            'from_keeper_id'  => 'nullable|integer|exists:users,id',
             'to_keeper_id'    => 'nullable|integer|exists:users,id',
             'remark'          => 'nullable|string|max:500',
         ]);
@@ -445,12 +522,21 @@ class AssetService
             if ($asset->status === 'scrapped') {
                 throw new RuntimeException('已报废资产不可调拨');
             }
+            $hasLocation = array_key_exists('to_location', $data) && $data['to_location'] !== null;
+            $hasKeeper = array_key_exists('to_keeper_id', $data) && $data['to_keeper_id'] !== null;
+            if (!$hasLocation && !$hasKeeper) {
+                throw new RuntimeException('调拨必须指定新的存放地或保管人');
+            }
+            if ((!$hasLocation || $data['to_location'] === $asset->location)
+                && (!$hasKeeper || (int) $data['to_keeper_id'] === (int) $asset->keeper_id)) {
+                throw new RuntimeException('调拨后的存放地或保管人必须发生变化');
+            }
             $transfer = AssetTransfer::create([
                 'asset_id'       => $asset->id,
                 'date'           => $data['date'] ?? now()->toDateString(),
-                'from_location'  => $data['from_location'] ?? $asset->location,
+                'from_location'  => $asset->location,
                 'to_location'    => $data['to_location'] ?? null,
-                'from_keeper_id' => $data['from_keeper_id'] ?? $asset->keeper_id,
+                'from_keeper_id' => $asset->keeper_id,
                 'to_keeper_id'   => $data['to_keeper_id'] ?? null,
                 'remark'         => $data['remark'] ?? null,
                 'created_by'     => $request->user()->id,
@@ -461,5 +547,10 @@ class AssetService
             ]);
             return $transfer->fresh(['asset:id,asset_no,name']);
         });
+    }
+
+    private function perPage(Request $request): int
+    {
+        return min(max((int) $request->integer('per_page', 15), 1), 100);
     }
 }
