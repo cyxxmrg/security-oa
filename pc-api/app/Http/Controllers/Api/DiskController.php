@@ -60,7 +60,6 @@ class DiskController extends Controller
     {
         return response()->json(['code' => 0, 'data' => [
             'initialized' => DiskSetting::get('initialized', false),
-            'storage_path' => DiskSetting::get('storage_path', storage_path('app/attachments')),
             'auto_detect' => DiskSetting::get('auto_detect', true),
         ]]);
     }
@@ -547,7 +546,6 @@ class DiskController extends Controller
             'code' => 0,
             'data' => [
                 'initialized'     => $initialized,
-                'storage_path'    => $st,
                 'project_folders' => $projectCount,
                 'employee_folders' => $employeeCount,
                 'total_files'     => $totalFiles,

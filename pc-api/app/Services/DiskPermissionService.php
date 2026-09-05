@@ -105,7 +105,7 @@ class DiskPermissionService
     {
         // 受保护根（project_root / work_root）：禁止操作
         if ($folder->is_protected) {
-            return $user->hasRole('admin'); // 只有 admin 能改（实际也不让改，但留 admin 逃生口）
+            return false;
         }
 
         // share 根：可改（admin 才行）
@@ -211,6 +211,9 @@ class DiskPermissionService
         if ($project->manager_id && (int) $project->manager_id === (int) $user->id) {
             return true;
         }
-        return $project->members()->where('users.id', $user->id)->exists();
+        return $project->members()
+            ->where('users.id', $user->id)
+            ->where('project_members.status', 'active')
+            ->exists();
     }
 }
