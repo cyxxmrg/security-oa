@@ -12,12 +12,12 @@
         <el-col :span="8">
           <el-form-item label="选择车辆">
             <el-select v-model="form.vehicle_id" placeholder="选择车辆（可选）" filterable clearable style="width:100%">
-              <el-option v-for="v in vehicles" :key="v.id" :value="v.id" :label="`${v.plate_no} ${v.brand || ''} ${v.model || ''}`" :disabled="v.status === 'in_use' || v.status === 'maintenance' || v.status === 'retired'">
+              <el-option v-for="v in vehicles" :key="v.id" :value="v.id" :label="`${v.plate_no} ${v.brand || ''} ${v.model || ''}`" :disabled="v.status === 'in_use' || v.status === 'maintenance' || v.status === 'retired' || v.status === 'scrapped'">
                 <div style="display:flex;justify-content:space-between;width:100%">
                   <span>{{ v.plate_no }} {{ v.brand || '' }} {{ v.model || '' }}</span>
                   <span v-if="v.status === 'in_use'" style="color:#e6a23c;font-size:12px">使用中</span>
                   <span v-else-if="v.status === 'maintenance'" style="color:#909399;font-size:12px">维修中</span>
-                  <span v-else-if="v.status === 'retired'" style="color:#A32D2D;font-size:12px">已停用</span>
+                  <span v-else-if="v.status === 'retired' || v.status === 'scrapped'" style="color:#A32D2D;font-size:12px">已停用</span>
                   <span v-else style="color:#67c23a;font-size:12px">可用</span>
                 </div>
               </el-option>

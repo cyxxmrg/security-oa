@@ -13,7 +13,7 @@ class Vehicle extends Model
 
     protected $fillable = ['plate_no', 'brand', 'model', 'year', 'color', 'vin', 'engine_no', 'purchase_date', 'purchase_price', 'department_id', 'responsible_user_id', 'status', 'mileage', 'seats', 'fuel_type'];
 
-    protected $casts = ['purchase_date' => 'date', 'purchase_price' => 'decimal:2'];
+    protected $casts = ['purchase_date' => 'date', 'purchase_price' => 'decimal:2', 'mileage' => 'integer'];
 
     public function department(): BelongsTo { return $this->belongsTo(Department::class); }
     public function responsibleUser(): BelongsTo { return $this->belongsTo(User::class, 'responsible_user_id'); }

@@ -72,7 +72,8 @@
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status === 'pending'">
-              <el-tag size="small" type="info" effect="plain">去审批中心</el-tag>
+              <el-button link type="success" size="small" @click="approveRequest(row)">批准</el-button>
+              <el-button link type="danger" size="small" @click="rejectRequest(row)">驳回</el-button>
             </template>
             <template v-else-if="row.status === 'approved'">
               <el-button link type="primary" size="small" @click="openDispatch(row)">派车</el-button>
@@ -166,8 +167,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { get, post, put, del } from '@/utils/request'
+import { ElMessage } from 'element-plus'
+import { get, post } from '@/utils/request'
 import VehicleApplyDialog from './Apply.vue'
 
 const showApply = ref(false)
@@ -229,7 +230,9 @@ const loadList = async () => {
   try {
     const res = await get('/vehicles/usage', {
       page: page.value,
-      pageSize: pageSize.value,
+      per_page: pageSize.value,
+      keyword: searchForm.value.keyword || undefined,
+      status: searchForm.value.status || undefined,
     })
     const data = res.data || res
     list.value = data?.data || data?.items || data || []
@@ -248,15 +251,22 @@ const loadStats = async () => {
     stats.value = {
       pending: data?.pending || 0,
       approved: data?.approved || 0,
-      using: 0,
+      using: data?.inUse || 0,
       monthRequests: data?.monthRequests || 0,
     }
   } catch (e) { /* ignore */ }
 }
 
-const loadAvailableVehicles = async () => {
+const loadAvailableVehicles = async (row?: VehicleUsage) => {
   try {
-    const res = await get('/vehicles', { status: 'available' })
+    const params: Record<string, unknown> = { status: 'available' }
+    if (row?.usage_date && row.start_time && row.end_time) {
+      params.usage_date = row.usage_date
+      params.start_time = row.start_time
+      params.end_time = row.end_time
+      params.exclude_usage_request_id = row.id
+    }
+    const res = await get('/vehicles', params)
     availableVehicles.value = (res.data || res) || []
   } catch (e) { /* ignore */ }
 }
@@ -279,9 +289,33 @@ const filteredData = computed(() => {
   })
 })
 
-const resetSearch = () => { searchForm.value = { keyword: '', status: '' } }
+const resetSearch = () => {
+  searchForm.value = { keyword: '', status: '' }
+  page.value = 1
+  loadList()
+}
 
-// V1.2.7h: 用车审批统一进审批中心, 此处不再处理
+const approveRequest = async (row: VehicleUsage) => {
+  try {
+    await post(`/vehicles/usage/${row.id}/dispatch`, { action: 'approved' })
+    ElMessage.success('申请已批准')
+    loadList()
+    loadStats()
+  } catch (e: unknown) {
+    ElMessage.error((e as { message?: string })?.message || '批准失败')
+  }
+}
+
+const rejectRequest = async (row: VehicleUsage) => {
+  try {
+    await post(`/vehicles/usage/${row.id}/dispatch`, { action: 'rejected' })
+    ElMessage.success('申请已驳回')
+    loadList()
+    loadStats()
+  } catch (e: unknown) {
+    ElMessage.error((e as { message?: string })?.message || '驳回失败')
+  }
+}
 
 // ===== 派车对话框 =====
 const dispatchDialogVisible = ref(false)
@@ -293,7 +327,7 @@ const openDispatch = (row: VehicleUsage) => {
   dispatchRow.value = row
   dispatchForm.vehicle_id = row.vehicle_id || null
   dispatchDialogVisible.value = true
-  loadAvailableVehicles()
+  loadAvailableVehicles(row)
 }
 
 const confirmDispatch = async () => {
@@ -338,9 +372,6 @@ const confirmReturn = async () => {
   try {
     await post(`/vehicles/usage/${returnRow.value.id}/dispatch`, {
       action: 'returned',
-    })
-    // 同时更新里程油耗
-    await put(`/vehicles/usage/${returnRow.value.id}`, {
       start_mileage: returnForm.start_mileage,
       end_mileage: returnForm.end_mileage,
       actual_fuel: returnForm.actual_fuel,
@@ -361,15 +392,7 @@ const showViewDialog = ref(false)
 const viewRow = ref<VehicleUsage | null>(null)
 
 const handleViewDetail = async (row: VehicleUsage) => {
-  try {
-    // V0.6.3: res = {code, data: <all usages>}
-    const res = await get(`/vehicles/usage`)
-    const d = res?.data ?? []
-    const all = Array.isArray(d) ? d : []
-    viewRow.value = all.find((r: VehicleUsage) => r.id === row.id) || row
-  } catch {
-    viewRow.value = row
-  }
+  viewRow.value = row
   showViewDialog.value = true
 }
 </script>

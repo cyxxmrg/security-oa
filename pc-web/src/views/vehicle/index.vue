@@ -204,9 +204,11 @@ const loadUsers = async () => {
 }
 
 const statusMap: Record<string, { label: string; type: 'success' | 'warning' | 'info' | 'danger' }> = {
+  normal: { label: '可用', type: 'success' },
   available: { label: '可用', type: 'success' },
   in_use: { label: '使用中', type: 'warning' },
   maintenance: { label: '维修中', type: 'info' },
+  scrapped: { label: '已报废', type: 'danger' },
   retired: { label: '已停用', type: 'danger' },
 }
 const statusLabel = (s?: string) => statusMap[s || '']?.label || s || ''
@@ -217,39 +219,11 @@ const loadList = async () => {
   try {
     const res: ApiResponse = await get('/vehicles')
     let vehicles: any[] = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : [])
-    // 模拟每辆车的保险/保养/油卡状态（实际项目从后端聚合）
-    vehicles = vehicles.map((v: VehicleItem) => ({
-      ...v,
-      // 保险到期日（mock：90 天内随机）
-      insurance_end_date: v.insurance_end_date || mockDate(30),
-      // 下次保养（mock：1 万公里内随机 + 30 天内日期）
-      next_maintenance_mileage: v.next_maintenance_mileage || mockMileage(),
-      next_maintenance_date: v.next_maintenance_date || mockDate(45),
-      // 最近油卡充值
-      last_recharge: v.last_recharge || mockRecharge()
-    }))
     list.value = vehicles
   } catch (e: any) {
     ElMessage.error(e?.message || '加载车辆列表失败')
   } finally {
     loading.value = false
-  }
-}
-
-// 模拟数据（实际项目由后端聚合返回）
-const mockDate = (daysFromNow: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() + Math.floor(Math.random() * daysFromNow) - 15)
-  return d.toISOString().slice(0, 10)
-}
-const mockMileage = () => Math.floor(Math.random() * 10000) + 50000
-const mockRecharge = () => {
-  if (Math.random() < 0.2) return null  // 20% 没充过
-  const d = new Date()
-  d.setDate(d.getDate() - Math.floor(Math.random() * 60))
-  return {
-    recharge_date: d.toISOString().slice(0, 10),
-    amount: (Math.floor(Math.random() * 30) + 5) * 100
   }
 }
 
@@ -280,7 +254,10 @@ const filteredData = computed(() => {
     const plate = item.plate_no || item.plateNo || ''
     const model = (item.brand || '') + ' ' + (item.model || '')
     const matchKeyword = !searchForm.value.keyword || plate.includes(searchForm.value.keyword) || model.includes(searchForm.value.keyword)
-    const matchStatus = !searchForm.value.status || item.status === searchForm.value.status
+    const matchStatus = !searchForm.value.status
+      || item.status === searchForm.value.status
+      || (searchForm.value.status === 'normal' && item.status === 'available')
+      || (searchForm.value.status === 'scrapped' && item.status === 'retired')
     return matchKeyword && matchStatus
   })
 })
@@ -291,7 +268,7 @@ const vehicleForm = reactive({
   model: '',
   department_id: null as number | null,
   responsible_user_id: null as number | null,
-  status: 'available',
+  status: 'normal',
   notes: '',
 })
 
@@ -370,7 +347,7 @@ const handleEdit = (row: VehicleItem) => {
     model: row.model,
     department_id: row.department_id,
     responsible_user_id: row.responsible_user_id,
-    status: row.status || 'available',
+    status: row.status === 'in_use' ? 'normal' : (row.status || 'normal'),
     notes: row.notes || '',
   })
   createDialogVisible.value = true
@@ -395,7 +372,7 @@ const resetSearch = () => { searchForm.value = { keyword: '', status: '' } }
 const handleCreate = () => {
   editingId.value = null
   // V1.2.16: 清理旧字段, 避免残留属性干扰提交
-  Object.assign(vehicleForm, { plate_no: '', brand: '', model: '', department_id: null, responsible_user_id: null, status: 'available', notes: '' })
+  Object.assign(vehicleForm, { plate_no: '', brand: '', model: '', department_id: null, responsible_user_id: null, status: 'normal', notes: '' })
   delete (vehicleForm as Record<string, unknown>).plateNo
   delete (vehicleForm as Record<string, unknown>).brandModel
   createDialogVisible.value = true
