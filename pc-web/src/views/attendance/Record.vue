@@ -165,7 +165,8 @@ const clockForm = reactive({
   remark: ''
 })
 
-const todayMaxDate = new Date().toISOString().slice(0, 10)
+const localToday = new Date()
+const todayMaxDate = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, '0')}-${String(localToday.getDate()).padStart(2, '0')}`
 const supplementForm = reactive({
   date: todayMaxDate,
   type: 'in' as 'in' | 'out' | 'field_in' | 'field_out',
@@ -175,7 +176,6 @@ const supplementForm = reactive({
 })
 const fieldForm = reactive({
   type: 'in' as 'in' | 'out',
-  time: '',
   location: '',
   remark: '',
 })
@@ -313,7 +313,6 @@ const handleSupplement = () => {
 const handleFieldClock = () => {
   // 智能默认: 还没签到就默认签到, 已签到未签退就默认签退
   fieldForm.type = !todayRecord.value?.clock_in ? 'in' : (!todayRecord.value?.clock_out ? 'out' : 'out')
-  fieldForm.time = ''
   fieldForm.location = ''
   fieldForm.remark = ''
   showFieldDialog.value = true
@@ -324,7 +323,6 @@ const confirmFieldClock = async () => {
   try {
     const r = await post('/attendance/field-clock', {
       type: fieldForm.type,
-      time: fieldForm.time || null,
       location: fieldForm.location || null,
       remark: fieldForm.remark || null,
     })

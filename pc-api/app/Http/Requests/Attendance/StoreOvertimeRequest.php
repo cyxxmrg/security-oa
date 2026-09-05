@@ -9,9 +9,8 @@ class StoreOvertimeRequest extends BaseFormRequest
     public function rules(): array
     {
         return [
-            'overtime_date'      => ['nullable', 'date_format:Y-m-d'],  // V1.2.10 改可选, Controller 用 date 别名兜底
-            'date'               => ['nullable', 'date_format:Y-m-d'],  // 别名
-            'overtime_date_required' => ['sometimes'],  // 占位
+            'overtime_date'      => ['nullable', 'required_without:date', 'date_format:Y-m-d'],
+            'date'               => ['nullable', 'required_without:overtime_date', 'date_format:Y-m-d'],
             'start_time'         => ['required', 'date_format:H:i'],
             'end_time'           => ['required', 'date_format:H:i', 'after:start_time'],
             'hours'              => ['required', 'numeric', 'min:0.5', 'max:24'],

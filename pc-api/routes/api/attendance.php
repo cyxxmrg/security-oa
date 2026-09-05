@@ -23,7 +23,7 @@ Route::prefix('attendance')->middleware(['auth:sanctum', 'ensure_business'])->gr
     Route::post('overtime', [AttendanceController::class, 'storeOvertimeRequest'])->middleware('permission:approval.mine');
     Route::post('overtime/{overtime}/approve', [AttendanceController::class, 'approveOvertime'])->middleware('permission:attendance.overtime');
     Route::delete('overtime/{overtime}', [AttendanceController::class, 'destroyOvertimeRequest'])->middleware('permission:approval.mine');
-    Route::get('/', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business');
+    Route::get('/', [AttendanceController::class, 'overview'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
     Route::get('stats', [AttendanceController::class, 'stats'])->withoutMiddleware('ensure_business')->middleware('permission:attendance.view');
 });
 

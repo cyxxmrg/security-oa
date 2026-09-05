@@ -18,15 +18,7 @@
           <el-radio-button value="out">外勤签退</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item label="打卡时间">
-        <el-time-picker
-          v-model="form.time"
-          placeholder="不填则取当前时间"
-          value-format="HH:mm:ss"
-          format="HH:mm:ss"
-          style="width: 100%"
-        />
-      </el-form-item>
+      <el-form-item label="打卡时间">提交时自动记录服务器当前时间</el-form-item>
       <el-form-item label="外勤位置">
         <el-input v-model="form.location" placeholder="请输入外勤地点（如：客户A公司）" />
       </el-form-item>

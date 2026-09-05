@@ -39,10 +39,33 @@ class ScheduleService
                 ->values()
                 ->all();
 
-            User::whereIn('id', $userIds)
+            $activeUserIds = User::whereIn('id', $userIds)
+                ->where('status', 'active')
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->get();
+                ->pluck('id')
+                ->map(static fn ($id): int => (int) $id)
+                ->all();
+            $inactiveUserIds = array_diff($userIds, $activeUserIds);
+            if ($inactiveUserIds !== []) {
+                throw new \RuntimeException('不能为已停用员工排班: ' . implode(', ', $inactiveUserIds));
+            }
+
+            $seen = [];
+            foreach ($assignments as $a) {
+                $key = ((int) $a['user_id']) . ':' . $a['date'];
+                if (isset($seen[$key])) {
+                    throw new \RuntimeException("员工 {$a['user_id']} 在 {$a['date']} 存在重复排班");
+                }
+                $seen[$key] = true;
+                if (!empty($a['group_id']) && !ShiftGroupMember::where('group_id', $a['group_id'])
+                    ->where('user_id', $a['user_id'])->exists()) {
+                    throw new \RuntimeException("员工 {$a['user_id']} 不是班组 {$a['group_id']} 成员");
+                }
+                if (!Shift::whereKey($a['shift_id'])->where('is_active', true)->exists()) {
+                    throw new \RuntimeException("班次 {$a['shift_id']} 不存在或已停用");
+                }
+            }
 
             foreach ($assignments as $a) {
                 $rec = Schedule::where('user_id', $a['user_id'])
@@ -55,7 +78,6 @@ class ScheduleService
                     'shift_id'   => $a['shift_id'],
                     'status'     => $a['status']   ?? 'scheduled',
                     'note'       => $a['note']     ?? null,
-                    'created_by' => Auth::id(),
                 ];
 
                 if ($rec) {
@@ -64,6 +86,7 @@ class ScheduleService
                 } else {
                     $payload['user_id'] = $a['user_id'];
                     $payload['date']    = $a['date'];
+                    $payload['created_by'] = Auth::id();
                     Schedule::create($payload);
                     $created++;
                 }
@@ -81,13 +104,25 @@ class ScheduleService
      */
     public function batchByGroup(int $groupId, int $shiftId, string $startDate, string $endDate, bool $skipWeekends = false): array
     {
-        $userIds = ShiftGroupMember::where('group_id', $groupId)->pluck('user_id')->all();
+        $group = \App\Models\ShiftGroup::whereKey($groupId)->where('is_active', true)->first();
+        if (!$group) {
+            throw new \RuntimeException('班组无成员，或班组不存在/已停用');
+        }
+        if (!Shift::whereKey($shiftId)->where('is_active', true)->exists()) {
+            throw new \RuntimeException('班次不存在或已停用');
+        }
+        $userIds = ShiftGroupMember::where('group_id', $groupId)
+            ->whereHas('user', fn ($query) => $query->where('status', 'active'))
+            ->pluck('user_id')->all();
         if (empty($userIds)) {
             throw new \RuntimeException('班组无成员');
         }
 
         $cursor = Carbon::parse($startDate);
         $end    = Carbon::parse($endDate);
+        if ($cursor->diffInDays($end) > 366) {
+            throw new \RuntimeException('单次批量排班最多覆盖 367 天');
+        }
         $assignments = [];
 
         while ($cursor->lte($end)) {
@@ -106,6 +141,9 @@ class ScheduleService
         }
 
         $count = count($assignments);
+        if ($count > 500) {
+            throw new \RuntimeException('单次批量排班最多保存 500 条');
+        }
         $this->batchSave($assignments);
 
         return ['count' => $count];
@@ -194,19 +232,26 @@ class ScheduleService
             $dates[] = today()->addDays($i)->format('Y-m-d');
         }
 
-        $next = Schedule::with('shift')
+        $schedules = Schedule::with('shift')
             ->where('user_id', $userId)
             ->whereIn('date', $dates)
             ->orderBy('date')
             ->orderBy('id')
-            ->first();
+            ->get();
+
+        $now = Carbon::now();
+        $next = $schedules->first(function (Schedule $schedule) use ($now) {
+            if (!$schedule->shift) return false;
+            $startsAt = Carbon::parse($schedule->date->format('Y-m-d') . ' ' . $schedule->shift->start_time);
+            return $startsAt->gt($now);
+        });
 
         if (!$next) {
             return null;
         }
 
         $shiftStart = $next->date->format('Y-m-d') . ' ' . $next->shift->start_time;
-        $minutesUntil = Carbon::now()->diffInMinutes(Carbon::parse($shiftStart), false);
+        $minutesUntil = $now->diffInMinutes(Carbon::parse($shiftStart), false);
 
         return [
             'date'                => $next->date->format('Y-m-d'),

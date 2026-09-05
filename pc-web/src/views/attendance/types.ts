@@ -117,7 +117,6 @@ export interface ClockForm {
 
 export interface FieldClockForm {
   type: 'in' | 'out'
-  time: string
   location: string
   remark: string
   [key: string]: unknown

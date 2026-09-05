@@ -112,11 +112,13 @@ class AttendanceController extends Controller
 
     public function clockIn(\App\Http\Requests\Attendance\ClockInRequest $request): JsonResponse
     {
-        $request->validated();
+        $data = $request->validated();
+        if (!empty($data['project_id']) && !\App\Models\Project::whereKey($data['project_id'])->exists()) {
+            return response()->json(['code' => 1001, 'message' => '无权将打卡关联到该项目'], 403);
+        }
 
         $today = today()->format('Y-m-d');
         $now   = now();
-        $record = AttendanceRecord::firstOrCreate(['user_id' => Auth::id(), 'date' => $today]);
 
         // 联动排班: 找今日排班, 用排班的 start_time + late_threshold 判定
         $schedule = \App\Models\Schedule::with('shift')
@@ -127,6 +129,9 @@ class AttendanceController extends Controller
         $status = 'normal';
         $shiftInfo = null;
         if ($schedule && $schedule->shift) {
+            if (in_array($schedule->status, ['rest', 'sick', 'leave'], true)) {
+                return response()->json(['code' => 1001, 'message' => '今日排班状态为休息/请假, 不能直接签到'], 409);
+            }
             $shift = $schedule->shift;
             $shiftInfo = [
                 'shift_id' => $shift->id,
@@ -141,10 +146,6 @@ class AttendanceController extends Controller
             if ($now->gt($cutoff)) {
                 $status = 'late';
             }
-            // 如果 schedule.status = rest/leave/sick, 保持原状态不覆盖
-            if (in_array($schedule->status, ['rest', 'sick', 'leave'], true)) {
-                $status = $schedule->status === 'rest' ? 'normal' : $schedule->status;
-            }
         } else {
             // 无排班: 用默认 9:00 + 5min
             $cutoff = \Carbon\Carbon::parse($today . ' 09:05:00');
@@ -153,13 +154,21 @@ class AttendanceController extends Controller
             }
         }
 
+        $record = AttendanceRecord::firstOrCreate(['user_id' => Auth::id(), 'date' => $today]);
+        if ($record->status === 'leave') {
+            return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能直接签到'], 409);
+        }
+        if ($record->clock_in) {
+            return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
+        }
+
         $record->update([
             'clock_in' => $now->format('H:i:s'),
-            'clock_in_location' => $request->location,
-            'clock_in_lat' => $request->latitude,
-            'clock_in_lng' => $request->longitude,
-            'project_id' => $request->project_id,
-            'remark' => $request->remark,
+            'clock_in_location' => $data['location'] ?? null,
+            'clock_in_lat' => $data['latitude'] ?? $data['lat'] ?? null,
+            'clock_in_lng' => $data['longitude'] ?? $data['lng'] ?? null,
+            'project_id' => $data['project_id'] ?? null,
+            'remark' => $data['remark'] ?? null,
             'status' => $status,
         ]);
 
@@ -173,51 +182,79 @@ class AttendanceController extends Controller
 
     public function clockOut(\App\Http\Requests\Attendance\ClockInRequest $request): JsonResponse
     {
-        $request->validated();
+        $data = $request->validated();
 
         $today = today()->format('Y-m-d');
         $now   = now();
-        $record = AttendanceRecord::where('user_id', Auth::id())->where('date', $today)->firstOrFail();
-        $record->update([
-            'clock_out' => $now->format('H:i:s'),
-            'clock_out_location' => $request->location,
-            'clock_out_lat' => $request->latitude,
-            'clock_out_lng' => $request->longitude,
-        ]);
+        return DB::transaction(function () use ($data, $today, $now) {
+            $recordDate = $today;
+            $record = AttendanceRecord::where('user_id', Auth::id())
+                ->where('date', $today)
+                ->whereNotNull('clock_in')
+                ->whereNull('clock_out')
+                ->lockForUpdate()
+                ->first();
+            $schedule = null;
 
-        // 联动排班: 早退判定
-        $schedule = \App\Models\Schedule::with('shift')
-            ->where('user_id', Auth::id())
-            ->where('date', $today)
-            ->first();
-
-        $newStatus = $record->status;
-        if ($schedule && $schedule->shift) {
-            $shift = $schedule->shift;
-            // 早退: 早于 end_time - early_leave_threshold
-            $cutoff = \Carbon\Carbon::parse($today . ' ' . $shift->end_time)
-                ->subMinutes($shift->early_leave_threshold_minutes);
-            if ($now->lt($cutoff) && $record->status === 'normal') {
-                $newStatus = 'early_leave';
+            if (!$record) {
+                $yesterday = today()->subDay()->format('Y-m-d');
+                $overnightSchedule = \App\Models\Schedule::with('shift')
+                    ->where('user_id', Auth::id())
+                    ->where('date', $yesterday)
+                    ->first();
+                if ($overnightSchedule?->shift?->is_overnight) {
+                    $record = AttendanceRecord::where('user_id', Auth::id())
+                        ->where('date', $yesterday)
+                        ->whereNotNull('clock_in')
+                        ->whereNull('clock_out')
+                        ->lockForUpdate()
+                        ->first();
+                    if ($record) {
+                        $recordDate = $yesterday;
+                        $schedule = $overnightSchedule;
+                    }
+                }
             }
-        }
-        $record->status = $newStatus;
 
-        // 计算工时
-        if ($record->clock_in && $record->clock_out) {
-            $start = \Carbon\Carbon::parse($today . ' ' . $record->clock_in);
-            $end   = \Carbon\Carbon::parse($today . ' ' . $record->clock_out);
-            // 跨夜班处理
-            if ($end->lt($start)) $end->addDay();
-            $record->work_hours = $start->diffInMinutes($end) / 60;
-        }
-        $record->save();
+            if (!$record) {
+                $completed = AttendanceRecord::where('user_id', Auth::id())->where('date', $today)->whereNotNull('clock_out')->exists();
+                return response()->json([
+                    'code' => 1001,
+                    'message' => $completed ? '今日已完成签退, 不能重复签退' : '未找到可签退的签到记录',
+                ], $completed ? 409 : 422);
+            }
 
-        return response()->json([
-            'code' => 0,
-            'message' => $newStatus === 'early_leave' ? '签退成功（早退）' : '签退成功',
-            'data' => $record,
-        ]);
+            $schedule ??= \App\Models\Schedule::with('shift')
+                ->where('user_id', Auth::id())
+                ->where('date', $recordDate)
+                ->first();
+            $record->clock_out = $now->format('H:i:s');
+            $record->clock_out_location = $data['location'] ?? null;
+            $record->clock_out_lat = $data['latitude'] ?? $data['lat'] ?? null;
+            $record->clock_out_lng = $data['longitude'] ?? $data['lng'] ?? null;
+
+            $newStatus = $record->status;
+            if ($schedule?->shift) {
+                $shift = $schedule->shift;
+                $cutoff = \Carbon\Carbon::parse($recordDate . ' ' . $shift->end_time);
+                if ($shift->is_overnight) $cutoff->addDay();
+                $cutoff->subMinutes($shift->early_leave_threshold_minutes);
+                if ($now->lt($cutoff) && $record->status === 'normal') {
+                    $newStatus = 'early_leave';
+                }
+            }
+            $record->status = $newStatus;
+
+            $start = \Carbon\Carbon::parse($recordDate . ' ' . $record->clock_in);
+            $record->work_hours = round($start->diffInMinutes($now) / 60, 1);
+            $record->save();
+
+            return response()->json([
+                'code' => 0,
+                'message' => $newStatus === 'early_leave' ? '签退成功（早退）' : '签退成功',
+                'data' => $record,
+            ]);
+        });
     }
 
     /**
@@ -256,6 +293,14 @@ class AttendanceController extends Controller
             $data['type'] = $typeAlias[$data['type']];
         }
 
+        $today = today()->format('Y-m-d');
+        if ($data['date'] > $today) {
+            return response()->json(['code' => 1001, 'message' => '补卡日期不能晚于今天'], 422);
+        }
+        if ($data['date'] === $today && $data['time'] > now()->format('H:i:s')) {
+            return response()->json(['code' => 1001, 'message' => '补卡时间不能晚于当前时间'], 422);
+        }
+
         $isField = str_starts_with($data['type'], 'field_');
         $type    = $isField ? substr($data['type'], 6) : $data['type']; // field_in -> in
 
@@ -263,6 +308,9 @@ class AttendanceController extends Controller
             ['user_id' => Auth::id(), 'date' => $data['date']],
             ['status' => $isField ? 'field_work' : 'late']
         );
+        if ($record->status === 'leave') {
+            return response()->json(['code' => 1001, 'message' => '已标记为请假的记录不能补卡'], 409);
+        }
 
         if ($type === 'in') {
             if ($record->clock_in) {
@@ -293,7 +341,8 @@ class AttendanceController extends Controller
         if ($record->clock_in && $record->clock_out) {
             $start = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_in);
             $end   = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_out);
-            $record->work_hours = $start->diffInMinutes($end) / 60;
+            if ($end->lt($start)) $end->addDay();
+            $record->work_hours = round($start->diffInMinutes($end) / 60, 1);
         }
         $record->save();
 
@@ -314,19 +363,37 @@ class AttendanceController extends Controller
             'project_id' => 'nullable|exists:projects,id',
             'remark'     => 'nullable|string|max:500',
         ]);
+        if (!empty($data['project_id']) && !\App\Models\Project::whereKey($data['project_id'])->exists()) {
+            return response()->json(['code' => 1001, 'message' => '无权将外勤打卡关联到该项目'], 403);
+        }
 
         $date = today()->format('Y-m-d');
-        $time = $data['time'] ?? now()->format('H:i:s');
+        $time = now()->format('H:i:s');
 
         $record = AttendanceRecord::firstOrCreate(
             ['user_id' => Auth::id(), 'date' => $date],
             ['status' => 'field_work']
         );
+        if ($record->status === 'leave') {
+            return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能外勤打卡'], 409);
+        }
 
         if ($data['type'] === 'in') {
+            if ($record->clock_in) {
+                return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
+            }
             $record->clock_in = $time;
             $record->clock_in_location = $data['location'] ?? null;
         } else {
+            if (!$record->clock_in) {
+                return response()->json(['code' => 1001, 'message' => '请先完成外勤签到再签退'], 422);
+            }
+            if ($record->clock_out) {
+                return response()->json(['code' => 1001, 'message' => '今日已完成签退, 不能重复签退'], 409);
+            }
+            if ($time < $record->clock_in) {
+                return response()->json(['code' => 1001, 'message' => '外勤签退时间不能早于签到时间'], 422);
+            }
             $record->clock_out = $time;
             $record->clock_out_location = $data['location'] ?? null;
         }
@@ -360,18 +427,18 @@ class AttendanceController extends Controller
         if ($request->filled('end_date')) $query->where('date', '<=', $request->end_date);
         if ($request->filled('status')) $query->where('status', $request->status);
 
-        $records = $query->orderBy('date', 'desc')->paginate($request->per_page ?? 15);
+        $records = $query->orderBy('date', 'desc')->paginate($this->perPage($request));
         return response()->json(['code' => 0, 'data' => $records]);
     }
 
     public function leaveRequests(Request $request): JsonResponse
     {
         $query = LeaveRequest::with(['user', 'approver']);
-        if (!$this->canManageAttendance($request)) $query->where('user_id', Auth::id());
+        if (!$this->canManageLeave($request)) $query->where('user_id', Auth::id());
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('type')) $query->where('type', $request->type);
 
-        return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($request->per_page ?? 15)]);
+        return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($this->perPage($request))]);
     }
 
     public function storeLeaveRequest(\App\Http\Requests\Attendance\StoreLeaveRequest $request): JsonResponse
@@ -388,11 +455,34 @@ class AttendanceController extends Controller
         if (isset($data['type']) && isset($typeMap[$data['type']])) {
             $data['type'] = $typeMap[$data['type']];
         }
+        $calendarDays = (int) \Carbon\Carbon::parse($data['start_date'])
+            ->diffInDays(\Carbon\Carbon::parse($data['end_date'])) + 1;
+        $requestedDays = (float) $data['days'];
+        $validDays = $calendarDays === 1
+            ? in_array($requestedDays, [0.5, 1.0], true)
+            : abs($requestedDays - $calendarDays) < 0.01;
+        if (!$validDays) {
+            return response()->json(['code' => 1001, 'message' => '请假天数必须与起止日期范围一致（单日可填 0.5 天）'], 422);
+        }
         $data['user_id'] = Auth::id();
         $data['status'] = 'pending';
 
         // V1.2.7 P0 修复: 把 LeaveRequest + ApprovalRecord 包在一个事务里,确保要么都成功要么都失败
         $leave = DB::transaction(function () use ($data) {
+            $applicant = \App\Models\User::whereKey(Auth::id())->lockForUpdate()->first();
+            if (!$applicant) {
+                throw new \RuntimeException('当前申请人不存在');
+            }
+            $overlappingLeave = LeaveRequest::where('user_id', $applicant->id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('start_date', '<=', $data['end_date'])
+                ->where('end_date', '>=', $data['start_date'])
+                ->exists();
+            if ($overlappingLeave) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'start_date' => ['该时间段已有待审批或已批准的请假申请'],
+                ]);
+            }
             $leave = LeaveRequest::create($data);
 
             // V1.2.4v: 同步创建审批中心记录 (operation/leave), 让审批中心能列出请假申请
@@ -403,11 +493,6 @@ class AttendanceController extends Controller
             ][$data['type']] ?? $data['type'];
 
             $code = \App\Services\ApprovalNumberService::next('OPS');
-
-            $applicant = \App\Models\User::find(Auth::id());
-            if (!$applicant) {
-                throw new \RuntimeException('当前申请人不存在');
-            }
 
             // 按模板初始化审批流程
             $flowService = app(ApprovalFlowService::class);
@@ -447,7 +532,7 @@ class AttendanceController extends Controller
 
     public function approveLeave(ApproveLeaveRequest $request, LeaveRequest $leave): JsonResponse
     {
-        if ($leave->user_id === Auth::id()) {
+        if ((int) $leave->user_id === (int) Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的请假申请'], 403);
         }
         if (!Auth::user()->hasActivePermissionTo('attendance.leave')) {
@@ -473,9 +558,15 @@ class AttendanceController extends Controller
 
             $user = User::findOrFail(Auth::id());
             $flowService = app(ApprovalFlowService::class);
-            $result = $isApproved
-                ? $flowService->advanceFlow($approval, $user, $comment)
-                : $flowService->rejectFlow($approval, $user, $comment);
+            try {
+                $result = $isApproved
+                    ? $flowService->advanceFlow($approval, $user, $comment)
+                    : $flowService->rejectFlow($approval, $user, $comment);
+            } catch (\DomainException $e) {
+                $status = str_starts_with($e->getMessage(), '当前用户不是')
+                    || str_starts_with($e->getMessage(), '申请人不能') ? 403 : 422;
+                return response()->json(['code' => 1001, 'message' => $e->getMessage()], $status);
+            }
 
             $approval->forceFill([
                 'flow' => $result['flow'],
@@ -505,9 +596,9 @@ class AttendanceController extends Controller
     public function overtimeRequests(Request $request): JsonResponse
     {
         $query = OvertimeRequest::with(['user', 'approver']);
-        if (!$this->canManageAttendance($request)) $query->where('user_id', Auth::id());
+        if (!$this->canManageOvertime($request)) $query->where('user_id', Auth::id());
         if ($request->filled('status')) $query->where('status', $request->status);
-        return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($request->per_page ?? 15)]);
+        return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($this->perPage($request))]);
     }
 
     public function storeOvertimeRequest(\App\Http\Requests\Attendance\StoreOvertimeRequest $request): JsonResponse
@@ -520,6 +611,11 @@ class AttendanceController extends Controller
         if (empty($data['overtime_date'])) {
             return response()->json(['code' => 422, 'message' => '加班日期不能为空', 'errors' => ['overtime_date' => ['加班日期必填']]], 422);
         }
+        $durationHours = \Carbon\Carbon::parse($data['start_time'])
+            ->diffInMinutes(\Carbon\Carbon::parse($data['end_time'])) / 60;
+        if ((float) $data['hours'] > $durationHours) {
+            return response()->json(['code' => 1001, 'message' => '加班时长不能超过起止时间范围'], 422);
+        }
         unset($data['date']);
         $data['user_id'] = Auth::id();
         $data['status'] = 'pending';
@@ -531,12 +627,23 @@ class AttendanceController extends Controller
             $data['compensation_type'] = 'leave';
         }
         $overtime = DB::transaction(function () use ($data) {
-            $compLabel = ['pay' => '加班费', 'leave' => '调休', 'default_pay' => '默认加班费'][$data['compensation_type']] ?? $data['compensation_type'];
-            $code = \App\Services\ApprovalNumberService::next('OPS');
-            $applicant = \App\Models\User::find(Auth::id());
+            $applicant = \App\Models\User::whereKey(Auth::id())->lockForUpdate()->first();
             if (!$applicant) {
                 throw new \RuntimeException('当前申请人不存在');
             }
+            $overlappingOvertime = OvertimeRequest::where('user_id', $applicant->id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('overtime_date', $data['overtime_date'])
+                ->where('start_time', '<', $data['end_time'])
+                ->where('end_time', '>', $data['start_time'])
+                ->exists();
+            if ($overlappingOvertime) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'start_time' => ['该时间段已有待审批或已批准的加班申请'],
+                ]);
+            }
+            $compLabel = ['pay' => '加班费', 'leave' => '调休', 'default_pay' => '默认加班费'][$data['compensation_type']] ?? $data['compensation_type'];
+            $code = \App\Services\ApprovalNumberService::next('OPS');
 
             // 按模板初始化审批流程
             $flowService = app(ApprovalFlowService::class);
@@ -579,7 +686,7 @@ class AttendanceController extends Controller
     public function approveOvertime(Request $request, OvertimeRequest $overtime): JsonResponse
     {
         $request->validate(['action' => 'required|in:approved,rejected', 'comment' => 'nullable|string']);
-        if ($overtime->user_id === Auth::id()) {
+        if ((int) $overtime->user_id === (int) Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的加班申请'], 403);
         }
         if (!Auth::user()->hasActivePermissionTo('attendance.overtime')) {
@@ -605,9 +712,15 @@ class AttendanceController extends Controller
 
             $user = User::findOrFail(Auth::id());
             $flowService = app(ApprovalFlowService::class);
-            $result = $isApproved
-                ? $flowService->advanceFlow($approval, $user, $comment)
-                : $flowService->rejectFlow($approval, $user, $comment);
+            try {
+                $result = $isApproved
+                    ? $flowService->advanceFlow($approval, $user, $comment)
+                    : $flowService->rejectFlow($approval, $user, $comment);
+            } catch (\DomainException $e) {
+                $status = str_starts_with($e->getMessage(), '当前用户不是')
+                    || str_starts_with($e->getMessage(), '申请人不能') ? 403 : 422;
+                return response()->json(['code' => 1001, 'message' => $e->getMessage()], $status);
+            }
 
             $approval->forceFill([
                 'flow' => $result['flow'],
@@ -743,24 +856,26 @@ class AttendanceController extends Controller
      */
     public function stats(Request $request): JsonResponse
     {
-        $month = $request->get('month', now()->format('Y-m'));
+        $month = $request->validate(['month' => 'nullable|date_format:Y-m'])['month'] ?? now()->format('Y-m');
         $start = $month . '-01';
         $end = \Carbon\Carbon::parse($start)->endOfMonth()->format('Y-m-t');
 
         $records = AttendanceRecord::whereBetween('date', [$start, $end])->get();
         $total = User::where('status', 'active')->count();
+        $recordCount = $records->count();
+        $normalCount = $records->where('status', 'normal')->count();
 
         return response()->json([
             'code' => 0,
             'data' => [
                 'month' => $month,
                 'total_employees' => $total,
-                'attendance_count' => $records->where('status', 'normal')->count(),
+                'attendance_count' => $normalCount,
                 'late_count' => $records->where('status', 'late')->count(),
                 'absent_count' => $records->where('status', 'absent')->count(),
                 'leave_count' => $records->where('status', 'leave')->count(),
-                'overtime_count' => $records->where('status', 'overtime')->count(),
-                'attendance_rate' => $total > 0 ? round($records->where('status', 'normal')->count() / $total * 100, 1) : 0,
+                'overtime_count' => OvertimeRequest::where('status', 'approved')->whereBetween('overtime_date', [$start, $end])->count(),
+                'attendance_rate' => $recordCount > 0 ? round($normalCount / $recordCount * 100, 1) : 0,
                 'pending_leave' => LeaveRequest::where('status', 'pending')->count(),
                 'pending_overtime' => OvertimeRequest::where('status', 'pending')->count(),
             ],
@@ -778,5 +893,36 @@ class AttendanceController extends Controller
             Log::warning('attendance scope check failed: ' . $e->getMessage());
             return false;
         }
+    }
+
+    private function canManageLeave(Request $request): bool
+    {
+        $user = $request->user();
+        if (!$user) return false;
+        if (($user->user_type ?? 'business') === 'system') return true;
+        try {
+            return $user->hasActivePermissionTo('attendance.leave');
+        } catch (\Throwable $e) {
+            Log::warning('leave scope check failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function canManageOvertime(Request $request): bool
+    {
+        $user = $request->user();
+        if (!$user) return false;
+        if (($user->user_type ?? 'business') === 'system') return true;
+        try {
+            return $user->hasActivePermissionTo('attendance.overtime');
+        } catch (\Throwable $e) {
+            Log::warning('overtime scope check failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function perPage(Request $request): int
+    {
+        return min(max((int) $request->integer('per_page', 15), 1), 100);
     }
 }

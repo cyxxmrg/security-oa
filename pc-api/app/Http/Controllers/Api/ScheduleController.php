@@ -78,7 +78,7 @@ class ScheduleController extends Controller
     public function defaultShift(Request $request): JsonResponse
     {
         $shift = Shift::where('is_default', true)->where('is_active', true)->first()
-            ?? Shift::where('code', 'day')->first()
+            ?? Shift::where('code', 'day')->where('is_active', true)->first()
             ?? Shift::where('is_active', true)->orderBy('sort_order')->first();
 
         return response()->json(['code' => 0, 'data' => $shift]);
@@ -140,7 +140,7 @@ class ScheduleController extends Controller
     {
         $data = $request->validate([
             'user_ids' => 'required|array',
-            'user_ids.*' => 'exists:users,id',
+            'user_ids.*' => 'distinct|exists:users,id',
         ]);
         DB::transaction(function () use ($group, $data) {
             ShiftGroupMember::where('group_id', $group->id)->delete();
@@ -249,7 +249,7 @@ class ScheduleController extends Controller
 
         // 获取系统默认班次 (用于未排班的日子)
         $defaultShift = Shift::where('is_default', true)->where('is_active', true)->first()
-            ?? Shift::where('code', 'day')->first()
+            ?? Shift::where('code', 'day')->where('is_active', true)->first()
             ?? Shift::where('is_active', true)->orderBy('sort_order')->first();
 
         $byDate = [];
@@ -298,7 +298,11 @@ class ScheduleController extends Controller
     public function batchSave(BatchSaveScheduleRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $result = $this->scheduleService->batchSave($data['assignments']);
+        try {
+            $result = $this->scheduleService->batchSave($data['assignments']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 409);
+        }
 
         return response()->json([
             'code'    => 0,
