@@ -11,7 +11,9 @@ use App\Models\ApprovalRecord;
 use App\Models\AttendanceRecord;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeRequest;
+use App\Models\Project;
 use App\Models\User;
+use App\Scopes\DataScope;
 use App\Services\ApprovalFlowService;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Dedoc\Scramble\Attributes\Group;
@@ -113,8 +115,9 @@ class AttendanceController extends Controller
     public function clockIn(\App\Http\Requests\Attendance\ClockInRequest $request): JsonResponse
     {
         $data = $request->validated();
-        if (!empty($data['project_id']) && !\App\Models\Project::whereKey($data['project_id'])->exists()) {
-            return response()->json(['code' => 1001, 'message' => '无权将打卡关联到该项目'], 403);
+        $projectError = $this->projectAccessError($data['project_id'] ?? null, $request->user());
+        if ($projectError) {
+            return $projectError;
         }
 
         $today = today()->format('Y-m-d');
@@ -154,30 +157,42 @@ class AttendanceController extends Controller
             }
         }
 
-        $record = AttendanceRecord::firstOrCreate(['user_id' => Auth::id(), 'date' => $today]);
-        if ($record->status === 'leave') {
-            return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能直接签到'], 409);
-        }
-        if ($record->clock_in) {
-            return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
-        }
+        return DB::transaction(function () use ($data, $today, $now, $status, $shiftInfo) {
+            $record = AttendanceRecord::where('user_id', Auth::id())
+                ->where('date', $today)
+                ->lockForUpdate()
+                ->first();
+            if (!$record) {
+                $record = AttendanceRecord::create([
+                    'user_id' => Auth::id(),
+                    'date' => $today,
+                    'status' => 'normal',
+                ]);
+            }
+            if ($record->status === 'leave') {
+                return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能直接签到'], 409);
+            }
+            if ($record->clock_in) {
+                return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
+            }
 
-        $record->update([
-            'clock_in' => $now->format('H:i:s'),
-            'clock_in_location' => $data['location'] ?? null,
-            'clock_in_lat' => $data['latitude'] ?? $data['lat'] ?? null,
-            'clock_in_lng' => $data['longitude'] ?? $data['lng'] ?? null,
-            'project_id' => $data['project_id'] ?? null,
-            'remark' => $data['remark'] ?? null,
-            'status' => $status,
-        ]);
+            $record->update([
+                'clock_in' => $now->format('H:i:s'),
+                'clock_in_location' => $data['location'] ?? null,
+                'clock_in_lat' => $data['latitude'] ?? $data['lat'] ?? null,
+                'clock_in_lng' => $data['longitude'] ?? $data['lng'] ?? null,
+                'project_id' => $data['project_id'] ?? null,
+                'remark' => $data['remark'] ?? null,
+                'status' => $status,
+            ]);
 
-        return response()->json([
-            'code' => 0,
-            'message' => $status === 'late' ? '签到成功（迟到）' : '签到成功',
-            'data' => $record,
-            'shift' => $shiftInfo,
-        ]);
+            return response()->json([
+                'code' => 0,
+                'message' => $status === 'late' ? '签到成功（迟到）' : '签到成功',
+                'data' => $record,
+                'shift' => $shiftInfo,
+            ]);
+        });
     }
 
     public function clockOut(\App\Http\Requests\Attendance\ClockInRequest $request): JsonResponse
@@ -304,49 +319,56 @@ class AttendanceController extends Controller
         $isField = str_starts_with($data['type'], 'field_');
         $type    = $isField ? substr($data['type'], 6) : $data['type']; // field_in -> in
 
-        $record = AttendanceRecord::firstOrCreate(
-            ['user_id' => Auth::id(), 'date' => $data['date']],
-            ['status' => $isField ? 'field_work' : 'late']
-        );
-        if ($record->status === 'leave') {
-            return response()->json(['code' => 1001, 'message' => '已标记为请假的记录不能补卡'], 409);
-        }
-
-        if ($type === 'in') {
-            if ($record->clock_in) {
-                return response()->json(['code' => 1001, 'message' => '该日上班卡已存在, 无需补卡'], 422);
+        return DB::transaction(function () use ($data, $isField, $type) {
+            $record = AttendanceRecord::where('user_id', Auth::id())
+                ->where('date', $data['date'])
+                ->lockForUpdate()
+                ->first();
+            if (!$record) {
+                $record = AttendanceRecord::create([
+                    'user_id' => Auth::id(),
+                    'date' => $data['date'],
+                    'status' => $isField ? 'field_work' : 'late',
+                ]);
             }
-            $record->clock_in = $data['time'];
-            $record->clock_in_location = $data['location'] ?? null;
-            $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($isField ? '外勤补卡' : '补卡') . ': ' . $data['reason'];
-        } else {
-            if ($record->clock_out) {
-                return response()->json(['code' => 1001, 'message' => '该日下班卡已存在, 无需补卡'], 422);
+            if ($record->status === 'leave') {
+                return response()->json(['code' => 1001, 'message' => '已标记为请假的记录不能补卡'], 409);
             }
-            $record->clock_out = $data['time'];
-            $record->clock_out_location = $data['location'] ?? null;
-            $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($isField ? '外勤补卡' : '补卡') . ': ' . $data['reason'];
-        }
 
-        // 状态判定: 外勤补卡一律 mark field_work, 普通补卡 9:00 后 mark late
-        if ($isField) {
-            $record->status = 'field_work';
-        } elseif ($type === 'in' && $data['time'] > '09:00:00') {
-            $record->status = 'late';
-        } else {
-            $record->status = $record->status ?: 'normal';
-        }
+            if ($type === 'in') {
+                if ($record->clock_in) {
+                    return response()->json(['code' => 1001, 'message' => '该日上班卡已存在, 无需补卡'], 422);
+                }
+                $record->clock_in = $data['time'];
+                $record->clock_in_location = $data['location'] ?? null;
+                $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($isField ? '外勤补卡' : '补卡') . ': ' . $data['reason'];
+            } else {
+                if ($record->clock_out) {
+                    return response()->json(['code' => 1001, 'message' => '该日下班卡已存在, 无需补卡'], 422);
+                }
+                $record->clock_out = $data['time'];
+                $record->clock_out_location = $data['location'] ?? null;
+                $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($isField ? '外勤补卡' : '补卡') . ': ' . $data['reason'];
+            }
 
-        // 重算工时
-        if ($record->clock_in && $record->clock_out) {
-            $start = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_in);
-            $end   = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_out);
-            if ($end->lt($start)) $end->addDay();
-            $record->work_hours = round($start->diffInMinutes($end) / 60, 1);
-        }
-        $record->save();
+            if ($isField) {
+                $record->status = 'field_work';
+            } elseif ($type === 'in' && $data['time'] > '09:00:00') {
+                $record->status = 'late';
+            } else {
+                $record->status = $record->status ?: 'normal';
+            }
 
-        return response()->json(['code' => 0, 'message' => '补卡成功', 'data' => $record]);
+            if ($record->clock_in && $record->clock_out) {
+                $start = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_in);
+                $end   = \Carbon\Carbon::parse($data['date'] . ' ' . $record->clock_out);
+                if ($end->lt($start)) $end->addDay();
+                $record->work_hours = round($start->diffInMinutes($end) / 60, 1);
+            }
+            $record->save();
+
+            return response()->json(['code' => 0, 'message' => '补卡成功', 'data' => $record]);
+        });
     }
 
     /**
@@ -363,56 +385,66 @@ class AttendanceController extends Controller
             'project_id' => 'nullable|exists:projects,id',
             'remark'     => 'nullable|string|max:500',
         ]);
-        if (!empty($data['project_id']) && !\App\Models\Project::whereKey($data['project_id'])->exists()) {
-            return response()->json(['code' => 1001, 'message' => '无权将外勤打卡关联到该项目'], 403);
+        $projectError = $this->projectAccessError($data['project_id'] ?? null, $request->user());
+        if ($projectError) {
+            return $projectError;
         }
 
         $date = today()->format('Y-m-d');
         $time = now()->format('H:i:s');
 
-        $record = AttendanceRecord::firstOrCreate(
-            ['user_id' => Auth::id(), 'date' => $date],
-            ['status' => 'field_work']
-        );
-        if ($record->status === 'leave') {
-            return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能外勤打卡'], 409);
-        }
+        return DB::transaction(function () use ($data, $date, $time) {
+            $record = AttendanceRecord::where('user_id', Auth::id())
+                ->where('date', $date)
+                ->lockForUpdate()
+                ->first();
+            if (!$record) {
+                $record = AttendanceRecord::create([
+                    'user_id' => Auth::id(),
+                    'date' => $date,
+                    'status' => 'field_work',
+                ]);
+            }
+            if ($record->status === 'leave') {
+                return response()->json(['code' => 1001, 'message' => '今日已标记为请假, 不能外勤打卡'], 409);
+            }
 
-        if ($data['type'] === 'in') {
-            if ($record->clock_in) {
-                return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
+            if ($data['type'] === 'in') {
+                if ($record->clock_in) {
+                    return response()->json(['code' => 1001, 'message' => '今日已完成签到, 不能重复签到'], 409);
+                }
+                $record->clock_in = $time;
+                $record->clock_in_location = $data['location'] ?? null;
+            } else {
+                if (!$record->clock_in) {
+                    return response()->json(['code' => 1001, 'message' => '请先完成外勤签到再签退'], 422);
+                }
+                if ($record->clock_out) {
+                    return response()->json(['code' => 1001, 'message' => '今日已完成签退, 不能重复签退'], 409);
+                }
+                if ($time < $record->clock_in) {
+                    return response()->json(['code' => 1001, 'message' => '外勤签退时间不能早于签到时间'], 422);
+                }
+                $record->clock_out = $time;
+                $record->clock_out_location = $data['location'] ?? null;
             }
-            $record->clock_in = $time;
-            $record->clock_in_location = $data['location'] ?? null;
-        } else {
-            if (!$record->clock_in) {
-                return response()->json(['code' => 1001, 'message' => '请先完成外勤签到再签退'], 422);
-            }
-            if ($record->clock_out) {
-                return response()->json(['code' => 1001, 'message' => '今日已完成签退, 不能重复签退'], 409);
-            }
-            if ($time < $record->clock_in) {
-                return response()->json(['code' => 1001, 'message' => '外勤签退时间不能早于签到时间'], 422);
-            }
-            $record->clock_out = $time;
-            $record->clock_out_location = $data['location'] ?? null;
-        }
-        $record->status = 'field_work';
-        if (!empty($data['project_id'])) $record->project_id = $data['project_id'];
-        $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($data['remark'] ?? '外勤打卡');
+            $record->status = 'field_work';
+            if (!empty($data['project_id'])) $record->project_id = $data['project_id'];
+            $record->remark = ($record->remark ? $record->remark . '; ' : '') . ($data['remark'] ?? '外勤打卡');
 
-        if ($record->clock_in && $record->clock_out) {
-            $start = \Carbon\Carbon::parse($date . ' ' . $record->clock_in);
-            $end   = \Carbon\Carbon::parse($date . ' ' . $record->clock_out);
-            $record->work_hours = $start->diffInMinutes($end) / 60;
-        }
-        $record->save();
+            if ($record->clock_in && $record->clock_out) {
+                $start = \Carbon\Carbon::parse($date . ' ' . $record->clock_in);
+                $end   = \Carbon\Carbon::parse($date . ' ' . $record->clock_out);
+                $record->work_hours = $start->diffInMinutes($end) / 60;
+            }
+            $record->save();
 
-        return response()->json([
-            'code'    => 0,
-            'message' => '外勤' . ($data['type'] === 'in' ? '签到' : '签退') . '成功',
-            'data'    => $record,
-        ]);
+            return response()->json([
+                'code'    => 0,
+                'message' => '外勤' . ($data['type'] === 'in' ? '签到' : '签退') . '成功',
+                'data'    => $record,
+            ]);
+        });
     }
 
     public function records(Request $request): JsonResponse
@@ -924,5 +956,28 @@ class AttendanceController extends Controller
     private function perPage(Request $request): int
     {
         return min(max((int) $request->integer('per_page', 15), 1), 100);
+    }
+
+    private function projectAccessError(?int $projectId, ?User $user): ?JsonResponse
+    {
+        if (!$projectId || !$user) {
+            return null;
+        }
+
+        $project = Project::withoutGlobalScope(DataScope::class)->find($projectId);
+        if (!$project) {
+            return response()->json(['code' => 1001, 'message' => '无权将打卡关联到该项目'], 403);
+        }
+
+        $isProjectMember = (int) $project->manager_id === (int) $user->id
+            || $project->members()
+                ->where('users.id', $user->id)
+                ->where('project_members.status', 'active')
+                ->exists();
+        if (!$user->hasRole('admin') && !$isProjectMember) {
+            return response()->json(['code' => 1001, 'message' => '无权将打卡关联到该项目'], 403);
+        }
+
+        return null;
     }
 }
