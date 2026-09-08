@@ -269,9 +269,9 @@ Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_bu
 Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business', 'permission:deposit.manage'])->group(function () {
     Route::get('/', [WarrantyDepositController::class, 'index']);
     Route::post('/', [WarrantyDepositController::class, 'store']);
-    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->where('id', '[0-9]+');
-    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->where('id', '[0-9]+');
-    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->where('id', '[0-9]+');
+    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
+    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
+    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
     Route::get('/{id}', [WarrantyDepositController::class, 'show'])->where('id', '[0-9]+');
 });
 

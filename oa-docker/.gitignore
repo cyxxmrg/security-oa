@@ -1,0 +1,5 @@
+data/pgdata/
+data/redisdata/
+data/storage/
+data/backups/
+.env

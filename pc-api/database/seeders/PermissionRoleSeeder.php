@@ -68,6 +68,8 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'finance.receive',  'label' => '应收账款'],
             ['name' => 'finance.pay',      'label' => '应付账款'],
             ['name' => 'finance.approve',  'label' => '报销审批'],
+            // V1.4.3 (REVIEW P1): 固定资产写操作独立权限点, 与 finance.pay 付款权限解耦
+            ['name' => 'finance.asset',    'label' => '固定资产管理'],
         ],
         '库存管理' => [
             ['name' => 'inventory.view',     'label' => '库存总览'],
@@ -90,6 +92,8 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'tender.cancel',   'label' => '招标废标'],
             ['name' => 'tender.award',    'label' => '招标定标'],
             ['name' => 'deposit.manage',  'label' => '保证金收退/没收'],
+            // V1.4.3 (REVIEW P1): 质保金资金动作(释放/没收)独立权限点
+            ['name' => 'deposit.release', 'label' => '质保金释放/没收(资金动作)'],
         ],
         // V1.0 公司网盘权限
         '网盘管理' => [
@@ -121,6 +125,8 @@ class PermissionRoleSeeder extends Seeder
             ['name' => 'vehicle.insurance', 'label' => '车辆保险'],
             ['name' => 'vehicle.maintenance', 'label' => '车辆保养'],
             ['name' => 'vehicle.fuel',   'label' => '油卡管理'],
+            // V1.4.3 (REVIEW P1-3): 油卡写操作独立权限点, 使 vehicle.fuel 只读可精细授权
+            ['name' => 'vehicle.fuel.edit', 'label' => '油卡管理操作'],
         ],
         // V1.2.12: 深化施工权限
         '深化施工' => [
@@ -246,7 +252,7 @@ class PermissionRoleSeeder extends Seeder
                 // V1.2.12: 加 expense.approve
                 'perms' => array_values(array_filter($allPerms, fn($n) =>
                     str_starts_with($n, 'finance.') ||
-                    $n === 'deposit.manage' ||
+                    $n === 'deposit.manage' || $n === 'deposit.release' ||
                     $n === 'tender.approve' ||
                      $n === 'expense.approve'
                      || str_starts_with($n, 'purchase')

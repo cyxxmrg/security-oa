@@ -221,12 +221,56 @@ class InspectionService
     // ========== 现场打卡 ==========
 
     /**
+     * V1.4.3 (REVIEW P1): 任务执行人判定 — 解析 assigned_to(兼容 数字/字符串/对象/JSON 数组)
+     */
+    private function taskAssignedIds(InspectionTask $task): array
+    {
+        $raw = $task->assigned_to;
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode((string) $raw, true);
+        $items = is_array($decoded) ? $decoded : [$raw];
+        $ids = [];
+        foreach ($items as $item) {
+            if (is_numeric($item)) {
+                $ids[] = (int) $item;
+            } elseif (is_array($item) && isset($item['id'])) {
+                $ids[] = (int) $item['id'];
+            } elseif (is_object($item) && isset($item->id)) {
+                $ids[] = (int) $item->id;
+            }
+        }
+        return array_unique($ids);
+    }
+
+    /**
+     * V1.4.3 (REVIEW P1): 任务操作人校验 — 未分配任务任何执行者可操作; 已分配仅本人;
+     * admin/finance/manager 放行(监管/代操作)。
+     */
+    private function assertTaskOperator(InspectionTask $task, ?User $user, string $action): void
+    {
+        if (!$user) {
+            return;
+        }
+        if (\App\Support\AuthScope::isUnrestricted($user) || $user->hasActiveRole('manager')) {
+            return;
+        }
+        $ids = $this->taskAssignedIds($task);
+        if (!empty($ids) && !in_array((int) $user->id, $ids, true)) {
+            throw new RuntimeException("该任务未分配给您, 不能{$action}");
+        }
+    }
+
+    /**
      * 工程师到达现场打卡
      */
     public function checkin(int $taskId, array $data, ?User $user = null): InspectionRecord
     {
         return DB::transaction(function () use ($taskId, $data, $user) {
             $task = InspectionTask::lockForUpdate()->findOrFail($taskId);
+            // V1.4.3 (REVIEW P1): 打卡绑定执行人 — 未分配/本人/管理者才可操作
+            $this->assertTaskOperator($task, $user, '打卡');
             if (!in_array($task->status, [InspectionTask::STATUS_PENDING, InspectionTask::STATUS_IN_PROGRESS, InspectionTask::STATUS_OVERDUE])) {
                 throw new RuntimeException("任务 [{$task->task_no}] 当前状态 [{$task->status}] 不能打卡");
             }
@@ -261,6 +305,14 @@ class InspectionService
     {
         return DB::transaction(function () use ($recordId, $data, $user) {
             $record = InspectionRecord::lockForUpdate()->findOrFail($recordId);
+            // V1.4.3 (REVIEW P1): 提交结果绑定执行人 — 打卡人本人或管理者
+            $this->assertTaskOperator($record->task, $user, '提交巡检结果');
+            if ($user
+                && (int) $record->user_id !== (int) $user->id
+                && !\App\Support\AuthScope::isUnrestricted($user)
+                && !$user->hasActiveRole('manager')) {
+                throw new RuntimeException('只能由打卡人本人提交巡检结果');
+            }
             if ($record->status !== InspectionRecord::STATUS_CHECKED_IN) {
                 throw new RuntimeException('记录已提交，不能重复 checkout');
             }

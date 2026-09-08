@@ -103,3 +103,15 @@ deploy/__pycache__/
 pc-web/*.log
 # 部署脚本含真实服务器密码，不纳入公开仓库
 deploy/
+
+# --- 2026-09 同步清理: 本机依赖/部署包装配产物不入仓 ---
+/pc-desktop/node_modules/
+/pc-desktop/dist/
+/pc-desktop/out/
+/.deploy_pkg/
+/.deploy_*.tar.gz
+/oa-web-dist-*.tar.gz
+/reasonix.toml
+
+# isort ��������
+*.isorted

@@ -22,6 +22,23 @@ class ExpenseController extends Controller
 {
     use ClearsListCache;
 
+    /** V1.4.3 (REVIEW P0-2): 报销全量查看判定缓存 (admin/finance/审批人可看全部) */
+    private static array $viewAllCache = [];
+
+    private function canViewAllClaims(Request $request): bool
+    {
+        $user = $request->user();
+        if (!$user) {
+            return false;
+        }
+        if (isset(self::$viewAllCache[$user->id])) {
+            return self::$viewAllCache[$user->id];
+        }
+        $ok = AuthScope::isUnrestricted($user) || $user->hasActivePermissionTo('expense.approve');
+        self::$viewAllCache[$user->id] = $ok;
+        return $ok;
+    }
+
     public function index(Request $request): JsonResponse
     {
         // V1.3.1: 缓存响应 JSON, 避免 Eloquent 序列化开销
@@ -44,7 +61,15 @@ class ExpenseController extends Controller
                   });
             });
         }
-        if ($request->filled('user_id'))    $query->where('user_id', $request->user_id);
+        // V1.4.3 (REVIEW P0-2) 报销列表横向访问修复:
+        // user_id 参数仅对可看全部者(admin/finance/expense.approve)生效;
+        // 其余(如全员 user 角色的 expense.view)一律强制只看自己。
+        if ($request->filled('user_id') && $this->canViewAllClaims($request)) {
+            $query->where('user_id', $request->user_id);
+        }
+        if (!$this->canViewAllClaims($request)) {
+            $query->where('user_id', $request->user()->id);
+        }
         if ($request->filled('project_id')) $query->where('project_id', $request->project_id);
         if ($request->filled('date_from')) $query->whereDate('created_at', '>=', $request->date_from);
         if ($request->filled('date_to'))   $query->whereDate('created_at', '<=', $request->date_to);
@@ -66,6 +91,10 @@ class ExpenseController extends Controller
 
     public function show(Request $request, ExpenseClaim $claim): JsonResponse
     {
+        // V1.4.3 (REVIEW P0-2): 详情横向访问修复 — 非本人且非(admin/finance/审批人)不可看
+        if ((int) $claim->user_id !== (int) $request->user()->id && !$this->canViewAllClaims($request)) {
+            return response()->json(['code' => 1003, 'message' => '无权查看该报销单'], 403);
+        }
         $claim->load(['user:id,name,username', 'project:id,name,project_no', 'approver:id,name', 'items']);
         $claim->status_label   = $this->statusLabel($claim->status);
         $claim->category_label = $this->categoryLabel($claim->category);

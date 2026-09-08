@@ -38,6 +38,110 @@ class RoleController extends Controller
         }
     }
 
+    // ============================================================
+    // RBAC 提权护栏 (V1.4.3 安全审计, 对应 REVIEW_security-audit.md P0-1)
+    // 目标:
+    //  - 内置高权限角色 (admin/system/system_admin) 仅 system 账号可调整
+    //  - 操作者不能调整自己所属角色的权限 (防横向自我提权 / 误操作自锁)
+    //  - 操作者不能修改自己账号的角色 (防自助提权到 admin)
+    //  - 非 system 账号不能把 admin 角色授予他人 (防提权面扩散)
+    // ============================================================
+
+    private function isSystemActor($user): bool
+    {
+        return $user
+            && (($user->is_system ?? false) === true || ($user->user_type ?? null) === 'system');
+    }
+
+    private function viewerActiveRoleNames($user): array
+    {
+        try {
+            return $user ? $user->activeRoles()->pluck('roles.name')->all() : [];
+        } catch (\Throwable $e) {
+            Log::warning('viewerActiveRoleNames 异常: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * 角色级护栏: 返回拒绝响应表示拦截, null 表示放行。
+     * 覆盖 update / destroy / assignPermissions / saveMenuPermissions。
+     */
+    private function assertRoleEditableBy(Request $request, Role $role): ?JsonResponse
+    {
+        $user = $request->user();
+        if ($this->isSystemActor($user)) {
+            return null;
+        }
+        if (in_array($role->name, ['admin', 'system', 'system_admin'], true)) {
+            return response()->json([
+                'code'    => 403,
+                'message' => "角色「{$role->name}」为内置高权限角色, 仅系统账号可调整",
+            ], 403);
+        }
+        if (in_array($role->name, $this->viewerActiveRoleNames($user), true)) {
+            return response()->json([
+                'code'    => 403,
+                'message' => '不能调整当前账号所属角色的权限, 请由其他管理员操作',
+            ], 403);
+        }
+        return null;
+    }
+
+    /**
+     * 用户级护栏: 返回拒绝响应表示拦截, null 表示放行。
+     * 覆盖 usersSyncRoles / usersBulkAssignRole / usersGrantTemporary / usersRevokeRole。
+     *
+     * @param  string[]  $grantedRoleNames  本次要授予的角色名列表 (不含则传 [])
+     */
+    private function assertUserRoleChangeAllowed(Request $request, \App\Models\User $target, array $grantedRoleNames = []): ?JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['code' => 401, 'message' => '未认证'], 401);
+        }
+        if ((int) $target->id === (int) $user->id) {
+            return response()->json([
+                'code'    => 403,
+                'message' => '不能修改自己账号的角色, 请由其他管理员操作',
+            ], 403);
+        }
+        if (!$this->isSystemActor($user) && in_array('admin', $grantedRoleNames, true)) {
+            return response()->json([
+                'code'    => 403,
+                'message' => '内置高权限角色「admin」仅系统账号可授予',
+            ], 403);
+        }
+        return null;
+    }
+
+    /**
+     * 高敏感权限点判定: 仅 system 账号可把这类权限授予业务角色 (V1.4.3 加固)
+     * 防止绕过: 操作者通过给"其他角色"注入 system.* / user.manage 等高权限点提权。
+     */
+    private function isSensitivePermission(string $perm): bool
+    {
+        return str_starts_with($perm, 'system.')
+            || in_array($perm, ['user.manage', 'approval.config', 'approval.template', 'settings.approval'], true);
+    }
+
+    private function assertNoSensitivePermissionGrant(Request $request, array $perms): ?JsonResponse
+    {
+        if ($this->isSystemActor($request->user())) {
+            return null;
+        }
+        foreach ($perms as $perm) {
+            $perm = (string) $perm;
+            if ($this->isSensitivePermission($perm)) {
+                return response()->json([
+                    'code'    => 403,
+                    'message' => "权限点「{$perm}」为高敏感系统权限, 仅系统账号可授予业务角色",
+                ], 403);
+            }
+        }
+        return null;
+    }
+
     /**
      * 角色列表（分页 + 搜索）
      */
@@ -133,6 +237,13 @@ class RoleController extends Controller
     {
         $data = $request->validated();
 
+        // V1.4.3 RBAC 护栏: 创建角色时不允许夹带高敏感系统权限
+        if (!empty($data['permissions'])) {
+            if ($deny = $this->assertNoSensitivePermissionGrant($request, $data['permissions'])) {
+                return $deny;
+            }
+        }
+
         $role = Role::create([
             'name'        => $data['name'],
             'guard_name'  => 'web',
@@ -155,6 +266,10 @@ class RoleController extends Controller
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
+        // V1.4.3 RBAC 护栏: 内置高权限角色 / 当前账号所属角色 不允许业务账号调整
+        if ($deny = $this->assertRoleEditableBy($request, $r)) {
+            return $deny;
+        }
         $data = $request->validate([
             'name'         => ['sometimes', 'required', 'string', 'max:64', Rule::unique('roles', 'name')->where('guard_name', 'web')->ignore($r->id)],
             'description'  => ['nullable', 'string', 'max:255'],
@@ -173,6 +288,10 @@ class RoleController extends Controller
         ])->save();
 
         if (array_key_exists('permissions', $data)) {
+            // V1.4.3 RBAC 护栏: 更新角色时不允许夹带高敏感系统权限
+            if ($deny = $this->assertNoSensitivePermissionGrant($request, $data['permissions'])) {
+                return $deny;
+            }
             $r->syncPermissions($data['permissions']);
         }
 
@@ -192,6 +311,12 @@ class RoleController extends Controller
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
+
+        // V1.4.3 RBAC 护栏: 内置高权限角色 (system/system_admin/admin) 与当前账号所属角色
+        // 不允许业务账号调整/删除 (删除角色会级联解除全部绑定用户, 破坏面大)
+        if ($deny = $this->assertRoleEditableBy($request, $r)) {
+            return $deny;
+        }
 
         // 系统保护: system / system_admin 是 system 账号绑定的角色, 不能删
         if (in_array($r->name, ['system', 'system_admin'], true)) {
@@ -238,8 +363,17 @@ class RoleController extends Controller
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
+        // V1.4.3 RBAC 护栏: 防通过角色权限矩阵横向提权
+        if ($deny = $this->assertRoleEditableBy($request, $r)) {
+            return $deny;
+        }
         $data = $request->validated();
         $perms = $data['permissions'] ?? [];
+
+        // V1.4.3 RBAC 护栏加固: 不允许给角色注入高敏感系统权限
+        if ($deny = $this->assertNoSensitivePermissionGrant($request, $perms)) {
+            return $deny;
+        }
 
         // V0.5.2 业务侧赋权限时, 自动同步继承链
         $r->syncPermissions($perms);
@@ -351,6 +485,10 @@ class RoleController extends Controller
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
             : Role::where('name', $role)->where('guard_name', 'web')->firstOrFail();
+        // V1.4.3 RBAC 护栏: 防通过菜单权限矩阵横向提权
+        if ($deny = $this->assertRoleEditableBy($request, $r)) {
+            return $deny;
+        }
 
         $data = $request->validate([
             'leaves'   => ['array'],
@@ -370,6 +508,11 @@ class RoleController extends Controller
                 'code' => 422,
                 'message' => '权限点不存在或 guard 不匹配: ' . implode(',', $invalidPerms),
             ], 422);
+        }
+
+        // V1.4.3 RBAC 护栏加固: 菜单矩阵不允许注入高敏感系统权限
+        if ($deny = $this->assertNoSensitivePermissionGrant($request, $validPerms)) {
+            return $deny;
         }
 
         $r->syncPermissions($perms);
@@ -753,6 +896,10 @@ class RoleController extends Controller
             'roles.*' => ['string', 'max:100'],
         ]);
         $roleNames = array_values(array_unique($data['roles'] ?? []));
+        // V1.4.3 RBAC 护栏: 不能修改自己账号角色; 非 system 不能授予 admin
+        if ($deny = $this->assertUserRoleChangeAllowed($request, $user, $roleNames)) {
+            return $deny;
+        }
         // 校验所有 role name 都存在
         $valid = \Spatie\Permission\Models\Role::where('guard_name', 'web')
             ->whereIn('name', $roleNames)->pluck('name')->all();
@@ -811,6 +958,14 @@ class RoleController extends Controller
         $roleName = $data['role'];
         if (!Role::where('name', $roleName)->where('guard_name', 'web')->exists()) {
             return response()->json(['code' => 422, 'message' => '角色不存在'], 422);
+        }
+        // V1.4.3 RBAC 护栏: 非 system 不能批量授予 admin; 批量目标不能包含自己
+        $viewer = $request->user();
+        if (!$this->isSystemActor($viewer) && $roleName === 'admin') {
+            return response()->json(['code' => 403, 'message' => '内置高权限角色「admin」仅系统账号可授予'], 403);
+        }
+        if ($viewer && in_array((int) $viewer->id, array_map('intval', $userIds), true)) {
+            return response()->json(['code' => 403, 'message' => '不能批量给自己分配角色, 请由其他管理员操作'], 403);
         }
         $count = 0;
         foreach ($userIds as $uid) {
@@ -890,6 +1045,12 @@ class RoleController extends Controller
             'assignments.*.reason'          => 'nullable|string|max:500',
         ]);
 
+        // V1.4.3 RBAC 护栏: 不能给自己授临时角色; 非 system 不能授 admin
+        $grantedRoleNames = array_values(array_unique(array_column($data['assignments'], 'role')));
+        if ($deny = $this->assertUserRoleChangeAllowed($request, $user, $grantedRoleNames)) {
+            return $deny;
+        }
+
         $grantedBy = $request->user()?->id;
         $oldAssignments = $user->allRoleAssignments()
             ->whereNotNull('model_has_roles.expires_at')
@@ -963,6 +1124,11 @@ class RoleController extends Controller
         $exists = Role::where('name', $role)->where('guard_name', 'web')->exists();
         if (!$exists) {
             return response()->json(['code' => 404, 'message' => "角色不存在: {$role}"], 404);
+        }
+
+        // V1.4.3 RBAC 护栏: 不能撤销自己账号的角色 (防自锁 / 防绕过审批自助变更)
+        if ($deny = $this->assertUserRoleChangeAllowed($request, $user, [])) {
+            return $deny;
         }
 
         $revokedBy = $request->user()?->id;

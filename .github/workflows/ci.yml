@@ -1,0 +1,85 @@
+# GitHub Actions CI — V0.6.3 (从 pc-api/.github/workflows/ci.yml 迁移)
+#
+# 跑 pc-api Laravel 测试:
+#   1. Boot PHP 8.3 + extensions
+#   2. composer install
+#   3. 准备 Postgres (security_oa_test)
+#   4. 跑 php artisan test (全量 Unit + Feature，不再只跑 Unit + 2 个)
+#
+# 触发: push / PR 到 main
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  phpunit:
+    name: PHPUnit (PHP 8.3 + PostgreSQL 15)
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: security_oa_test
+          POSTGRES_USER: oa_test
+          POSTGRES_PASSWORD: test_pass_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U oa_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, pgsql, mbstring, bcmath, xml, zip, gd, intl
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.json') }}
+          restore-keys: ${{ runner.os }}-php-
+
+      - name: Install dependencies
+        working-directory: pc-api
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare .env
+        working-directory: pc-api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          echo "DB_CONNECTION=pgsql" >> .env
+          echo "DB_DATABASE=security_oa_test" >> .env
+          echo "DB_USERNAME=oa_test" >> .env
+          echo "DB_PASSWORD=test_pass_2026" >> .env
+          echo "CACHE_STORE=array" >> .env
+          echo "SESSION_DRIVER=array" >> .env
+
+      - name: Run migrations
+        working-directory: pc-api
+        run: php artisan migrate --force
+
+      - name: Run tests (Unit + Feature, 全量)
+        working-directory: pc-api
+        run: php artisan test
+
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## Test results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit + Feature 全量测试已运行" >> $GITHUB_STEP_SUMMARY

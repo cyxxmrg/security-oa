@@ -129,11 +129,14 @@ else
   info "Composer 已存在，跳过安装。"
 fi
 
-# ---------- 4. Node.js 20 (NodeSource) ----------
+# ---------- 4. Node.js ----------
+# V1.4.3 部署适配: Ubuntu 26.04 (resolute) 官方源提供 Node 22 + npm;
+# NodeSource 对 resolute 暂无发行版目录, 故以官方源为主路径。
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 18 ]; then
-  info "安装 Node.js 20 (LTS)..."
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y -q nodejs
+  info "安装 Node.js (Ubuntu 官方源)..."
+  apt-get install -y -q nodejs npm
+  # 官方源 npm 偏旧 (9.x), 升级到最新以兼容前端 lockfile; 失败则回退系统 npm
+  npm install -g npm@latest --no-fund --no-audit >/dev/null 2>&1 || warn "npm 全局升级失败, 将使用系统自带 npm"
 else
   info "Node.js 已满足要求 ($(node -v))，跳过安装。"
 fi

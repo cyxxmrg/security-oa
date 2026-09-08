@@ -10,7 +10,9 @@ use App\Models\SupplierPayable;
 use App\Services\LedgerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * V0.4.2 总账/应收应付控制器
@@ -104,21 +106,30 @@ class LedgerController extends Controller
             return response()->json(['code' => 1, 'msg' => '分摊应付单不存在或不属于当前供应商'], 422);
         }
 
-        $payment = SupplierPayment::create([
-            'supplier_id'   => $validated['supplier_id'],
-            'amount'        => $validated['amount'],
-            'payment_date'  => $validated['payment_date'],
-            'method'        => $validated['method'],
-            'voucher_no'    => $validated['voucher_no'] ?? null,
-            'bank_account'  => $validated['bank_account'] ?? null,
-            'operator'      => $validated['operator'] ?? null,
-            'remark'        => $validated['remark'] ?? null,
-            'allocations'   => $validated['allocations'],
-            'created_by'    => $request->user()->id,
-        ]);
+        $payment = DB::transaction(function () use ($validated, $request) {
+            \App\Models\Supplier::whereKey($validated['supplier_id'])->lockForUpdate()->firstOrFail();
+            if (!empty($validated['voucher_no']) && SupplierPayment::where('supplier_id', $validated['supplier_id'])
+                ->where('voucher_no', $validated['voucher_no'])->exists()) {
+                throw ValidationException::withMessages([
+                    'voucher_no' => '该供应商已存在相同凭证号的付款记录',
+                ]);
+            }
 
-        // 自动应用分摊
-        $this->service->applySupplierPayment($payment->id);
+            $payment = SupplierPayment::create([
+                'supplier_id'   => $validated['supplier_id'],
+                'amount'        => $validated['amount'],
+                'payment_date'  => $validated['payment_date'],
+                'method'        => $validated['method'],
+                'voucher_no'    => $validated['voucher_no'] ?? null,
+                'bank_account'  => $validated['bank_account'] ?? null,
+                'operator'      => $validated['operator'] ?? null,
+                'remark'        => $validated['remark'] ?? null,
+                'allocations'   => $validated['allocations'],
+                'created_by'    => $request->user()->id,
+            ]);
+
+            return $this->service->applySupplierPayment($payment->id);
+        });
 
         return response()->json(['code' => 0, 'data' => $payment->fresh()], 201);
     }
@@ -171,7 +182,7 @@ class LedgerController extends Controller
             'method'                  => ['required', Rule::in(['cash', 'bank', 'alipay', 'wechat', 'check', 'other'])],
             'voucher_no'              => ['nullable', 'string', 'max:50'],
             'bank_account'            => ['nullable', 'string', 'max:50'],
-            'account_id'              => ['nullable', 'integer', 'exists:finance_accounts,id'],
+            'account_id'              => ['required', 'integer', 'exists:finance_accounts,id'],
             'operator'                => ['nullable', 'string', 'max:50'],
             'remark'                  => ['nullable', 'string', 'max:1000'],
             'allocations'             => ['required', 'array', 'min:1'],
@@ -210,22 +221,32 @@ class LedgerController extends Controller
             return response()->json(['code' => 1, 'msg' => '分摊应收单不存在或不属于当前客户'], 422);
         }
 
-        $receipt = CustomerReceipt::create([
-            'customer_id'  => $validated['customer_id'],
-            'project_id'   => $validated['project_id'] ?? null,
-            'amount'       => $validated['amount'],
-            'receipt_date' => $validated['receipt_date'],
-            'method'       => $validated['method'],
-            'voucher_no'   => $validated['voucher_no'] ?? null,
-            'bank_account' => $validated['bank_account'] ?? null,
-            'account_id'   => $validated['account_id'] ?? null,
-            'operator'     => $validated['operator'] ?? null,
-            'remark'       => $validated['remark'] ?? null,
-            'allocations'  => $validated['allocations'],
-            'created_by'   => $request->user()->id,
-        ]);
+        $receipt = DB::transaction(function () use ($validated, $request) {
+            \App\Models\Customer::whereKey($validated['customer_id'])->lockForUpdate()->firstOrFail();
+            if (!empty($validated['voucher_no']) && CustomerReceipt::where('customer_id', $validated['customer_id'])
+                ->where('voucher_no', $validated['voucher_no'])->exists()) {
+                throw ValidationException::withMessages([
+                    'voucher_no' => '该客户已存在相同凭证号的收款记录',
+                ]);
+            }
 
-        $this->service->applyCustomerReceipt($receipt->id);
+            $receipt = CustomerReceipt::create([
+                'customer_id'  => $validated['customer_id'],
+                'project_id'   => $validated['project_id'] ?? null,
+                'amount'       => $validated['amount'],
+                'receipt_date' => $validated['receipt_date'],
+                'method'       => $validated['method'],
+                'voucher_no'   => $validated['voucher_no'] ?? null,
+                'bank_account' => $validated['bank_account'] ?? null,
+                'account_id'   => $validated['account_id'],
+                'operator'     => $validated['operator'] ?? null,
+                'remark'       => $validated['remark'] ?? null,
+                'allocations'  => $validated['allocations'],
+                'created_by'   => $request->user()->id,
+            ]);
+
+            return $this->service->applyCustomerReceipt($receipt->id);
+        });
 
         return response()->json(['code' => 0, 'data' => $receipt->fresh()], 201);
     }

@@ -9,6 +9,8 @@ use App\Models\SupplierPayable;
 use App\Models\Receivable;
 use App\Models\Payable;
 use App\Models\FinancePayment;
+use App\Models\FinanceAccount;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -237,21 +239,33 @@ class LedgerService
     public function applySupplierPayment(int $paymentId): SupplierPayment
     {
         return DB::transaction(function () use ($paymentId) {
-            $payment = SupplierPayment::findOrFail($paymentId);
+            $payment = SupplierPayment::lockForUpdate()->findOrFail($paymentId);
             $allocations = $payment->allocations ?? [];
+            $this->assertAllocationTotal($allocations, (float) $payment->amount, 'payable_id');
+            $payableIds = array_values(array_unique(array_map(
+                static fn (array $row): int => (int) ($row['payable_id'] ?? 0),
+                $allocations
+            )));
+            $payables = SupplierPayable::whereIn('id', $payableIds)
+                ->where('supplier_id', $payment->supplier_id)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            if ($payables->count() !== count($payableIds)) {
+                throw ValidationException::withMessages([
+                    'allocations' => '分摊应付单不存在或不属于当前供应商',
+                ]);
+            }
 
             foreach ($allocations as $row) {
                 $payableId = (int) ($row['payable_id'] ?? 0);
                 $amount    = (float) ($row['amount'] ?? 0);
-                if ($payableId <= 0 || $amount <= 0) {
-                    continue;
-                }
-                $payable = SupplierPayable::where('id', $payableId)
-                    ->where('supplier_id', $payment->supplier_id)
-                    ->lockForUpdate()
-                    ->first();
-                if (!$payable) {
-                    continue;
+                $payable = $payables->get($payableId);
+                $balance = round((float) $payable->amount - (float) $payable->paid_amount, 2);
+                if ($amount > $balance + 0.0001) {
+                    throw ValidationException::withMessages([
+                        'allocations' => "应付单 #{$payableId} 的分摊金额超过未付余额",
+                    ]);
                 }
                 $newPaid = round((float) $payable->paid_amount + $amount, 2);
                 $payable->update([
@@ -272,22 +286,64 @@ class LedgerService
     public function applyCustomerReceipt(int $receiptId): CustomerReceipt
     {
         return DB::transaction(function () use ($receiptId) {
-            $receipt = CustomerReceipt::findOrFail($receiptId);
+            $receipt = CustomerReceipt::lockForUpdate()->findOrFail($receiptId);
             $allocations = $receipt->allocations ?? [];
+            $this->assertAllocationTotal($allocations, (float) $receipt->amount, 'receivable_id');
+            $receivableIds = array_values(array_unique(array_map(
+                static fn (array $row): int => (int) ($row['receivable_id'] ?? 0),
+                $allocations
+            )));
+            $baseReceivables = Receivable::whereIn('id', $receivableIds)
+                ->where('customer_id', $receipt->customer_id)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $legacyReceivables = CustomerReceivable::whereIn('id', $receivableIds)
+                ->where('customer_id', $receipt->customer_id)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            if ($baseReceivables->count() + $legacyReceivables->count() < count($receivableIds)) {
+                throw ValidationException::withMessages([
+                    'allocations' => '分摊应收单不存在或不属于当前客户',
+                ]);
+            }
+
+            $account = FinanceAccount::where('status', 'active')
+                ->lockForUpdate()
+                ->findOrFail($receipt->account_id);
+            $financePayments = [];
 
             foreach ($allocations as $row) {
                 $rid    = (int) ($row['receivable_id'] ?? 0);
                 $amount = (float) ($row['amount'] ?? 0);
-                if ($rid <= 0 || $amount <= 0) {
-                    continue;
-                }
-
-                // 更新 customer_receivables (收款单系统内部表)
-                $rec = CustomerReceivable::where('id', $rid)
-                    ->where('customer_id', $receipt->customer_id)
-                    ->lockForUpdate()
-                    ->first();
+                $rec = $baseReceivables->get($rid);
                 if ($rec) {
+                    $balance = round((float) $rec->amount - (float) $rec->received_amount, 2);
+                    if ($amount > $balance + 0.0001) {
+                        throw ValidationException::withMessages([
+                            'allocations' => "应收单 #{$rid} 的分摊金额超过未收余额",
+                        ]);
+                    }
+                    $newRecv = round((float) $rec->received_amount + $amount, 2);
+                    $newRemaining = round((float) $rec->amount - $newRecv, 2);
+                    $rec->update([
+                        'received_amount' => $newRecv,
+                        'status'          => $newRemaining <= 0.0001 ? 'fully_paid' : 'partial',
+                    ]);
+                    $financePayments[] = [
+                        'receivable_id' => $rec->id,
+                        'project_id'    => $rec->project_id ?? $receipt->project_id,
+                        'amount'        => $amount,
+                    ];
+                } else {
+                    $rec = $legacyReceivables->get($rid);
+                    $balance = round((float) $rec->amount - (float) $rec->received_amount, 2);
+                    if ($amount > $balance + 0.0001) {
+                        throw ValidationException::withMessages([
+                            'allocations' => "应收单 #{$rid} 的分摊金额超过未收余额",
+                        ]);
+                    }
                     $newRecv = round((float) $rec->received_amount + $amount, 2);
                     $rec->update([
                         'received_amount' => $newRecv,
@@ -295,31 +351,20 @@ class LedgerService
                             ? CustomerReceivable::STATUS_PAID
                             : CustomerReceivable::STATUS_PARTIAL,
                     ]);
-                }
-
-                // V1.2.16 fix: 同步更新基础 receivables 表 (应收账款页用)
-                // 不管 customer_receivables 是否存在, 都要更新 receivables
-                $baseRec = \App\Models\Receivable::where('id', $rid)->lockForUpdate()->first();
-                if ($baseRec) {
-                    $baseNewRecv = round((float) $baseRec->received_amount + $amount, 2);
-                    $baseNewRemaining = round((float) $baseRec->amount - $baseNewRecv, 2);
-                    $baseRec->update([
-                        'received_amount'  => $baseNewRecv,
-                        'remaining_amount' => $baseNewRemaining,
-                        'status'           => $baseNewRemaining < 0 ? 'overpaid' : ($baseNewRemaining <= 0 ? 'fully_paid' : ($baseNewRecv > 0 ? 'partial' : 'pending')),
-                        'received_date'    => $baseNewRemaining <= 0 ? $receipt->receipt_date : $baseRec->received_date,
-                    ]);
+                    $financePayments[] = [
+                        'receivable_id' => null,
+                        'project_id'    => $rec->project_id ?? $receipt->project_id,
+                        'amount'        => $amount,
+                    ];
                 }
             }
 
-            // V1.2.16 fix: 入账到指定资金账户 + 记流水
-            if ($receipt->account_id && $receipt->amount > 0) {
-                \App\Models\FinanceAccount::where('id', $receipt->account_id)
-                    ->increment('balance', (float) $receipt->amount);
-
+            foreach ($financePayments as $row) {
                 \App\Models\FinancePayment::create([
-                    'account_id'   => $receipt->account_id,
-                    'amount'       => (float) $receipt->amount,
+                    'account_id'   => $account->id,
+                    'receivable_id'=> $row['receivable_id'],
+                    'project_id'   => $row['project_id'],
+                    'amount'       => $row['amount'],
                     'payment_date' => $receipt->receipt_date,
                     'method'       => $receipt->method ?? 'bank',
                     'voucher_no'   => $receipt->voucher_no,
@@ -327,8 +372,31 @@ class LedgerService
                     'remark'       => '收款单: ' . ($receipt->voucher_no ?: '#' . $receipt->id),
                 ]);
             }
+            $account->increment('balance', (float) $receipt->amount);
 
             return $receipt->fresh();
         });
+    }
+
+    private function assertAllocationTotal(array $allocations, float $amount, string $idKey): void
+    {
+        $ids = [];
+        $sum = 0;
+        foreach ($allocations as $row) {
+            $id = (int) ($row[$idKey] ?? 0);
+            $lineAmount = round((float) ($row['amount'] ?? 0), 2);
+            if ($id <= 0 || $lineAmount <= 0 || isset($ids[$id])) {
+                throw ValidationException::withMessages([
+                    'allocations' => '分摊明细包含无效或重复记录',
+                ]);
+            }
+            $ids[$id] = true;
+            $sum += (int) round($lineAmount * 100);
+        }
+        if ($sum !== (int) round($amount * 100)) {
+            throw ValidationException::withMessages([
+                'allocations' => '分摊金额合计必须与收付款金额一致',
+            ]);
+        }
     }
 }

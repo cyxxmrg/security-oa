@@ -325,6 +325,7 @@ const formRules = {
   customer_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
   receivable_id: [{ required: true, message: '请选择关联应收款 (决定这笔款核销到哪一笔)', trigger: 'change' }],
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
+  account_id: [{ required: true, message: '请选择入账账户', trigger: 'change' }],
 }
 
 const handleCreate = () => {

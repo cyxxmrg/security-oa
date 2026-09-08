@@ -741,6 +741,10 @@ class SystemSettingsController extends Controller
 
             // 4) admin 角色 → 只绑 34 个业务权限, **不绑** 4 个 system 独占权限
             // (V1.2.9e: 大哥要求, 业务管理员不应有 License/系统状态/字典/一键清除 权限)
+            // V1.4.3 (REVIEW): 修正写入表 permission_role → role_has_permissions
+            // 运行时权限判定(User::hasActivePermissionTo / seeder / spatie)全部读 role_has_permissions,
+            // permission_role 为历史遗留冗余表; 此前写错表导致 wipe-data 重建的绑定不生效
+            // (被 admin 角色名旁路掩盖, 非 admin 角色在 wipe 后判定失权)。
             $rows = [];
             foreach ($businessPermIds as $pid) {
                 $rows[] = [
@@ -748,7 +752,7 @@ class SystemSettingsController extends Controller
                     'permission_id' => $pid,
                 ];
             }
-            \DB::table('permission_role')->insert($rows);
+            \DB::table('role_has_permissions')->insert($rows);
             $deleted['_seed_admin_role'] = $adminRoleId;
             $deleted['_admin_role_perms'] = count($rows);
 

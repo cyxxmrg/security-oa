@@ -33,6 +33,16 @@ class PortalRepairController extends Controller
         $code = trim($data['code']);
         $suffix = $data['phone_suffix'];
 
+        // V1.4.3 (REVIEW P1): 失败锁定 — 同 IP 连续失败 5 次锁 15 分钟 (防工单号+尾号爆破)
+        $ipKey = $request->ip() ?: 'unknown';
+        $lockKey = "portal:repair:lock:{$ipKey}";
+        if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
+            return response()->json([
+                'code' => 429,
+                'message' => '查询尝试过多, 请 15 分钟后再试',
+            ], 429);
+        }
+
         $ro = RepairOrder::with([
             'customer:id,name',
             'project:id,name',
@@ -42,6 +52,10 @@ class PortalRepairController extends Controller
         ])->where('code', $code)->first();
 
         if (!$ro) {
+            // V1.4.3: 单号不存在也计失败 (防单号枚举)
+            if ($block = $this->bumpFailure($ipKey)) {
+                return $block;
+            }
             return response()->json([
                 'code' => 404,
                 'message' => '未找到该工单, 请检查单号是否正确',
@@ -54,6 +68,10 @@ class PortalRepairController extends Controller
         $storedSuffix = substr($storedDigits, -4);
 
         if ($storedSuffix !== $suffix) {
+            // V1.4.3: 失败计数 + 达阈值锁定 (统一 helper)
+            if ($block = $this->bumpFailure($ipKey)) {
+                return $block;
+            }
             // 模糊提示, 不暴露是单号错还是电话错
             return response()->json([
                 'code' => 403,
@@ -61,11 +79,32 @@ class PortalRepairController extends Controller
             ], 403);
         }
 
+        // 成功 → 清失败计数
+        \Illuminate\Support\Facades\Cache::forget("portal:repair:fail:{$ipKey}");
+
         // 脱敏返回 — 只展示客户可见的内容
         return response()->json([
             'code' => 0,
             'data' => $this->presentPublic($ro),
         ]);
+    }
+
+    /** V1.4.3 (REVIEW P1): 失败锁定 — 同 IP 连续失败 5 次锁 15 分钟 */
+    private function bumpFailure(string $ipKey): ?JsonResponse
+    {
+        $failKey = "portal:repair:fail:{$ipKey}";
+        $fails = \Illuminate\Support\Facades\Cache::add($failKey, 1, 300)
+            ? 1
+            : (int) \Illuminate\Support\Facades\Cache::increment($failKey);
+        if ($fails >= 5) {
+            \Illuminate\Support\Facades\Cache::put("portal:repair:lock:{$ipKey}", 1, 900);
+            \Illuminate\Support\Facades\Cache::forget($failKey);
+            return response()->json([
+                'code' => 429,
+                'message' => '查询尝试过多, 请 15 分钟后再试',
+            ], 429);
+        }
+        return null;
     }
 
     private function presentPublic(RepairOrder $ro): array
