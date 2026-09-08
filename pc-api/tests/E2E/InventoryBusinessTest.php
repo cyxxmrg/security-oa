@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V1.2.7 P1-2 - InventoryService 业务级测试 (HTTP API)
@@ -16,7 +14,7 @@ use PHPUnit\Framework\TestCase;
  *
  * 跑在 117 上, 直接 HTTP 调真实 API
  */
-class InventoryBusinessTest extends TestCase
+class InventoryBusinessTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -27,6 +25,7 @@ class InventoryBusinessTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         self::$tokens = [];
     }
 

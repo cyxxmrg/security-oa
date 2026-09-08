@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\TemporaryPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -114,19 +115,28 @@ class UserSeeder extends Seeder
     {
         // 部门 id 可能在多次 seed 后自增, 用 name 反查
         $deptMap = DB::table('departments')->pluck('id', 'name');
+        $configuredPassword = env('SEED_DEFAULT_PASSWORD');
+        if ($configuredPassword && !preg_match('/^(?=.*[A-Za-z])(?=.*\d).{12,64}$/', $configuredPassword)) {
+            throw new \RuntimeException('SEED_DEFAULT_PASSWORD 必须为 12-64 位且同时包含字母和数字');
+        }
         $users = [
             // V1.2: system 账号替代 admin — 首次登录必须改密 (must_change_password=true)
-            ['name' => '系统管理员', 'username' => 'system', 'email' => 'system@local', 'phone' => '13800000000', 'password' => Hash::make('<已脱敏>'), 'department' => '总经办', 'status' => 'active', 'gender' => 'male', 'is_system' => true, 'user_type' => 'system', 'must_change_password' => true],
+            ['name' => '系统管理员', 'username' => 'system', 'email' => 'system@local', 'phone' => '13800000000', 'password' => $configuredPassword ?: TemporaryPassword::generate(), 'department' => '总经办', 'status' => 'active', 'gender' => 'male', 'is_system' => true, 'user_type' => 'system', 'must_change_password' => true],
             // V1.1: manager/user/finance/zhaodc 全是业务用户
-            ['name' => '李明辉', 'username' => 'manager', 'email' => 'manager@security-oa.com', 'phone' => '13900139001', 'password' => Hash::make('123456'), 'department' => '技术部', 'status' => 'active', 'gender' => 'male', 'is_system' => false, 'user_type' => 'business'],
-            ['name' => '王小红', 'username' => 'user', 'email' => 'user@security-oa.com', 'phone' => '13700137002', 'password' => Hash::make('123456'), 'department' => '销售部', 'status' => 'active', 'gender' => 'female', 'is_system' => false, 'user_type' => 'business'],
-            ['name' => '赵大成', 'username' => 'zhaodc', 'email' => 'zhaodc@security-oa.com', 'phone' => '13600136003', 'password' => Hash::make('123456'), 'department' => '技术部', 'status' => 'active', 'gender' => 'male', 'is_system' => false, 'user_type' => 'business'],
-            ['name' => '陈静', 'username' => 'chenjing', 'email' => 'chenjing@security-oa.com', 'phone' => '13500135004', 'password' => Hash::make('123456'), 'department' => '财务部', 'status' => 'active', 'gender' => 'female', 'is_system' => false, 'user_type' => 'business'],
+            ['name' => '李明辉', 'username' => 'manager', 'email' => 'manager@security-oa.com', 'phone' => '13900139001', 'password' => $configuredPassword ?: TemporaryPassword::generate(), 'department' => '技术部', 'status' => 'active', 'gender' => 'male', 'is_system' => false, 'user_type' => 'business', 'must_change_password' => true],
+            ['name' => '王小红', 'username' => 'user', 'email' => 'user@security-oa.com', 'phone' => '13700137002', 'password' => $configuredPassword ?: TemporaryPassword::generate(), 'department' => '销售部', 'status' => 'active', 'gender' => 'female', 'is_system' => false, 'user_type' => 'business', 'must_change_password' => true],
+            ['name' => '赵大成', 'username' => 'zhaodc', 'email' => 'zhaodc@security-oa.com', 'phone' => '13600136003', 'password' => $configuredPassword ?: TemporaryPassword::generate(), 'department' => '技术部', 'status' => 'active', 'gender' => 'male', 'is_system' => false, 'user_type' => 'business', 'must_change_password' => true],
+            ['name' => '陈静', 'username' => 'chenjing', 'email' => 'chenjing@security-oa.com', 'phone' => '13500135004', 'password' => $configuredPassword ?: TemporaryPassword::generate(), 'department' => '财务部', 'status' => 'active', 'gender' => 'female', 'is_system' => false, 'user_type' => 'business', 'must_change_password' => true],
         ];
         foreach ($users as $u) {
             $dept = $u['department']; unset($u['department']);
+            $plainPassword = $u['password'];
+            $u['password'] = Hash::make($plainPassword);
             $u['department_id'] = $deptMap[$dept] ?? null;
-            DB::table('users')->insertOrIgnore(array_merge($u, ['created_at' => now(), 'updated_at' => now()]));
+            $inserted = DB::table('users')->insertOrIgnore(array_merge($u, ['created_at' => now(), 'updated_at' => now()]));
+            if ($inserted > 0) {
+                $this->command?->warn("初始账号 {$u['username']} 的一次性密码: {$plainPassword}");
+            }
         }
 
         // 分配角色 (按用户名查 role_id, 不写死 1/2/3/4)

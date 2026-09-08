@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
  * V0.5.3 临时角色 - 单元测试 (纯 PDO, 不依赖 Eloquent boot)
  *
  * 测试 TemporaryRole helper 的 4 个核心方法 + expiringSoon
- * 走真实 DB (117 端 oa DB)
+ * 走隔离 testing DB，并在事务中自建专用夹具
  *
  * 关键: 不 extend Laravel TestCase, 避免 loading 整个 app;
  * Model 操作临时用 DB facade, 但 Eloquent::find() 会出错,
@@ -23,7 +23,7 @@ class TemporaryRoleTest extends TestCase
         // P1-14 安全防御：禁止在 production / 非 testing 环境下跑
         // 历史问题：曾直接读 /var/www/oa-api/.env 并直连真库 security_oa + DELETE/INSERT
         // 现统一用 phpunit.xml (APP_ENV=testing) 注入的 testing DB（security_oa_test）
-        $appEnv = function_exists('app') ? app()->environment() : (getenv('APP_ENV') ?: '');
+        $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') ?: '');
         if ($appEnv === 'production' || $appEnv !== 'testing') {
             self::markTestSkipped('Refusing to run TemporaryRoleTest outside testing env (was直连真库)');
             return;
@@ -43,7 +43,43 @@ class TemporaryRoleTest extends TestCase
             );
         } catch (\Throwable $e) {
             self::markTestSkipped('无法连本地 PG: ' . $e->getMessage());
+            return;
         }
+
+        self::$pdo->beginTransaction();
+
+        $roleStatement = self::$pdo->prepare("
+            INSERT INTO roles (name, guard_name, description, is_system, created_at, updated_at)
+            VALUES (?, 'web', 'PHPUnit fixture', true, NOW(), NOW())
+            ON CONFLICT (name, guard_name) DO UPDATE SET updated_at = EXCLUDED.updated_at
+        ");
+        foreach (['admin', 'manager', 'finance'] as $role) {
+            $roleStatement->execute([$role]);
+        }
+
+        $userStatement = self::$pdo->prepare("
+            INSERT INTO users (name, username, phone, password, gender, status, is_system, user_type, created_at, updated_at)
+            VALUES ('PHPUnit Temporary Role', 'phpunit_temp_role', '13900000001', NULL, 'other', 'active', false, 'business', NOW(), NOW())
+            ON CONFLICT (username) DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at
+            RETURNING id
+        ");
+        $userStatement->execute();
+        $userId = (int) $userStatement->fetchColumn();
+
+        $managerId = self::$pdo->query("SELECT id FROM roles WHERE name = 'manager' AND guard_name = 'web'")->fetchColumn();
+        self::$pdo->prepare("
+            INSERT INTO model_has_roles (role_id, model_type, model_id)
+            VALUES (?, 'App\\Models\\User', ?)
+            ON CONFLICT DO NOTHING
+        ")->execute([(int) $managerId, $userId]);
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$pdo?->inTransaction()) {
+            self::$pdo->rollBack();
+        }
+        self::$pdo = null;
     }
 
     private function pdo(): \PDO
@@ -53,12 +89,12 @@ class TemporaryRoleTest extends TestCase
     }
 
     /**
-     * 找 test 用的 user id — 用 sales_yang (id 固定, 纯 manager 角色)
+     * 查找事务内创建的专用测试用户。
      */
     private function pickTestUserId(): int
     {
-        $row = $this->pdo()->query("SELECT id FROM users WHERE username = 'sales_yang' LIMIT 1")->fetch();
-        if (!$row) $this->markTestSkipped('sales_yang 用户不存在');
+        $row = $this->pdo()->query("SELECT id FROM users WHERE username = 'phpunit_temp_role' LIMIT 1")->fetch();
+        if (!$row) $this->fail('临时角色测试夹具用户不存在');
         return (int) $row['id'];
     }
 
@@ -80,7 +116,7 @@ class TemporaryRoleTest extends TestCase
         $this->pdo()->prepare("DELETE FROM model_has_roles WHERE model_type = 'App\\Models\\User' AND model_id = ? AND expires_at IS NOT NULL")
             ->execute([$userId]);
 
-        // 重新插回 sales_yang 的标准 manager (因为我们用 sales_yang 做 target)
+        // 恢复专用测试用户的永久 manager 角色。
         $rid = $this->getRoleId('manager');
         if ($rid) {
             $this->pdo()->prepare("

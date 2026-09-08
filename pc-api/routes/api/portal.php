@@ -18,6 +18,8 @@ Route::prefix('portal')->group(function () {
     Route::get('invitations', [PortalController::class, 'invitations'])->middleware('throttle:10,1');
     Route::get('supplier/info', [PortalController::class, 'supplierInfo'])->middleware('throttle:10,1');
     Route::get('t/{token}', [PortalController::class, 'tenderByToken']);
+    Route::get('t/{token}/attachments/{attachment}', [PortalController::class, 'downloadPublicAttachment'])
+        ->whereNumber('attachment')->middleware('throttle:30,1');
     Route::get('t/{token}/my-bid', [PortalController::class, 'myBid'])->middleware('throttle:20,1');
     Route::post('t/{token}/bids', [PortalController::class, 'submitBid'])->middleware('throttle:10,1');
     Route::post('t/{token}/bids/attachments', [PortalController::class, 'uploadBidAttachment'])->middleware('throttle:10,1');

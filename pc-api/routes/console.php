@@ -1,7 +1,12 @@
 <?php
 
+use App\Support\TemporaryPassword;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
@@ -9,44 +14,61 @@ use Illuminate\Support\Facades\Schedule;
 |--------------------------------------------------------------------------
 */
 
-Artisan::command('oa:seed-admin', function () {
+Artisan::command('oa:seed-admin {--password=}', function () {
+    $password = $this->option('password') ?: TemporaryPassword::generate();
+    if (!preg_match('/^(?=.*[A-Za-z])(?=.*\d).{12,64}$/', $password)) {
+        throw new \InvalidArgumentException('密码必须为 12-64 位且同时包含字母和数字');
+    }
     $admin = \App\Models\User::firstOrCreate(
         ['username' => 'admin'],
-        ['name' => '张建国', 'email' => 'admin@security-oa.com', 'phone' => '13800138000', 'password' => bcrypt('<已脱敏>'), 'status' => 'active']
+        ['name' => '张建国', 'email' => 'admin@security-oa.com', 'phone' => '13800138000', 'password' => bcrypt($password), 'status' => 'active', 'must_change_password' => true]
     );
     $admin->assignRole('admin');
 
     $manager = \App\Models\User::firstOrCreate(
         ['username' => 'manager'],
-        ['name' => '李明辉', 'email' => 'manager@security-oa.com', 'phone' => '13900139001', 'password' => bcrypt('123456'), 'status' => 'active']
+        ['name' => '李明辉', 'email' => 'manager@security-oa.com', 'phone' => '13900139001', 'password' => bcrypt($password), 'status' => 'active', 'must_change_password' => true]
     );
     $manager->assignRole('manager');
 
     $user = \App\Models\User::firstOrCreate(
         ['username' => 'user'],
-        ['name' => '王小红', 'email' => 'user@security-oa.com', 'phone' => '13700137002', 'password' => bcrypt('123456'), 'status' => 'active']
+        ['name' => '王小红', 'email' => 'user@security-oa.com', 'phone' => '13700137002', 'password' => bcrypt($password), 'status' => 'active', 'must_change_password' => true]
     );
     $user->assignRole('user');
 
-    $this->info('默认管理员已创建: admin / <已脱敏>');
+    $created = collect([$admin, $manager, $user])->filter->wasRecentlyCreated->pluck('username');
+    if ($created->isNotEmpty()) {
+        $this->warn("新建账号 {$created->join(', ')} 的一次性密码: {$password}");
+    } else {
+        $this->info('账号已存在，未修改密码');
+    }
 })->purpose('创建默认管理员账号');
 
-Artisan::command('oa:seed-finance', function () {
+Artisan::command('oa:seed-finance {--password=}', function () {
+    $password = $this->option('password') ?: TemporaryPassword::generate();
+    if (!preg_match('/^(?=.*[A-Za-z])(?=.*\d).{12,64}$/', $password)) {
+        throw new \InvalidArgumentException('密码必须为 12-64 位且同时包含字母和数字');
+    }
     // v0.3.14 D2: 财务角色 + 默认账号
     $finance = \App\Models\User::firstOrCreate(
         ['username' => 'finance'],
-        ['name' => '周会计', 'email' => 'finance@security-oa.com', 'phone' => '13700137003', 'password' => bcrypt('123456'), 'status' => 'active']
+        ['name' => '周会计', 'email' => 'finance@security-oa.com', 'phone' => '13700137003', 'password' => bcrypt($password), 'status' => 'active', 'must_change_password' => true]
     );
     $finance->assignRole('finance');
 
     $salesManager = \App\Models\User::firstOrCreate(
         ['username' => 'sales_mgr'],
-        ['name' => '销售经理·陈', 'email' => 'sales_mgr@security-oa.com', 'phone' => '13700137004', 'password' => bcrypt('123456'), 'status' => 'active']
+        ['name' => '销售经理·陈', 'email' => 'sales_mgr@security-oa.com', 'phone' => '13700137004', 'password' => bcrypt($password), 'status' => 'active', 'must_change_password' => true]
     );
     $salesManager->assignRole('sales_manager');
 
-    $this->info('财务账号已创建: finance / 123456');
-    $this->info('销售经理账号已创建: sales_mgr / 123456');
+    $created = collect([$finance, $salesManager])->filter->wasRecentlyCreated->pluck('username');
+    if ($created->isNotEmpty()) {
+        $this->warn("新建账号 {$created->join(', ')} 的一次性密码: {$password}");
+    } else {
+        $this->info('账号已存在，未修改密码');
+    }
 })->purpose('创建财务和销售经理账号 (v0.3.14 D2)');
 
 Artisan::command('oa:seed-roles', function () {
@@ -263,3 +285,106 @@ Schedule::command('analytics:refresh')
     ->withoutOverlapping()
     ->onOneServer()
     ->name('analytics-mv-refresh');
+
+Artisan::command('oa:purge-expired-personal-data {--dry-run}', function () {
+    $cutoff = now()->subDays(max(1, (int) config('compliance.former_employee_retention_days')));
+    $userIds = DB::table('employee_resignations')
+        ->where('status', 'completed')
+        ->where('last_work_day', '<=', $cutoff->toDateString())
+        ->distinct()
+        ->pluck('user_id');
+
+    $auditCutoff = now()->subDays(max(1, (int) config('compliance.audit_log_retention_days')));
+    $systemCutoff = now()->subDays(max(1, (int) config('compliance.system_log_retention_days')));
+    $onboardingFileIds = DB::table('employee_onboardings')
+        ->whereIn('user_id', $userIds)
+        ->get(['id_card_file_id', 'driver_license_file_id', 'education_file_id', 'contract_file_id'])
+        ->flatMap(fn ($row) => (array) $row)
+        ->filter()
+        ->unique()
+        ->values();
+    $resignationFileIds = DB::table('employee_resignations')
+        ->whereIn('user_id', $userIds)
+        ->whereNotNull('resign_certificate_file_id')
+        ->pluck('resign_certificate_file_id');
+    $personalFileIds = $onboardingFileIds
+        ->merge($resignationFileIds)
+        ->unique()
+        ->values();
+    $personalFiles = DB::table('disk_files')->whereIn('id', $personalFileIds)->get(['id', 'path']);
+    $this->info("待匿名化离职员工: {$userIds->count()}");
+    $this->info("待删除个人证件文件: {$personalFiles->count()}");
+    if ($this->option('dry-run')) {
+        return 0;
+    }
+
+    DB::transaction(function () use ($userIds, $personalFileIds, $personalFiles, $auditCutoff, $systemCutoff) {
+        foreach ($personalFiles as $file) {
+            $disk = Storage::disk('attachments');
+            if ($disk->exists($file->path) && !$disk->delete($file->path)) {
+                throw new \RuntimeException("个人证件文件删除失败: disk_file #{$file->id}");
+            }
+        }
+
+        foreach ($userIds as $userId) {
+            DB::table('users')->where('id', $userId)->update([
+                'name' => "已离职员工#{$userId}",
+                'username' => "deleted_user_{$userId}",
+                'email' => null,
+                'phone' => "DELETED-{$userId}",
+                'id_card' => null,
+                'avatar' => null,
+                'gender' => 'other',
+                'department_id' => null,
+                'position_id' => null,
+                'password' => Hash::make(Str::random(64)),
+                'status' => 'inactive',
+                'last_login_at' => null,
+                'last_login_ip' => null,
+                'remember_token' => null,
+                'updated_at' => now(),
+            ]);
+            DB::table('employee_profiles')->where('user_id', $userId)->update([
+                'employee_no' => "DELETED-{$userId}",
+                'contract_start' => null, 'contract_end' => null,
+                'base_salary' => 0, 'salary_allowance' => 0,
+                'bank_name' => null, 'bank_account' => null,
+                'emergency_contact' => null, 'emergency_phone' => null, 'notes' => null,
+                'updated_at' => now(),
+            ]);
+            DB::table('employee_onboardings')->where('user_id', $userId)->update([
+                'id_card_no' => null, 'driver_license_no' => null,
+                'id_card_file_id' => null, 'driver_license_file_id' => null,
+                'education_file_id' => null, 'contract_file_id' => null,
+                'driver_license_expire' => null, 'education_level' => null,
+                'education_school' => null, 'education_major' => null, 'remark' => null,
+                'updated_at' => now(),
+            ]);
+            DB::table('employee_resignations')->where('user_id', $userId)->update([
+                'reason' => '已按保留策略匿名化',
+                'handover_note' => null, 'assets_checklist' => null,
+                'final_salary_amount' => null, 'leave_balance_payout' => null,
+                'severance_pay' => null, 'total_settlement' => null,
+                'paid_method' => null, 'resign_certificate_file_id' => null,
+                'remark' => null,
+                'updated_at' => now(),
+            ]);
+            DB::table('personal_access_tokens')
+                ->where('tokenable_type', \App\Models\User::class)
+                ->where('tokenable_id', $userId)
+                ->delete();
+        }
+        DB::table('disk_files')->whereIn('id', $personalFileIds)->delete();
+        DB::table('audit_logs')->where('created_at', '<', $auditCutoff)->delete();
+        DB::table('system_logs')->where('created_at', '<', $systemCutoff)->delete();
+    });
+
+    $this->info('个人数据匿名化及日志保留清理完成');
+    return 0;
+})->purpose('按合规保留期限匿名化离职人员并清理过期日志');
+
+Schedule::command('oa:purge-expired-personal-data')
+    ->dailyAt('03:30')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->name('compliance-data-retention');

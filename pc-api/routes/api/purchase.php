@@ -18,10 +18,10 @@ Route::prefix('tenders')->middleware(['auth:sanctum', 'ensure_business'])->group
     Route::get('/', [TenderController::class, 'index'])->middleware('permission:tender.view|tender.approve|deposit.manage');
     Route::post('/', [TenderController::class, 'store'])->middleware('permission:tender.create');
     Route::get('pending-review', [TenderController::class, 'pendingReview'])->middleware('permission:tender.approve');
-    Route::post('{id}/publish', [TenderController::class, 'publish'])->whereNumber('id')->middleware('permission:tender.submit');
-    Route::post('{id}/close', [TenderController::class, 'close'])->whereNumber('id')->middleware('permission:tender.cancel');
+    Route::post('{id}/publish', [TenderController::class, 'publish'])->whereNumber('id')->middleware('permission:tender.submit|tender.approve');
+    Route::post('{id}/close', [TenderController::class, 'close'])->whereNumber('id')->middleware('permission:tender.cancel|tender.create');
     Route::post('{id}/cancel', [TenderController::class, 'cancel'])->whereNumber('id')->middleware('permission:tender.cancel');
-    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->whereNumber('id')->middleware('permission:tender.award');
+    Route::post('{id}/evaluate', [TenderController::class, 'evaluate'])->whereNumber('id')->middleware('permission:tender.award|tender.approve');
     Route::post('{id}/award', [TenderController::class, 'award'])->whereNumber('id')->middleware('permission:tender.award');
     Route::post('{id}/submit-review', [TenderController::class, 'submitReview'])->whereNumber('id')->middleware('permission:tender.submit');
     Route::post('{id}/approve', [TenderController::class, 'approve'])->whereNumber('id')->middleware('permission:tender.approve');
@@ -179,4 +179,5 @@ Route::prefix('external-quotes')->middleware(['auth:sanctum', 'ensure_business',
     Route::post('{quoteId}/shortlist', [ExternalQuoteController::class, 'shortlistQuote'])->whereNumber('quoteId');
     Route::post('{quoteId}/reject', [ExternalQuoteController::class, 'rejectQuote'])->whereNumber('quoteId');
     Route::post('{quoteId}/award', [ExternalQuoteController::class, 'awardQuote'])->whereNumber('quoteId');
+    Route::get('files/download', [ExternalQuoteController::class, 'downloadDraftFile']);
 });

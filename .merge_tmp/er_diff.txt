@@ -1,0 +1,269 @@
+warning: in the working copy of '.merge_tmp/EmployeeResignationController.HEAD.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.merge_tmp/EmployeeResignationController.ORIGIN.php', LF will be replaced by CRLF the next time Git touches it
+diff --git a/.merge_tmp/EmployeeResignationController.HEAD.php b/.merge_tmp/EmployeeResignationController.ORIGIN.php
+index e19ed48..1c10cde 100644
+--- a/.merge_tmp/EmployeeResignationController.HEAD.php
++++ b/.merge_tmp/EmployeeResignationController.ORIGIN.php
+@@ -109,44 +109,28 @@ class EmployeeResignationController extends Controller
+             return response()->json(['code' => 1002, 'message' => '该员工已有未结的离职申请'], 422);
+         }
+ 
+-        try {
+-            $resignation = DB::transaction(function () use ($data) {
+-            $lockedUser = User::lockForUpdate()->findOrFail($data['user_id']);
+-            $existing = EmployeeResignation::where('user_id', $lockedUser->id)
+-                ->whereIn('status', ['draft', 'pending', 'approved'])
+-                ->lockForUpdate()
+-                ->exists();
+-            if ($existing) {
+-                throw new \DomainException('该员工已有未结的离职申请');
+-            }
+-
+-            $resignation = EmployeeResignation::create([
+-                'user_id'      => $lockedUser->id,
+-                'resign_date'  => $data['resign_date'],
+-                'notice_date'  => $data['notice_date'] ?? Carbon::now()->format('Y-m-d'),
+-                'last_work_day' => $data['last_work_day'],
+-                'resign_type'  => $data['resign_type'],
+-                'reason'       => $data['reason'],
+-                'handover_to_user_id' => $data['handover_to_user_id'] ?? null,
+-                'handover_note' => $data['handover_note'] ?? null,
+-                'assets_checklist' => $data['assets_checklist'] ?? null,
+-                'final_salary_amount' => $data['final_salary_amount'] ?? null,
+-                'leave_balance_payout' => $data['leave_balance_payout'] ?? null,
+-                'severance_pay' => $data['severance_pay'] ?? null,
+-                'social_security_cutoff' => $data['social_security_cutoff'] ?? null,
+-                'remark'       => $data['remark'] ?? null,
+-                'status'       => !empty($data['submit']) ? 'pending' : 'draft',
+-                'created_by'   => Auth::id(),
+-            ]);
+-
+-            if (!empty($data['submit'])) {
+-                $this->syncApprovalRecord($resignation, 'submit');
+-            }
++        $resignation = EmployeeResignation::create([
++            'user_id'      => $data['user_id'],
++            'resign_date'  => $data['resign_date'],
++            'notice_date'  => $data['notice_date'] ?? Carbon::now()->format('Y-m-d'),
++            'last_work_day' => $data['last_work_day'],
++            'resign_type'  => $data['resign_type'],
++            'reason'       => $data['reason'],
++            'handover_to_user_id' => $data['handover_to_user_id'] ?? null,
++            'handover_note' => $data['handover_note'] ?? null,
++            'assets_checklist' => $data['assets_checklist'] ?? null,
++            'final_salary_amount' => $data['final_salary_amount'] ?? null,
++            'leave_balance_payout' => $data['leave_balance_payout'] ?? null,
++            'severance_pay' => $data['severance_pay'] ?? null,
++            'social_security_cutoff' => $data['social_security_cutoff'] ?? null,
++            'remark'       => $data['remark'] ?? null,
++            'status'       => !empty($data['submit']) ? 'pending' : 'draft',
++            'created_by'   => Auth::id(),
++        ]);
+ 
+-                return $resignation;
+-            });
+-        } catch (\DomainException|\RuntimeException $e) {
+-            return response()->json(['code' => 1002, 'message' => $e->getMessage()], 422);
++        // V1.2.5: 若直接提交审批, 同步创建审批中心记录 (operation/resignation)
++        if (!empty($data['submit'])) {
++            $this->syncApprovalRecord($resignation, 'submit');
+         }
+ 
+         return response()->json(['code' => 0, 'message' => '离职申请已创建', 'data' => $resignation], 201);
+@@ -187,19 +171,13 @@ class EmployeeResignationController extends Controller
+      */
+     public function submit(EmployeeResignation $resignation): JsonResponse
+     {
+-        try {
+-            $resignation = DB::transaction(function () use ($resignation) {
+-            $resignation = EmployeeResignation::lockForUpdate()->findOrFail($resignation->id);
+-            if ($resignation->status !== 'draft') {
+-                throw new \DomainException('仅草稿状态可提交');
+-            }
+-            $resignation->update(['status' => 'pending']);
+-            $this->syncApprovalRecord($resignation, 'submit');
+-                return $resignation;
+-            });
+-        } catch (\DomainException|\RuntimeException $e) {
+-            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
++        if ($resignation->status !== 'draft') {
++            return response()->json(['code' => 1001, 'message' => '仅草稿状态可提交'], 422);
+         }
++        $resignation->update(['status' => 'pending']);
++
++        // V1.2.5: 同步创建审批中心记录
++        $this->syncApprovalRecord($resignation, 'submit');
+ 
+         return response()->json(['code' => 0, 'message' => '已提交审批', 'data' => $resignation]);
+     }
+@@ -210,45 +188,40 @@ class EmployeeResignationController extends Controller
+      */
+     public function approve(EmployeeResignation $resignation): JsonResponse
+     {
+-        return DB::transaction(function () use ($resignation) {
+-            $resignation = EmployeeResignation::lockForUpdate()->findOrFail($resignation->id);
+-            if ($resignation->status !== 'pending') {
+-                return response()->json(['code' => 1001, 'message' => '仅待审批状态可审批'], 422);
+-            }
++        if ($resignation->status !== 'pending') {
++            return response()->json(['code' => 1001, 'message' => '仅待审批状态可审批'], 422);
++        }
++        if ((int) $resignation->created_by === (int) Auth::id() || (int) $resignation->user_id === (int) Auth::id()) {
++            return response()->json(['code' => 1003, 'message' => '离职申请人或目标员工不能审批该申请'], 403);
++        }
++        $resignation->update([
++            'status' => 'approved',
++            'approved_by' => Auth::id(),
++            'approved_at' => now(),
++        ]);
+ 
++        // 使用 ApprovalFlowService 推进审批流
++        try {
++            $flowService = app(ApprovalFlowService::class);
+             $approval = ApprovalRecord::where('type', 'operation')
+                 ->where('sub_type', 'resignation')
+-                ->whereJsonContains('payload->resignation_id', $resignation->id)
+-                ->where('status', ApprovalRecord::STATUS_PENDING)
+-                ->lockForUpdate()
++                ->where('payload->resignation_id', $resignation->id)
+                 ->first();
+-            if (!$approval) {
+-                return response()->json(['code' => 1001, 'message' => '未找到有效的审批中心记录'], 409);
+-            }
+-
+-            $operator = User::findOrFail(Auth::id());
+-            $result = app(ApprovalFlowService::class)->advanceFlow($approval, $operator, '审批通过');
+-            $approval->forceFill([
+-                'status' => $result['status'],
+-                'current_approver_id' => $result['current_approver_id'],
+-                'flow' => $result['flow'],
+-                'comment' => '审批通过',
+-            ])->save();
+-
+-            if ($result['status'] === ApprovalRecord::STATUS_APPROVED) {
+-                $resignation->update([
+-                    'status' => 'approved',
+-                    'approved_by' => Auth::id(),
+-                    'approved_at' => now(),
+-                ]);
++            if ($approval) {
++                $operator = User::find(Auth::id());
++                if ($operator) {
++                    $result = $flowService->advanceFlow($approval, $operator, '审批通过');
++                    $approval->status = $result['status'];
++                    $approval->current_approver_id = $result['current_approver_id'];
++                    $approval->flow = $result['flow'];
++                    $approval->save();
++                }
+             }
++        } catch (\Throwable $e) {
++            Log::error('EmployeeResignationController::approve advanceFlow failed', ['msg' => $e->getMessage()]);
++        }
+ 
+-            return response()->json([
+-                'code' => 0,
+-                'message' => $result['status'] === ApprovalRecord::STATUS_APPROVED ? '已审批' : '已通过，已转交下一节点',
+-                'data' => $resignation->fresh(),
+-            ]);
+-        });
++        return response()->json(['code' => 0, 'message' => '已审批', 'data' => $resignation]);
+     }
+ 
+     /**
+@@ -257,19 +230,13 @@ class EmployeeResignationController extends Controller
+      */
+     public function cancel(EmployeeResignation $resignation): JsonResponse
+     {
+-        try {
+-            $resignation = DB::transaction(function () use ($resignation) {
+-            $resignation = EmployeeResignation::lockForUpdate()->findOrFail($resignation->id);
+-            if (in_array($resignation->status, ['completed', 'cancelled'], true)) {
+-                throw new \DomainException('已完成或已取消的单不能再撤回');
+-            }
+-            $resignation->update(['status' => 'cancelled']);
+-            $this->syncApprovalRecord($resignation, 'cancel');
+-                return $resignation;
+-            });
+-        } catch (\DomainException|\RuntimeException $e) {
+-            return response()->json(['code' => 1001, 'message' => $e->getMessage()], 422);
++        if (in_array($resignation->status, ['completed', 'cancelled'], true)) {
++            return response()->json(['code' => 1001, 'message' => '已完成或已取消的单不能再撤回'], 422);
+         }
++        $resignation->update(['status' => 'cancelled']);
++
++        // V1.2.5: 同步撤销审批中心记录
++        $this->syncApprovalRecord($resignation, 'cancel');
+ 
+         return response()->json(['code' => 0, 'message' => '已撤回']);
+     }
+@@ -285,19 +252,15 @@ class EmployeeResignationController extends Controller
+                 'involuntary'  => '被动离职',
+                 'contract_end' => '合同到期',
+                 'retirement'   => '退休',
+-                'mutual'       => '协商解除',
+-                'dismissed'    => '辞退',
+-                'probation_dismissed' => '试用期辞退',
+                 'other'        => '其他',
+             ][$resignation->resign_type] ?? $resignation->resign_type;
+ 
+             if ($action === 'submit') {
+-                $code = \App\Services\ApprovalNumberService::next('OPS');
++                $year = now()->format('Y');
++                $seq = ApprovalRecord::where('code', 'like', "OPS-{$year}-%")->count() + 1;
++                $code = sprintf('OPS-%s-%04d', $year, $seq);
+                 $applicant = User::find(Auth::id());
+                 $targetUser = User::find($resignation->user_id);
+-                if (!$applicant) {
+-                    throw new \RuntimeException('当前申请人不存在');
+-                }
+ 
+                 $exists = ApprovalRecord::where('type', 'operation')
+                     ->where('sub_type', 'resignation')
+@@ -307,10 +270,19 @@ class EmployeeResignationController extends Controller
+ 
+                 $flowService = app(ApprovalFlowService::class);
+                 $template = $flowService->resolveTemplate('resignation');
+-                if (!$template) {
+-                    throw new \RuntimeException('未找到离职对应的启用审批流程');
++                if ($template) {
++                    $flowData = $flowService->initFlow($template, $applicant, '提交离职申请');
++                } else {
++                    $flowData = [
++                        'current_approver_id' => 1,
++                        'flow' => [[
++                            'operator' => $applicant?->name ?? '—',
++                            'action'   => 'submit',
++                            'time'     => now()->toDateTimeString(),
++                            'comment'  => '提交离职申请: ' . $resignation->reason,
++                        ]],
++                    ];
+                 }
+-                $flowData = $flowService->initFlow($template, $applicant, '提交离职申请');
+ 
+                 ApprovalRecord::create([
+                     'code'         => $code,
+@@ -346,21 +318,17 @@ class EmployeeResignationController extends Controller
+                 $flow = is_array($approval->flow) ? $approval->flow : [];
+                 $operatorName = User::find(Auth::id())?->name ?? '—';
+                 if ($action === 'approve') {
+-                    $flow[] = ['operator_id' => Auth::id(), 'operator' => $operatorName, 'action' => 'approve', 'time' => now()->toDateTimeString(), 'comment' => '审批通过'];
++                    $flow[] = ['operator' => $operatorName, 'action' => 'approve', 'time' => now()->toDateTimeString(), 'comment' => '审批通过'];
+                     $approval->status = ApprovalRecord::STATUS_APPROVED;
+                 } elseif ($action === 'cancel') {
+-                    $flow[] = ['operator_id' => Auth::id(), 'operator' => $operatorName, 'action' => 'cancel', 'time' => now()->toDateTimeString(), 'comment' => '撤销离职申请'];
++                    $flow[] = ['operator' => $operatorName, 'action' => 'cancel', 'time' => now()->toDateTimeString(), 'comment' => '撤销离职申请'];
+                     $approval->status = ApprovalRecord::STATUS_CANCELLED;
+                 }
+                 $approval->flow = $flow;
+                 $approval->save();
+             }
+         } catch (\Throwable $e) {
+-            Log::error('EmployeeResignationController::syncApprovalRecord failed', [
+-                'msg' => $e->getMessage(),
+-                'action' => $action,
+-            ]);
+-            throw $e;
++            Log::error('EmployeeResignationController::syncApprovalRecord failed', ['msg' => $e->getMessage(), 'action' => $action]);
+         }
+     }
+ 

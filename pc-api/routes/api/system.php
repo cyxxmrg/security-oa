@@ -266,25 +266,41 @@ Route::prefix('warranty-service-orders')->middleware(['auth:sanctum', 'ensure_bu
 });
 
 // 质保期保证金
-Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business', 'permission:deposit.manage'])->group(function () {
+// 合并说明 (HEAD=v1.4.3/1.4.4 本地安全收紧, origin=远端合规加固版):
+//   两侧对同一组端点各自加固, 权限点两套命名并存、实际都绑定到 finance/admin:
+//     本地: deposit.manage + deposit.release (资金动作独立拆分);
+//     远端: warranty.deposit.view + warranty.deposit.manage.
+//   取"更严格且不丢对方挂载功能"的并集口径 (permission:A|B = 满足任一即放行):
+//     读/建档 = view/manage 级并集; 释放/没收(资金流出动作) = warranty.deposit.manage|deposit.release.
+//   结果: 操作者集合仍仅为 finance/admin (manager/user 不持有任何 deposit 权限点),
+//   且无论合并后的种子/迁移保留哪一套命名, 端点都保持可达。
+Route::prefix('warranty-deposits')->middleware(['auth:sanctum', 'ensure_business', 'permission:warranty.deposit.view|deposit.manage'])->group(function () {
     Route::get('/', [WarrantyDepositController::class, 'index']);
-    Route::post('/', [WarrantyDepositController::class, 'store']);
-    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
-    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
-    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->where('id', '[0-9]+')->middleware('permission:deposit.release');
+    Route::post('/', [WarrantyDepositController::class, 'store'])->middleware('permission:warranty.deposit.manage|deposit.manage');
+    Route::post('/{id}/partial-release', [WarrantyDepositController::class, 'partialRelease'])->middleware('permission:warranty.deposit.manage|deposit.release')->where('id', '[0-9]+');
+    Route::post('/{id}/full-release', [WarrantyDepositController::class, 'fullRelease'])->middleware('permission:warranty.deposit.manage|deposit.release')->where('id', '[0-9]+');
+    Route::post('/{id}/forfeit', [WarrantyDepositController::class, 'forfeit'])->middleware('permission:warranty.deposit.manage|deposit.release')->where('id', '[0-9]+');
     Route::get('/{id}', [WarrantyDepositController::class, 'show'])->where('id', '[0-9]+');
 });
 
 // ========== 施工预算 ==========
-Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business', 'permission:project.view'])->group(function () {
+// 合并说明 (HEAD=本地 v1.4.3/1.4.4, origin=远端合规加固版):
+//   远端引入三档 granular 权限 construction.budget.{view,manage,approve}:
+//     manager  = view+manage (编制), finance/admin = view+approve (审批, 禁编制人自批);
+//   本地原用 project.{view,edit} 粗粒度挂载 (manager 可自批, 口径偏松)。
+//   合并取更严格口径:
+//     读    = construction.budget.view|project.view (manager/finance/admin 可读, finance 需可读才能审批);
+//     编制  = construction.budget.manage|project.edit (仅 manager/admin);
+//     审批  = construction.budget.approve (仅 finance/admin) — 放弃本地 project.edit 允许项目经理自批的宽松口径。
+Route::prefix('construction/budgets')->middleware(['auth:sanctum', 'ensure_business', 'permission:construction.budget.view|project.view'])->group(function () {
     Route::get('/', [BudgetController::class, 'index']);
     Route::get('/summary/{projectId}', [BudgetController::class, 'summary']);
-    Route::post('/', [BudgetController::class, 'store'])->middleware('permission:project.edit');
+    Route::post('/', [BudgetController::class, 'store'])->middleware('permission:construction.budget.manage|project.edit');
     Route::get('/{id}', [BudgetController::class, 'show'])->where('id', '[0-9]+');
-    Route::put('/{id}', [BudgetController::class, 'update'])->where('id', '[0-9]+')->middleware('permission:project.edit');
-    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->where('id', '[0-9]+')->middleware('permission:project.edit');
-    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->where('id', '[0-9]+')->middleware('permission:project.edit');
-    Route::delete('/{id}', [BudgetController::class, 'destroy'])->where('id', '[0-9]+')->middleware('permission:project.edit');
+    Route::put('/{id}', [BudgetController::class, 'update'])->middleware('permission:construction.budget.manage|project.edit')->where('id', '[0-9]+');
+    Route::post('/{id}/approve', [BudgetController::class, 'approve'])->middleware('permission:construction.budget.approve')->where('id', '[0-9]+');
+    Route::post('/{id}/revise', [BudgetController::class, 'revise'])->middleware('permission:construction.budget.manage|project.edit')->where('id', '[0-9]+');
+    Route::delete('/{id}', [BudgetController::class, 'destroy'])->middleware('permission:construction.budget.manage|project.edit')->where('id', '[0-9]+');
 });
 
 // ========== 施工团队 ==========

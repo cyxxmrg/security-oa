@@ -25,13 +25,11 @@ class TenderAttachment extends Model
 
     public function getUrlAttribute(): string
     {
-        if (!$this->tender_bid_id && $this->visibility === 'public') {
-            return asset('storage/' . $this->file_path);
-        }
-
-        return route('tenders.attachments.download', [
-            'id' => $this->tender_project_id,
-            'attId' => $this->id,
-        ]);
+        // 合并结论 (origin/main 版): 统一返回鉴权下载 URL —
+        // 1) 供应商门户不消费本 accessor (PortalController::tenderByToken 自行构造
+        //    /api/portal/t/{token}/attachments/{id} 的公开 URL);
+        // 2) 业务端 (useTenderDetail/privateFile) 用 Bearer fetch 打开, 需要 /api 路径;
+        // 3) 该路径与两侧路由块注册的 URI 一致, 不依赖命名路由 tenders.attachments.download 是否存在。
+        return url("/api/tenders/{$this->tender_project_id}/attachments/{$this->id}/download");
     }
 }

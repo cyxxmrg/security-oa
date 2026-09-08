@@ -1,15 +1,13 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V0.4.10 A3 - 业务端点 Feature 测试
  *
  * 8 个端到端: 业务模块 + 数据权限 + 审计
  */
-class BusinessApiTest extends TestCase
+class BusinessApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 

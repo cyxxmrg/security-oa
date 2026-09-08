@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use ReflectionClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -76,9 +77,7 @@ class FormRequestV127Test extends TestCase
         StoreExpenseClaimRequest::class,
     ];
 
-    /**
-     * @dataProvider requestClassProvider
-     */
+    #[DataProvider('requestClassProvider')]
     public function test_request_class_is_well_formed(string $class): void
     {
         // 1) extends BaseFormRequest
@@ -158,7 +157,8 @@ class FormRequestV127Test extends TestCase
         $errors = $v->errors()->toArray();
         $this->assertArrayHasKey('name', $errors);
         $this->assertArrayHasKey('username', $errors);
-        $this->assertArrayHasKey('password', $errors);
+        $this->assertArrayNotHasKey('password', $errors);
+        $this->assertContains('nullable', $rules['password']);
     }
 
     public function test_store_employee_unique_username(): void

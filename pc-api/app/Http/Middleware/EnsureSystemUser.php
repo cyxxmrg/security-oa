@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * 用途:
  *   - 初始化向导 / 许可证管理 / 数据库重置 / 系统设置
- *   - 只有 db:seed 创建的 admin/<已脱敏> (user_type=system) 能进
+ *   - 只有 user_type=system 的系统管理账号能进
  */
 class EnsureSystemUser
 {

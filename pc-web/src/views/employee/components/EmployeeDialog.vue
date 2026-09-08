@@ -28,7 +28,7 @@
       <el-row :gutter="16">
         <el-col v-if="!target" :span="12">
           <el-form-item label="初始密码" prop="password">
-            <el-input v-model="form.password" type="password" placeholder="默认 123456" show-password />
+            <el-input v-model="form.password" type="password" placeholder="留空由系统生成一次性密码" show-password />
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -175,6 +175,13 @@ const localSkillIds = ref<(number | string)[]>([])
 const rules: FormRules = {
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   username: [{ required: true, message: '请输入登录账号', trigger: 'blur' }],
+  password: [{
+    validator: (_rule, value: string, callback) => {
+      if (!value || /^(?=.*[A-Za-z])(?=.*\d).{12,64}$/.test(value)) return callback()
+      callback(new Error('密码必须为 12-64 位且同时包含字母和数字'))
+    },
+    trigger: 'blur',
+  }],
   department_id: [{ required: true, message: '请选择部门', trigger: 'change' }],
   position_id: [{ required: true, message: '请选择岗位', trigger: 'change' }],
 }

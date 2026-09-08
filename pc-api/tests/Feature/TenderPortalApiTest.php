@@ -26,33 +26,38 @@ use Tests\TestCase;
  */
 class TenderPortalApiTest extends TestCase
 {
-    private string $routeFile;
+    /** @var list<string> */
+    private array $routeFiles;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->routeFile = __DIR__ . '/../../routes/api.php';
+        $this->routeFiles = [
+            __DIR__ . '/../../routes/api/purchase.php',
+            __DIR__ . '/../../routes/api/portal.php',
+        ];
     }
 
     private function getRoutes(): array
     {
-        $content = file_get_contents($this->routeFile);
         $routes = [];
-        // 兼容 'path' 是空 ('') 或 '/' 的情况 + 完整 namespace
-        if (preg_match_all("/Route::(get|post|put|delete)\(\s*('[^']*'|\"[^\\\"]*\")\s*,\s*\[((?:App\\\\Http\\\\Controllers\\\\Api\\\\)?[A-Za-z\\\\]+)::class,\s*'([^']+)'\]/", $content, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $r) {
-                $path = trim($r[2], "'\"");
-                $ctrl = $r[3];
-                // 自动补 App\\Http\\Controllers\\Api\\ 前缀
-                if (strpos($ctrl, 'App\\') !== 0) {
-                    $ctrl = 'App\\Http\\Controllers\\Api\\' . ltrim($ctrl, '\\');
+        foreach ($this->routeFiles as $routeFile) {
+            $content = file_get_contents($routeFile);
+            // 兼容 'path' 是空 ('') 或 '/' 的情况 + 完整 namespace
+            if (preg_match_all("/Route::(get|post|put|delete)\(\s*('[^']*'|\"[^\\\"]*\")\s*,\s*\[((?:App\\\\Http\\\\Controllers\\\\Api\\\\)?[A-Za-z\\\\]+)::class,\s*'([^']+)'\]/", $content, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $r) {
+                    $path = trim($r[2], "'\"");
+                    $ctrl = $r[3];
+                    if (strpos($ctrl, 'App\\') !== 0) {
+                        $ctrl = 'App\\Http\\Controllers\\Api\\' . ltrim($ctrl, '\\');
+                    }
+                    $routes[] = [
+                        'method' => strtoupper($r[1]),
+                        'path' => $path,
+                        'controller' => $ctrl,
+                        'action' => $r[4],
+                    ];
                 }
-                $routes[] = [
-                    'method' => strtoupper($r[1]),
-                    'path' => $path,
-                    'controller' => $ctrl,
-                    'action' => $r[4],
-                ];
             }
         }
         return $routes;
@@ -64,7 +69,7 @@ class TenderPortalApiTest extends TestCase
      */
     public function test_tender_routes_count(): void
     {
-        $content = file_get_contents($this->routeFile);
+        $content = implode("\n", array_map('file_get_contents', $this->routeFiles));
         $tender_refs = substr_count($content, 'TenderController::class');
         $portal_refs = substr_count($content, 'PortalController::class');
         $total = $tender_refs + $portal_refs;
@@ -109,7 +114,7 @@ class TenderPortalApiTest extends TestCase
      */
     public function test_portal_routes_no_auth(): void
     {
-        $content = file_get_contents($this->routeFile);
+        $content = file_get_contents(__DIR__ . '/../../routes/api/portal.php');
         // 找 portal 段 (允许缩进变化)
         $found = false;
         if (preg_match_all("/prefix\('portal'\)->group\(function\s*\(\)\s*\{(.*?)\n\}\);/s", $content, $matches)) {
@@ -130,7 +135,7 @@ class TenderPortalApiTest extends TestCase
      */
     public function test_portal_tender_token_endpoint(): void
     {
-        $content = file_get_contents($this->routeFile);
+        $content = file_get_contents(__DIR__ . '/../../routes/api/portal.php');
         // 直接查字符串 (路由在 prefix('portal')->group 内)
         $this->assertStringContainsString("Route::get('t/{token}'", $content, "portal/t/{token} 路由缺失");
         $this->assertStringContainsString("PortalController::class, 'tenderByToken'", $content, "tenderByToken action 缺失");

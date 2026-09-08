@@ -450,10 +450,10 @@ class AttendanceController extends Controller
     public function records(Request $request): JsonResponse
     {
         $query = AttendanceRecord::with(['user', 'project']);
-        if ($this->canManageAttendance($request)) {
+        if ($this->canManageAttendance($request, 'attendance.report')) {
             if ($request->filled('user_id')) $query->where('user_id', $request->user_id);
         } else {
-            $query->where('user_id', Auth::id());
+            $query->where('user_id', $request->user()->id);
         }
         if ($request->filled('start_date')) $query->where('date', '>=', $request->start_date);
         if ($request->filled('end_date')) $query->where('date', '<=', $request->end_date);
@@ -466,7 +466,9 @@ class AttendanceController extends Controller
     public function leaveRequests(Request $request): JsonResponse
     {
         $query = LeaveRequest::with(['user', 'approver']);
-        if (!$this->canManageLeave($request)) $query->where('user_id', Auth::id());
+        if (!$this->canManageAttendance($request, 'attendance.leave')) {
+            $query->where('user_id', $request->user()->id);
+        }
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('type')) $query->where('type', $request->type);
 
@@ -567,7 +569,7 @@ class AttendanceController extends Controller
         if ((int) $leave->user_id === (int) Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的请假申请'], 403);
         }
-        if (!Auth::user()->hasActivePermissionTo('attendance.leave')) {
+        if (!$this->canManageAttendance($request, 'attendance.leave')) {
             return response()->json(['code' => 1011, 'message' => '当前账号没有考勤审批权限'], 403);
         }
         return DB::transaction(function () use ($request, $leave) {
@@ -628,7 +630,9 @@ class AttendanceController extends Controller
     public function overtimeRequests(Request $request): JsonResponse
     {
         $query = OvertimeRequest::with(['user', 'approver']);
-        if (!$this->canManageOvertime($request)) $query->where('user_id', Auth::id());
+        if (!$this->canManageAttendance($request, 'attendance.overtime')) {
+            $query->where('user_id', $request->user()->id);
+        }
         if ($request->filled('status')) $query->where('status', $request->status);
         return response()->json(['code' => 0, 'data' => $query->orderBy('created_at', 'desc')->paginate($this->perPage($request))]);
     }
@@ -721,7 +725,7 @@ class AttendanceController extends Controller
         if ((int) $overtime->user_id === (int) Auth::id()) {
             return response()->json(['code' => 1010, 'message' => '不能审批自己的加班申请'], 403);
         }
-        if (!Auth::user()->hasActivePermissionTo('attendance.overtime')) {
+        if (!$this->canManageAttendance($request, 'attendance.overtime')) {
             return response()->json(['code' => 1011, 'message' => '当前账号没有考勤审批权限'], 403);
         }
         return DB::transaction(function () use ($request, $overtime) {
@@ -914,41 +918,15 @@ class AttendanceController extends Controller
         ]);
     }
 
-    private function canManageAttendance(Request $request): bool
+    private function canManageAttendance(Request $request, string $permission): bool
     {
         $user = $request->user();
         if (!$user) return false;
         if (($user->user_type ?? 'business') === 'system') return true;
         try {
-            return $user->hasActivePermissionTo('attendance.report');
+            return $user->hasActivePermissionTo($permission);
         } catch (\Throwable $e) {
-            Log::warning('attendance scope check failed: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    private function canManageLeave(Request $request): bool
-    {
-        $user = $request->user();
-        if (!$user) return false;
-        if (($user->user_type ?? 'business') === 'system') return true;
-        try {
-            return $user->hasActivePermissionTo('attendance.leave');
-        } catch (\Throwable $e) {
-            Log::warning('leave scope check failed: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    private function canManageOvertime(Request $request): bool
-    {
-        $user = $request->user();
-        if (!$user) return false;
-        if (($user->user_type ?? 'business') === 'system') return true;
-        try {
-            return $user->hasActivePermissionTo('attendance.overtime');
-        } catch (\Throwable $e) {
-            Log::warning('overtime scope check failed: ' . $e->getMessage());
+            Log::warning('attendance permission check failed: ' . $e->getMessage());
             return false;
         }
     }

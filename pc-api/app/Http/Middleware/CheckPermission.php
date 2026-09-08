@@ -52,8 +52,8 @@ class CheckPermission
         if (in_array('admin', $userRoles, true)) {
             return $next($request);
         }
-        // 2) 解析候选权限点 (支持 "a|b" OR 语法 与 "module.*" 通配)
-        // 注意: 实际请求通过 sanctum guard, 但权限注册在 web guard, 必须显式指定
+        // 2) 解析候选权限点 — 支持 "a|b" 任一权限语义 (与项目既有路由声明保持一致) 与 "module.*" 通配
+        //    注意: 实际请求通过 sanctum guard, 但权限注册在 web guard, 必须显式指定
         $candidates = $this->resolveCandidates($permission);
         if (empty($candidates)) {
             Log::warning("CheckPermission: 权限 {$permission} 未在 DB 注册, 拒绝访问");

@@ -19,7 +19,7 @@ class StoreEmployeeRequest extends BaseFormRequest
             'username'      => ['required', 'string', 'min:2', 'max:64', 'unique:users,username'],
             'phone'         => ['nullable', 'string', 'max:20', 'unique:users,phone'],
             'email'         => ['nullable', 'email', 'max:100', 'unique:users,email'],
-            'password'      => ['nullable', 'string', 'min:6', 'max:64'],  // V1.2.10 改可选, Controller 默认 123456
+            'password'      => ['nullable', 'string', 'min:12', 'max:64', 'regex:/^(?=.*[A-Za-z])(?=.*\d).+$/'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'position_id'   => ['nullable', 'integer', 'exists:positions,id'],
             'gender'        => ['nullable', 'string', 'in:male,female,other'],
@@ -37,7 +37,8 @@ class StoreEmployeeRequest extends BaseFormRequest
             'username.unique'       => '工号已存在',
             'phone.unique'          => '手机号已被占用',
             'email.unique'          => '邮箱已被占用',
-            'password.min'          => '密码至少 6 位',
+            'password.min'          => '密码至少 12 位',
+            'password.regex'        => '密码必须同时包含字母和数字',
             'department_id.exists'  => '部门不存在',
             'position_id.exists'    => '岗位不存在',
             'role_id.exists'        => '角色不存在',

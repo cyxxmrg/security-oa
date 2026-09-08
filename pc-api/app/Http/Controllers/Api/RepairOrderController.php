@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\RepairOrderStatus;
 use App\Http\Controllers\Controller;
+use App\Support\PrivateFileStorage;
 use App\Models\RepairAttachment;
 use App\Models\RepairMethod;
 use App\Models\RepairOrder;

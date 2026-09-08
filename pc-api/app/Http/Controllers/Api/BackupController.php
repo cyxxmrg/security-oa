@@ -18,6 +18,15 @@ class BackupController extends Controller
     {
         // 授权由路由中间件负责；构造函数必须兼容 CLI 命令（如 route:list）。
         $this->backupDir = storage_path('app/backups');
+        // Keep the controller-level guard, but defer it until request handling so
+        // route discovery and cache commands can instantiate the controller.
+        $this->middleware(function (Request $request, \Closure $next) {
+            if (!$request->user() || $request->user()->user_type !== 'system') {
+                abort(403, '备份管理仅限 system 账号');
+            }
+
+            return $next($request);
+        });
     }
 
     public function index(): JsonResponse
@@ -89,6 +98,11 @@ class BackupController extends Controller
 
     public function runDue(Request $request): JsonResponse
     {
+        $expectedToken = $this->settingString('backup_cron_token', '');
+        if ($expectedToken !== '' && !hash_equals($expectedToken, (string) $request->query('token', ''))) {
+            return response()->json(['code' => 403, 'message' => '备份任务 token 不正确'], 403);
+        }
+
         $config = $this->scheduleConfig();
         if (!$config['enabled']) {
             return response()->json(['code' => 0, 'message' => '自动备份未启用', 'data' => ['ran' => false, 'config' => $config]]);

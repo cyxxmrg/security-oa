@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\RoleController;
 use Illuminate\Support\Facades\Route;
 
 // ========== 员工管理 (V1.2.4u: system + 业务用户都能进) ==========
-Route::prefix('employees')->middleware(['auth:sanctum', 'ensure_business'])->group(function () {
+Route::prefix('employees')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.view'])->group(function () {
     Route::get('/', [EmployeeController::class, 'index'])->withoutMiddleware('ensure_business');
     Route::post('/', [EmployeeController::class, 'store'])->middleware('permission:employee.create');
 
@@ -42,27 +42,30 @@ Route::prefix('employees')->middleware(['auth:sanctum', 'ensure_business'])->gro
 });
 
 // ========== 员工入职档案 ==========
-Route::prefix('employee-onboardings')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.create'])->group(function () {
+// 合并: 本地 employee.create 与远端 08-04 细分 employee.onboarding.manage (均已注册) → OR 兼容两套授权
+Route::prefix('employee-onboardings')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.onboarding.manage|employee.create'])->group(function () {
     Route::get('/', [EmployeeOnboardingController::class, 'index']);
-    Route::post('/', [EmployeeOnboardingController::class, 'store'])->middleware('permission:employee.create');
+    Route::post('/', [EmployeeOnboardingController::class, 'store'])->middleware('permission:employee.onboarding.manage|employee.create');
     Route::get('{onboarding}', [EmployeeOnboardingController::class, 'show']);
-    Route::put('{onboarding}', [EmployeeOnboardingController::class, 'update'])->middleware('permission:employee.create');
-    Route::delete('{onboarding}', [EmployeeOnboardingController::class, 'destroy'])->middleware('permission:employee.create');
+    Route::put('{onboarding}', [EmployeeOnboardingController::class, 'update'])->middleware('permission:employee.onboarding.manage|employee.create');
+    Route::delete('{onboarding}', [EmployeeOnboardingController::class, 'destroy'])->middleware('permission:employee.onboarding.manage|employee.create');
 });
 
 // ========== 员工离职记录 ==========
-Route::prefix('employee-resignations')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.create'])->group(function () {
+// 合并: 本地 employee.create(写) + approval.mine(审批) 与远端 employee.resignation.{view,manage,approve,complete} 细分 → OR 并集保可达
+Route::prefix('employee-resignations')->middleware(['auth:sanctum', 'ensure_business', 'permission:employee.resignation.view|employee.create'])->group(function () {
     Route::get('/', [EmployeeResignationController::class, 'index']);
-    Route::post('/', [EmployeeResignationController::class, 'store'])->middleware('permission:employee.create');
+    Route::post('/', [EmployeeResignationController::class, 'store'])->middleware('permission:employee.resignation.manage|employee.create');
     Route::get('settlement-preview', [EmployeeResignationController::class, 'settlementPreview']);
     Route::get('{resignation}', [EmployeeResignationController::class, 'show']);
-    Route::put('{resignation}', [EmployeeResignationController::class, 'update'])->middleware('permission:employee.create');
-    Route::post('{resignation}/submit', [EmployeeResignationController::class, 'submit'])->middleware('permission:employee.create');
+    Route::put('{resignation}', [EmployeeResignationController::class, 'update'])->middleware('permission:employee.resignation.manage|employee.create');
+    Route::post('{resignation}/submit', [EmployeeResignationController::class, 'submit'])->middleware('permission:employee.resignation.manage|employee.create');
+    // 审批: 撤销前缀读写门(审批人可能只持 approval.mine / resignation.approve), 单独放行
     Route::post('{resignation}/approve', [EmployeeResignationController::class, 'approve'])
-        ->withoutMiddleware('permission:employee.create')
-        ->middleware('permission:approval.mine');
-    Route::post('{resignation}/cancel', [EmployeeResignationController::class, 'cancel'])->middleware('permission:employee.create');
-    Route::post('{resignation}/complete', [EmployeeResignationController::class, 'complete'])->middleware('permission:employee.create');
+        ->withoutMiddleware('permission:employee.resignation.view|employee.create')
+        ->middleware('permission:employee.resignation.approve|approval.mine');
+    Route::post('{resignation}/cancel', [EmployeeResignationController::class, 'cancel'])->middleware('permission:employee.resignation.manage|employee.create');
+    Route::post('{resignation}/complete', [EmployeeResignationController::class, 'complete'])->middleware('permission:employee.resignation.complete|employee.create');
 });
 
 // ========== 用户管理 (前端 /api/users 别名) ==========

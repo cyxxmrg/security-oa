@@ -16,7 +16,9 @@ use App\Models\WorkOrder;
 use App\Models\ExternalConstructionWork;
 use App\Models\Project;
 use App\Services\PurchaseFlowService;
+// 合并两侧 import: HEAD 需要 AuthScope(assertSourceAccess), origin/main 需要 PrivateFileStorage(私有附件下载)
 use App\Support\AuthScope;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -328,18 +330,15 @@ class PurchaseFlowController extends Controller
     }
 
     /** 下载合同附件 */
-    public function downloadContractFile(int $id, int $fid): StreamedResponse|JsonResponse
+    public function downloadContractFile(int $id, int $fid)
     {
+        // 合并说明: 保留 HEAD 的"合同必须存在"守卫 + origin/main 的 PrivateFileStorage 私有下载
         PurchaseContract::findOrFail($id);
         $file = PurchaseContractFile::where('contract_id', $id)->findOrFail($fid);
-        return $this->downloadPurchaseFile($file->file_path, $file->file_name, $file->mime);
-    }
-
-    /** 删除合同附件 */
-    public function deleteContractFile(int $id, int $fid, Request $request): JsonResponse
-    {
-        $this->flow->deleteContractFile($id, $fid, $request->user());
-        return response()->json(['code' => 0, 'message' => '附件已删除']);
+        return PrivateFileStorage::download($file->file_path, $file->file_name, [
+            'Content-Type' => $file->mime ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /** 列出合同清单 */

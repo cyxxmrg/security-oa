@@ -1,8 +1,6 @@
 <?php
 
-namespace Tests\Feature;
-
-use PHPUnit\Framework\TestCase;
+namespace Tests\E2E;
 
 /**
  * V1.2.7 P1 - 排班管理 Feature 测试
@@ -14,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  *  4. 智能排班建议 (smartSuggest)
  *  5. 排班统计 (stats)
  */
-class ScheduleApiTest extends TestCase
+class ScheduleApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
@@ -24,6 +22,7 @@ class ScheduleApiTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        self::requireMutationOptIn();
         try {
             $r = new \Redis();
             $r->connect('127.0.0.1', 6379);

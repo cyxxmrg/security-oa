@@ -9,18 +9,21 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
- * P1-7 修复: 供应商门户短期访问 token 管理
+ * P1-7 修复: 供应商门户短期访问 token 管理。
  *
  * 设计目标:
- *  - 用 token 替代 "供应商 portal_supplier_id + 手机号后 4 位" 的单因子弱认证
- *  - token 由 mobile (phone 后 4 位) 签发, 绑定到 supplier_id
- *  - 30 分钟 TTL, 绑定供应商和手机号后 4 位
- *  - 未通过 token + 手机号后 4 位校验时不返回供应商业务数据
+ *  - 用短期 token 替代 "供应商 portal_supplier_id + 手机号后 4 位" 的单因子弱认证
+ *  - token 由 mobile (phone 后 4 位) 签发, 绑定 supplier_id 与手机号后 4 位
+ *  - 服务端仅保存 token 的 SHA-256 摘要 (不落明文), phone_suffix 仅存 HMAC 摘要
+ *  - 30 分钟 TTL, used_at 用于主动撤销 (一旦消费/撤销即失效)
+ *  - 不暴露 supplier_id 给未认证的查询 (supplierInfo / invitations);
+ *    未通过 token + 手机号后 4 位校验时不返回供应商业务数据
  *
  * 关键方法:
  *  - issue(Supplier, phoneSuffix): 生成并持久化短期 token, 返回明文 token + 元数据
- *  - verify(Request, supplierId, phoneSuffix): 保留兼容，校验并消费 token
- *  - checkAccess(Request, supplierId, phoneSuffix): 校验短期会话，不消费 token
+ *  - verify(Request, supplierId, phoneSuffix): 校验 token 及其绑定供应商, 校验通过即消费 (标记 used_at)
+ *  - checkAccess(Request, supplierId, phoneSuffix): 校验短期会话, 不消费 token (门户查询/投标/附件操作)
+ *  - resolveAccess(Request): 从请求 (Bearer / access_token / 兼容请求头) 解析供应商身份
  */
 class PortalInviteService
 {
@@ -39,7 +42,7 @@ class PortalInviteService
 
         $invite = TenderPortalInvite::create([
             'supplier_id'       => $supplier->id,
-            'token'             => $plain,
+            'token'             => $this->tokenDigest($plain),
             'phone_suffix_hash' => $hash,
             'ip'                => $request?->ip(),
             'user_agent'        => $request ? substr((string) $request->userAgent(), 0, 255) : null,
@@ -55,7 +58,7 @@ class PortalInviteService
     }
 
     /**
-     * 校验 token + 烧掉 (consume-once)
+     * 校验短期访问 token
      *
      * 校验失败返回 null; 成功返回 Supplier 实例, 并已标记 used_at。
      *
@@ -64,12 +67,12 @@ class PortalInviteService
      */
     public function verify(Request $request, string $supplierId, string $phoneSuffix): ?Supplier
     {
-        $token = (string) ($request->input('access_token') ?: $request->header('X-Portal-Access-Token', ''));
+        $token = $this->tokenFromRequest($request);
         if ($token === '') {
             return null;
         }
 
-        $invite = TenderPortalInvite::where('token', $token)
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
             ->whereNull('used_at')
             ->where('expires_at', '>', now())
             ->first();
@@ -88,9 +91,6 @@ class PortalInviteService
             return null;
         }
 
-        // 标记烧掉
-        $invite->forceFill(['used_at' => now()])->save();
-
         return Supplier::find($invite->supplier_id);
     }
 
@@ -101,12 +101,12 @@ class PortalInviteService
      */
     public function checkAccess(Request $request, string $supplierId, string $phoneSuffix = ''): ?Supplier
     {
-        $token = (string) ($request->input('access_token') ?: $request->header('X-Portal-Access-Token', ''));
+        $token = $this->tokenFromRequest($request);
         if ($token === '') {
             return null;
         }
 
-        $invite = TenderPortalInvite::where('token', $token)
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
             ->whereNull('used_at')
             ->where('expires_at', '>', now())
             ->first();
@@ -124,6 +124,21 @@ class PortalInviteService
         return Supplier::find($invite->supplier_id);
     }
 
+    public function resolveAccess(Request $request): ?Supplier
+    {
+        $token = $this->tokenFromRequest($request);
+        if ($token === '') {
+            return null;
+        }
+
+        $invite = TenderPortalInvite::where('token', $this->tokenDigest($token))
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        return $invite ? Supplier::find($invite->supplier_id) : null;
+    }
+
     /**
      * 暴露给前端: 供应商凭手机号 + 后 4 位申请 token
      *
@@ -131,20 +146,17 @@ class PortalInviteService
      *  - supplier 表里的 phone 后 4 位 与 入参 phoneSuffix 一致 → 签发 token
      *  - 失败: 返回 null (调用方 abort 401)
      */
-    public function issueByPhone(string $phone, string $phoneSuffix, ?Request $request = null): ?array
+    public function issueByCredentials(string $phone, string $supplierCode, ?Request $request = null): ?array
     {
-        if (!preg_match('/^[0-9]{4}$/', $phoneSuffix)) {
-            return null;
-        }
         $supplier = Supplier::where('phone', $phone)->first();
-        if (!$supplier) {
+        if (!$supplier || $supplierCode === '' || !hash_equals((string) $supplier->code, $supplierCode)) {
             return null;
         }
         $phoneDigits = preg_replace('/[^0-9]/', '', (string) $supplier->phone);
-        if ($phoneDigits === '' || substr($phoneDigits, -4) !== $phoneSuffix) {
+        if (strlen($phoneDigits) < 4) {
             return null;
         }
-        return $this->issue($supplier, $phoneSuffix, $request);
+        return $this->issue($supplier, substr($phoneDigits, -4), $request) + ['supplier_id' => $supplier->id];
     }
 
     /**
@@ -153,5 +165,19 @@ class PortalInviteService
     private function hashSuffix(string $suffix): string
     {
         return hash_hmac('sha256', $suffix, (string) config('app.key', 'oa-portal-salt-fallback'));
+    }
+
+    private function tokenDigest(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    protected function tokenFromRequest(Request $request): string
+    {
+        // Bearer > body access_token (老客户端兼容, 避免 token 进 URL)
+        // > X-Portal-Access-Token 请求头 (P1-7 客户端兼容)
+        return (string) ($request->bearerToken()
+            ?: $request->input('access_token', '')
+            ?: $request->header('X-Portal-Access-Token', ''));
     }
 }

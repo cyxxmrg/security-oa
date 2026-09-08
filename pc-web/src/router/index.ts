@@ -711,7 +711,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // ====== V1.1 admin 隔离: 按 user_type 分流 ======
-  // system 用户 (system/<已脱敏>) 只能进系统管理页, 不能进业务页
+  // system 用户只能进系统管理页, 不能进业务页
   // business 用户 (manager/user/finance) 只能进业务页, 不能进系统管理页
   const userType = (userStore.userInfo as Record<string, unknown>)?.user_type ?? 'business'
   const path = to.path

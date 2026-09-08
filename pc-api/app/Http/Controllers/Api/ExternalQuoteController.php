@@ -7,6 +7,7 @@ use App\Models\ExternalQuote;
 use App\Models\ExternalQuoteRequest;
 use App\Services\ExternalQuoteService;
 use App\Services\FileUploadService;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -193,31 +194,28 @@ class ExternalQuoteController extends Controller
         $request->validate([
             'file' => 'required|file|max:51200|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,zip,rar',
         ]);
-        $result = $uploader->store($request, 'file', [
-            'disk'         => 'attachments',
-            'subdir'       => 'external-quotes/_draft/' . $request->user()->id . '/' . date('Ymd'),
-            'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'dwg', 'zip', 'rar'],
-            'allowed_mime' => [
-                'application/pdf', 'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'application/vnd.ms-excel',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'image/jpeg', 'image/png', 'application/acad', 'application/dwg', 'image/vnd.dwg',
-                'application/zip', 'application/x-rar-compressed',
-            ],
-            'max_size'     => 51200,
-        ]);
+        $file = $request->file('file');
+        $ext  = strtolower($file->getClientOriginalExtension());
+        $dir  = 'private/external-quotes/_draft/' . date('Ymd');
+        $path = $file->storeAs($dir, uniqid('att_') . ($ext ? ".{$ext}" : ''), 'local');
 
         return response()->json(['code' => 0, 'message' => '已上传', 'data' => [
             'id'            => uniqid('f_'),
-            'name'          => $result['original_name'],
-            'original_name' => $result['original_name'],
-            'path'          => $result['path'],
-            'url'           => null,
-            'size'          => $result['size'],
-            'mime_type'     => $result['mime'],
+            'name'          => $file->getClientOriginalName(),
+            'original_name' => $file->getClientOriginalName(),
+            'path'          => $path,
+            'url'           => '/api/external-quotes/files/download?path=' . rawurlencode($path),
+            'size'          => $file->getSize(),
+            'mime_type'     => $file->getMimeType(),
             'uploaded_at'   => now()->toIso8601String(),
         ]]);
+    }
+
+    public function downloadDraftFile(Request $request)
+    {
+        $path = (string) $request->query('path', '');
+        abort_unless(str_starts_with($path, 'private/external-quotes/_draft/'), 404);
+        return PrivateFileStorage::download($path, basename($path), ['X-Content-Type-Options' => 'nosniff']);
     }
 
     /** 6. 该请求下的所有报价 */

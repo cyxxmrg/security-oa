@@ -169,7 +169,7 @@ Route::prefix('repair-orders/{repairOrderId}/progress-logs')->whereNumber('repai
     Route::delete('{id}', [RepairProgressLogController::class, 'destroy'])->whereNumber('id')->middleware('permission:repair.delete');
 });
 
-// 维修附件
+// 维修附件 (合并: 远端无子权限/无命名路由; 采用 HEAD 更严格子权限, 且 RepairOrderController 以 route('repair.attachments.download') 生成 file_url, 必须保留 ->name)
 Route::prefix('repair-orders/{repairOrderId}/attachments')->whereNumber('repairOrderId')->middleware(['auth:sanctum', 'ensure_business', 'permission:repair.view'])->group(function () {
     Route::get('/', [RepairOrderController::class, 'listAttachments']);
     Route::post('/', [RepairOrderController::class, 'uploadAttachment'])->middleware('permission:repair.edit');

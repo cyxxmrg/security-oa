@@ -3,6 +3,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { openAuthenticatedFile } from '@/utils/privateFile'
 import { tender } from '@/api/tender'
 import type {
   TenderProject, TenderBid, TenderAttachment, TenderDeposit, TenderDepositRule,
@@ -160,8 +161,9 @@ export function useTenderDetail() {
   }
 
   // ============== 附件 ==============
-  const openFile = (att: TenderAttachment) => {
-    if (att.url) window.open(att.url, '_blank')
+  const openFile = async (att: TenderAttachment) => {
+    if (!att.url) return
+    try { await openAuthenticatedFile(att.url, att.file_name) } catch { ElMessage.error('附件打开失败') }
   }
 
   const beforeUpload = (file: File) => {

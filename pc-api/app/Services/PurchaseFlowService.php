@@ -1219,6 +1219,7 @@ class PurchaseFlowService
             $contract = PurchaseContract::lockForUpdate()->findOrFail($contractId);
             $this->assertContractEditable($contract);
             $f = PurchaseContractFile::where('contract_id', $contractId)->where('id', $fileId)->lockForUpdate()->firstOrFail();
+            \App\Support\PrivateFileStorage::delete($f->file_path);
             $label = $f->file_name;
             $f->delete();
             Storage::disk('attachments')->delete($f->file_path);

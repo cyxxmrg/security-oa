@@ -3,10 +3,10 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { openAuthenticatedFile } from '@/utils/privateFile'
 import { purchase } from '@/api/modules'
 import { unwrapList } from '@/utils/response'
 import { purchaseFlow } from '@/api/purchase-flow'
-import { get } from '@/utils/request'
 import type { UploadRequestOptions } from 'element-plus'
 
 // 采购订单
@@ -303,30 +303,15 @@ export function usePurchaseDetail() {
       await loadContractFiles()
     } catch { /* 拦截器已提示 */ }
   }
-  const handlePreviewFile = (row: ContractFile) => {
-    void openPurchaseFile(row, false)
+  const handlePreviewFile = async (row: ContractFile) => {
+    try { await openAuthenticatedFile(row.url, row.name) } catch { ElMessage.error('附件打开失败') }
   }
   const handleDownloadFile = async (row: ContractFile) => {
     await openPurchaseFile(row, true)
   }
   const openPurchaseFile = async (row: ContractFile | PaymentVoucher, download: boolean) => {
     try {
-      const responseData = await get(row.url, undefined, { responseType: 'blob' })
-      const blob = responseData instanceof Blob ? responseData : new Blob([responseData as BlobPart])
-      const objectUrl = URL.createObjectURL(blob)
-      if (download) {
-        const anchor = document.createElement('a')
-        anchor.href = objectUrl
-        anchor.download = row.name
-        document.body.appendChild(anchor)
-        anchor.click()
-        document.body.removeChild(anchor)
-        URL.revokeObjectURL(objectUrl)
-      } else {
-        const previewWindow = window.open(objectUrl, '_blank')
-        if (!previewWindow) ElMessage.warning('浏览器拦截了预览窗口，请允许弹窗后重试')
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
-      }
+      await openAuthenticatedFile(row.url, row.name, download)
     } catch { ElMessage.error('下载失败') }
   }
   const handleDeleteContractFile = async (row: ContractFile) => {
@@ -390,8 +375,10 @@ export function usePurchaseDetail() {
       await loadPayments()
     } catch { /* 拦截器已提示 */ }
   }
-  const handlePreviewVoucher = (row: PaymentVoucher) => { void openPurchaseFile(row, false) }
-  const handleDownloadVoucher = (row: PaymentVoucher) => { void openPurchaseFile(row, true) }
+  const handlePreviewVoucher = async (row: PaymentVoucher) => {
+    try { await openAuthenticatedFile(row.url, row.name) } catch { ElMessage.error('凭证打开失败') }
+  }
+  const handleDownloadVoucher = (row: PaymentVoucher) => handleDownloadFile(row)
 
   // ========== Tab 4: 发货 ==========
   const loadingShipping = ref(false)

@@ -9,6 +9,7 @@ use App\Models\TenderAttachment;
 use App\Models\Supplier;
 use App\Services\FileUploadService;
 use App\Services\PortalInviteService;
+use App\Support\PrivateFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -55,7 +56,9 @@ class PortalController extends Controller
             'open_at'         => $t->open_at?->toIso8601String(),
             'project'         => $t->project ? ['id' => $t->project->id, 'name' => $t->project->name] : null,
             'attachments'     => $atts->map(fn($a) => [
-                'id' => $a->id, 'name' => $a->file_name, 'url' => $a->url,
+                'id' => $a->id,
+                'name' => $a->file_name,
+                'url' => url("/api/portal/t/{$token}/attachments/{$a->id}"),
                 'size' => $a->file_size, 'mime' => $a->mime_type, 'category' => $a->category,
             ]),
             'public_token'    => $t->public_token,
@@ -180,12 +183,15 @@ class PortalController extends Controller
             return response()->json(['code' => 1003, 'message' => '该项目当前不接受投标附件'], 422);
         }
         $bid = $t->bids()->where('id', $data['bid_id'])->where('supplier_id', $data['supplier_id'])->firstOrFail();
+        // 合并说明 (HEAD + origin/main):
+        //  - 保留本地 FileUploadService 统一校验 (扩展名/MIME/大小/sha256) 与"定标/撤回后禁传"守卫
+        //  - 落盘改走 origin/main 的私有附件方案: local 盘 storage/app/private/..., 由 PrivateFileStorage 受控下载
         if (in_array($bid->status, ['awarded', 'rejected', 'withdrawn'], true)) {
             return response()->json(['code' => 1003, 'message' => '该投标已结束，不能继续上传附件'], 422);
         }
         $result = $uploader->store($request, 'file', [
-            'disk'         => 'attachments',
-            'subdir'       => "tenders/{$t->id}/bids/{$bid->id}",
+            'disk'         => 'local',
+            'subdir'       => "private/tenders/{$t->id}/bids/{$bid->id}",
             'allowed_ext'  => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar'],
             'allowed_mime' => [
                 'application/pdf', 'application/msword',
@@ -210,16 +216,31 @@ class PortalController extends Controller
         return response()->json(['code' => 0, 'data' => $att]);
     }
 
+    public function downloadPublicAttachment(string $token, int $attachment)
+    {
+        $tender = TenderProject::where('public_token', $token)->firstOrFail();
+        abort_unless(in_array($tender->status, ['bidding', 'published', 'evaluating', 'awarded', 'closed'], true), 403);
+        $file = TenderAttachment::where('tender_project_id', $tender->id)
+            ->whereNull('tender_bid_id')
+            ->where('visibility', 'public')
+            ->findOrFail($attachment);
+
+        return PrivateFileStorage::download($file->file_path, $file->file_name, [
+            'Content-Type' => $file->mime_type ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     /**
-     * P1-7 修复: 双因子认证 (一次性 token + 手机号后 4 位)
+     * 短期 token + 手机号后 4 位的供应商访问校验。
      *
      *  - 前端必须先用 supplierInfo / invitations 拿到 access_token (签发时校验后 4 位)
      *  - 投标/上传/查我方投标 都必须同时带 access_token + phone_suffix
-     *  - token 在有效期内可复用，但必须绑定 supplier_id + 手机号后 4 位
+     *  - token 默认 30 分钟内可复用，但必须绑定 supplier_id + 手机号后 4 位; 可通过 used_at 主动撤销
      */
     private function verifySupplierAccess(Request $request, int $supplierId): ?JsonResponse
     {
-        $suffix = (string) $request->input('phone_suffix', '');
+        $suffix = (string) ($request->header('X-Portal-Phone-Suffix') ?: $request->input('phone_suffix', ''));
         if (!preg_match('/^[0-9]{4}$/', $suffix)) {
             return response()->json(['code' => 1004, 'message' => '请提供供应商预留手机号后 4 位'], 422);
         }
@@ -229,7 +250,10 @@ class PortalController extends Controller
             return response()->json(['code' => 1005, 'message' => '供应商身份无效'], 404);
         }
 
-        $token = (string) ($request->input('access_token') ?: $request->header('X-Portal-Access-Token', ''));
+        // 兼容三种携带方式: Authorization: Bearer (新前端) / body access_token / X-Portal-Access-Token (老前端)
+        $token = (string) ($request->bearerToken()
+            ?: $request->input('access_token')
+            ?: $request->header('X-Portal-Access-Token', ''));
         if ($token === '') {
             return response()->json(['code' => 1007, 'message' => '缺少 access_token, 请先调用 access 端点获取'], 401);
         }
@@ -245,20 +269,28 @@ class PortalController extends Controller
     }
 
     /**
-     * P1-7 修复: 供应商凭手机号 + 后 4 位申请一次性 access_token
+     * 供应商凭手机号申请短期 access_token (合并两侧签发方式):
+     *   - origin/main: phone + supplier_code (供应商编号)
+     *   - HEAD:        phone + phone_suffix (手机号后 4 位) — 老客户端兼容
      *
-     * POST /api/portal/access  body: { phone, phone_suffix }
-     * 返回: { access_token, expires_in, ttl_minutes }
+     * POST /api/portal/access  body: { phone, supplier_code | phone_suffix }
+     * 返回: { access_token, supplier_id, expires_in, expires_at, ttl_minutes }
      */
     public function access(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'phone'        => 'required|string|max:32',
-            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+            'phone'         => 'required|string|max:32',
+            'supplier_code' => 'nullable|string|max:64',
+            'phone_suffix'  => 'nullable|string|size:4|regex:/^[0-9]+$/',
         ]);
+        if (empty($data['supplier_code']) && empty($data['phone_suffix'])) {
+            return response()->json(['code' => 1010, 'message' => '请提供 supplier_code 或手机号后 4 位'], 422);
+        }
         /** @var PortalInviteService $inviter */
         $inviter = app(PortalInviteService::class);
-        $issued = $inviter->issueByPhone($data['phone'], $data['phone_suffix'], $request);
+        $issued = !empty($data['supplier_code'])
+            ? $inviter->issueByCredentials($data['phone'], $data['supplier_code'], $request)
+            : $inviter->issueByPhone($data['phone'], $data['phone_suffix'], $request);
         if (!$issued) {
             return response()->json(['code' => 1010, 'message' => '供应商身份校验失败'], 403);
         }
@@ -266,7 +298,7 @@ class PortalController extends Controller
             'code' => 0,
             'data' => [
                 'access_token' => $issued['token'],
-                'supplier_id'   => $issued['supplier_id'],
+                'supplier_id'  => $issued['supplier_id'] ?? null,
                 'expires_in'   => $issued['ttl_minutes'] * 60,
                 'expires_at'   => $issued['expires_at']->toIso8601String(),
                 'ttl_minutes'  => $issued['ttl_minutes'],
@@ -281,16 +313,22 @@ class PortalController extends Controller
      */
     public function invitations(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'phone'        => 'required|string|max:32',
-            'supplier_id'  => 'required|integer|exists:suppliers,id',
-            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
-        ]);
-        $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
-        if ($verify) return $verify;
-        $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
+        // 双模式鉴权 (HEAD + origin/main 并集):
+        //  - origin/main: 仅凭短期 access_token 经 resolveAccess 确认供应商 (不要求每次带 supplier_id/phone)
+        //  - HEAD: 携带 supplier_id + phone + phone_suffix 走 verifySupplierAccess (兼容老客户端)
+        $supplier = app(PortalInviteService::class)->resolveAccess($request);
         if (!$supplier) {
-            return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
+            $data = $request->validate([
+                'phone'        => 'required|string|max:32',
+                'supplier_id'  => 'required|integer|exists:suppliers,id',
+                'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+            ]);
+            $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
+            if ($verify) return $verify;
+            $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
+            if (!$supplier) {
+                return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
+            }
         }
         // 该供应商被邀请的招标 (在 invited_supplier_ids 数组中)
         $list = TenderProject::allData()->whereJsonContains('invited_supplier_ids', $supplier->id)
@@ -323,16 +361,20 @@ class PortalController extends Controller
      */
     public function supplierInfo(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'phone'        => 'required|string|max:32',
-            'supplier_id'  => 'required|integer|exists:suppliers,id',
-            'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
-        ]);
-        $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
-        if ($verify) return $verify;
-        $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
+        // 双模式鉴权 (HEAD + origin/main 并集), 同 invitations()
+        $supplier = app(PortalInviteService::class)->resolveAccess($request);
         if (!$supplier) {
-            return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
+            $data = $request->validate([
+                'phone'        => 'required|string|max:32',
+                'supplier_id'  => 'required|integer|exists:suppliers,id',
+                'phone_suffix' => 'required|string|size:4|regex:/^[0-9]+$/',
+            ]);
+            $verify = $this->verifySupplierAccess($request, (int) $data['supplier_id']);
+            if ($verify) return $verify;
+            $supplier = Supplier::whereKey($data['supplier_id'])->where('phone', $data['phone'])->first();
+            if (!$supplier) {
+                return response()->json(['code' => 1006, 'message' => '供应商身份校验失败'], 403);
+            }
         }
 
         // 历史投标 (脱敏: 只返回 id/status/created_at, 不返回 total_amount/tender_id)

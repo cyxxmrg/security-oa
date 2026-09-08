@@ -22,6 +22,7 @@ class EmployeeOnboarding extends Model
         'hire_date' => 'date', 'probation_end_date' => 'date',
         'contract_start' => 'date', 'contract_end' => 'date',
         'driver_license_expire' => 'date',
+        'id_card_no' => 'encrypted',
     ];
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
     public function department(): BelongsTo { return $this->belongsTo(Department::class); }

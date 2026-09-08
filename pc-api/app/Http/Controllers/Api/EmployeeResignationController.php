@@ -210,6 +210,11 @@ class EmployeeResignationController extends Controller
      */
     public function approve(EmployeeResignation $resignation): JsonResponse
     {
+        // P1-8: 离职申请人或目标员工不能审批该申请 (禁止自审)
+        if ((int) $resignation->created_by === (int) Auth::id() || (int) $resignation->user_id === (int) Auth::id()) {
+            return response()->json(['code' => 1003, 'message' => '离职申请人或目标员工不能审批该申请'], 403);
+        }
+
         return DB::transaction(function () use ($resignation) {
             $resignation = EmployeeResignation::lockForUpdate()->findOrFail($resignation->id);
             if ($resignation->status !== 'pending') {
