@@ -28,7 +28,7 @@ if [[ "$code" == "200" ]] || [[ "$code" == "401" ]] || [[ "$code" == "403" ]]; t
     echo "[$(ts)] api OK ($code)"
 else
     echo "[$(ts)] api FAIL ($code) — 尝试 php-fpm restart"
-    systemctl restart php8.3-fpm || true
+    systemctl restart php8.5-fpm || true
     err=$((err+1))
 fi
 

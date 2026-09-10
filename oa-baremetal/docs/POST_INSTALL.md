@@ -24,7 +24,7 @@
 
 ```sql
 -- 改 admin 密码 (用 bcrypt 后的 hash)
-UPDATE users SET password = '$2y$10$...' WHERE username = 'admin';
+UPDATE users SET password = '$2y$10$...' WHERE username = 'admin'; <!-- # noqa: secret -->
 ```
 
 > 用脚本生成 hash:
@@ -48,7 +48,7 @@ sudo sed -i "s/^requirepass .*/requirepass $NEW_RED/" /etc/redis/redis.conf
 sudo sed -i "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$NEW_RED/" /var/www/oa-api/.env
 
 # 重启
-sudo systemctl restart redis-server php8.3-fpm
+sudo systemctl restart redis-server php8.5-fpm
 ```
 
 ---
@@ -169,7 +169,7 @@ sudo tee /etc/logrotate.d/oa-laravel <<'EOF'
     create 0640 www-data www-data
     sharedscripts
     postrotate
-        systemctl reload php8.3-fpm > /dev/null 2>&1
+        systemctl reload php8.5-fpm > /dev/null 2>&1
     endscript
 }
 EOF

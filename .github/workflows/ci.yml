@@ -1,7 +1,7 @@
 # GitHub Actions CI — V0.6.3 (从 pc-api/.github/workflows/ci.yml 迁移)
 #
 # 跑 pc-api Laravel 测试:
-#   1. Boot PHP 8.3 + extensions
+#   1. Boot PHP 8.5 + extensions
 #   2. composer install
 #   3. 准备 Postgres (security_oa_test)
 #   4. 跑 php artisan test (全量 Unit + Feature，不再只跑 Unit + 2 个)
@@ -18,7 +18,7 @@ on:
 
 jobs:
   phpunit:
-    name: PHPUnit (PHP 8.3 + PostgreSQL 15)
+    name: PHPUnit (PHP 8.5 + PostgreSQL 15)
     runs-on: ubuntu-22.04
 
     services:
@@ -40,10 +40,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP 8.3
+      - name: Setup PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           extensions: pdo_pgsql, pgsql, mbstring, bcmath, xml, zip, gd, intl
           coverage: none
 

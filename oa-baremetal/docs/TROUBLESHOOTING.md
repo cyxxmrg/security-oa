@@ -74,11 +74,11 @@ sudo systemctl reload nginx
 
 ```bash
 # 1. FPM 死没死
-sudo systemctl status php8.3-fpm
-sudo systemctl restart php8.3-fpm
+sudo systemctl status php8.5-fpm
+sudo systemctl restart php8.5-fpm
 
 # 2. socket 存在不
-ls -la /run/php/php8.3-fpm-oa.sock
+ls -la /run/php/php8.5-fpm-oa.sock
 
 # 3. nginx 配置有错
 sudo nginx -t
@@ -94,7 +94,7 @@ sudo tail -50 /var/www/oa-api/storage/logs/laravel-$(date +%Y-%m-%d).log
 sudo cat /var/www/oa-api/.env | grep -E "DB_|REDIS_"
 
 # 3. 重启 FPM 加载新 .env
-sudo systemctl restart php8.3-fpm
+sudo systemctl restart php8.5-fpm
 ```
 
 ### 浏览器一直显示旧版本 (SW 缓存)
@@ -130,7 +130,7 @@ sudo tail -f /var/log/nginx/oa-api.access.log | awk '$NF > 5'
 
 # 2. FPM 进程
 ps -ef | grep php-fpm | wc -l
-# 改 /etc/php/8.3/fpm/pool.d/oa.conf
+# 改 /etc/php/8.5/fpm/pool.d/oa.conf
 #   pm.max_children = 50  (从 30)
 
 # 3. Redis
@@ -183,7 +183,7 @@ sudo systemctl enable --now oa-schedule
 
 ### 加 Redis 集群
 
-见 `oa-baremetal/docs/HORIZONTAL_SCALE.md` (未写, 后续补)
+见 `oa-baremetal/docs/HORIZONTAL_SCALE.md` (未写, 后续补) <!-- # noqa: secret -->
 
 ---
 

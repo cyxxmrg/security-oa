@@ -1,6 +1,6 @@
 # OA 安防运维系统 - Docker 一键部署包
 
-> **版本**: V1.0 · **适配**: 192.168.1.115 全新部署验证通过 · **环境**: Ubuntu 26.04 / Docker 29.6+ / PostgreSQL 15 / PHP 8.2 / Redis 7 / Nginx 1.28
+> **版本**: V1.0 · **适配**: 192.168.1.115 全新部署验证通过 · **环境**: Ubuntu 26.04 / Docker 29.6+ / PostgreSQL 15 / PHP 8.5 / Redis 7 / Nginx 1.28
 
 ---
 
@@ -14,7 +14,7 @@ oa-docker/
 ├── .gitignore
 ├── docker/
 │   ├── php/
-│   │   ├── Dockerfile         # php-fpm 8.2 镜像 (含 pdo_pgsql/redis/intl/zip)
+│   │   ├── Dockerfile         # php-fpm 8.5 镜像 (含 pdo_pgsql/redis/intl/zip)
 │   │   └── entrypoint.sh      # 容器启动脚本 (migrate/seed/init/chown)
 │   ├── nginx/
 │   │   ├── Dockerfile         # nginx:alpine 镜像

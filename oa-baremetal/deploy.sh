@@ -4,7 +4,7 @@
 #  适用: 全新空服务器 / 空数据库
 #  用法: sudo bash deploy.sh
 #  干的事:
-#    1. 装 PG 15+ / Redis 7+ / PHP 8.3 / Nginx
+#    1. 装 PG 15+ / Redis 7+ / PHP 8.5 / Nginx
 #    2. 建数据库 security_oa (空) + 用户 oa_user
 #    3. 部署 Laravel 后端 (migrate + seed)
 #    4. 部署前端 dist 到 /var/www/oa-web
@@ -53,24 +53,24 @@ echo "===================================================="
 echo ""
 
 # -------- 1. 装基础包 --------
-info "[1/9] 装系统包 (PG / Redis / PHP 8.3 / Nginx / Composer)..."
+info "[1/9] 装系统包 (PG / Redis / PHP 8.5 / Nginx / Composer)..."
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq software-properties-common apt-transport-https ca-certificates curl gnupg lsb-release unzip git ufw fail2ban
 
-# PHP 8.3 (26.04 自带 8.3 也可, 但 PPA 更稳)
-if ! command -v php8.3 >/dev/null 2>&1; then
+# PHP 8.5 (ondrej PPA; 26.04 自带版本可能偏低)
+if ! command -v php8.5 >/dev/null 2>&1; then
     add-apt-repository -y ppa:ondrej/php
     apt-get update -qq
 fi
 apt-get install -y -qq \
     postgresql postgresql-contrib \
     redis-server \
-    php8.3 php8.3-fpm php8.3-cli \
-    php8.3-pgsql php8.3-redis php8.3-bcmath php8.3-curl \
-    php8.3-mbstring php8.3-xml php8.3-zip php8.3-gd \
-    php8.3-intl php8.3-imagick php8.3-opcache \
+    php8.5 php8.5-fpm php8.5-cli \
+    php8.5-pgsql php8.5-redis php8.5-bcmath php8.5-curl \
+    php8.5-mbstring php8.5-xml php8.5-zip php8.5-gd \
+    php8.5-intl php8.5-imagick php8.5-opcache \
     nginx \
     composer
 
@@ -78,7 +78,7 @@ ok "基础包装完"
 
 # -------- 2. 启动服务 --------
 info "[2/9] 启动 PG / Redis / PHP-FPM / Nginx..."
-systemctl enable --now postgresql redis-server php8.3-fpm nginx
+systemctl enable --now postgresql redis-server php8.5-fpm nginx
 sleep 2
 ok "服务全部 enabled"
 
@@ -130,11 +130,11 @@ ok "Redis OK"
 
 # -------- 5. 配 PHP-FPM pool --------
 info "[5/9] 配 PHP-FPM (oa pool)..."
-cat > /etc/php/8.3/fpm/pool.d/oa.conf <<EOF
+cat > /etc/php/8.5/fpm/pool.d/oa.conf <<EOF
 [oa]
 user = www-data
 group = www-data
-listen = /run/php/php8.3-fpm-oa.sock
+listen = /run/php/php8.5-fpm-oa.sock
 listen.owner = www-data
 listen.group = www-data
 pm = dynamic
@@ -149,10 +149,10 @@ php_admin_value[memory_limit] = 512M
 php_admin_value[date.timezone] = Asia/Shanghai
 EOF
 # 删默认 pool 避免冲突
-rm -f /etc/php/8.3/fpm/pool.d/www.conf
-systemctl restart php8.3-fpm
+rm -f /etc/php/8.5/fpm/pool.d/www.conf
+systemctl restart php8.5-fpm
 sleep 1
-ls -la /run/php/php8.3-fpm-oa.sock >/dev/null 2>&1 || err "PHP-FPM socket 没起"
+ls -la /run/php/php8.5-fpm-oa.sock >/dev/null 2>&1 || err "PHP-FPM socket 没起"
 ok "PHP-FPM pool 配好"
 
 # -------- 6. 部署 Laravel 后端 --------
@@ -317,7 +317,7 @@ server {
 
     location ~ \.php$ {
         try_files $uri =404;
-        fastcgi_pass unix:/run/php/php8.3-fpm-oa.sock;
+        fastcgi_pass unix:/run/php/php8.5-fpm-oa.sock;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;

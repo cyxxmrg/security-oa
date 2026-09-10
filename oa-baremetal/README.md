@@ -116,7 +116,7 @@ REDIS_PASS="oa_redis_pwd_change_me"  # ← 改!
 sudo -u postgres psql -c "ALTER USER oa_user WITH PASSWORD '你的新密码';"
 # 同步 .env
 sudo nano /var/www/oa-api/.env   # 改 DB_PASSWORD + REDIS_PASSWORD
-sudo systemctl restart php8.3-fpm
+sudo systemctl restart php8.5-fpm
 
 # 改 Redis 密码
 sudo sed -i 's/^requirepass .*/requirepass 你的新密码/' /etc/redis/redis.conf
@@ -173,6 +173,6 @@ sudo bash uninstall.sh
 
 详见 `docs/TROUBLESHOOTING.md`。
 
-- 502 Bad Gateway → `systemctl status php8.3-fpm`
+- 502 Bad Gateway → `systemctl status php8.5-fpm`
 - 登录 500 → `tail /var/www/oa-api/storage/logs/laravel-*.log`
 - 浏览器 SW 缓存旧版 → F12 → Application → Service Workers → Unregister

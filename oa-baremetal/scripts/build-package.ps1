@@ -49,7 +49,7 @@ foreach ($t in $tools) {
         Write-Host "  [OK] $name : $line" -ForegroundColor Green
     } catch {
         Write-Host "  [FAIL] $name not found: $cmd" -ForegroundColor Red
-        Write-Host "  Required: PHP 8.3+ / Composer 2 / Node 22 / Git-Bash tar" -ForegroundColor Yellow
+        Write-Host "  Required: PHP 8.5+ / Composer 2 / Node 22 / Git-Bash tar" -ForegroundColor Yellow
         exit 1
     }
 }

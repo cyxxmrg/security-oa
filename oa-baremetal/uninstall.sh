@@ -40,8 +40,8 @@ rm -f /etc/cron.d/oa-backup /etc/cron.d/oa-healthcheck
 rm -rf /opt/oa
 
 # 6. PHP-FPM pool
-rm -f /etc/php/8.3/fpm/pool.d/oa.conf
-systemctl restart php8.3-fpm
+rm -f /etc/php/8.5/fpm/pool.d/oa.conf
+systemctl restart php8.5-fpm
 
 # 7. UFW
 ufw delete allow 8081/tcp 2>/dev/null || true
