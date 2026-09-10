@@ -12,6 +12,9 @@
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <!-- RoleGuardrailApiTest 是现场测试(需运行中的 API:8081 + Redis + 真实账号, OA_TEST_PASS 注入),
+                 CI 无此环境, 从默认套件排除; 本地按文件头部注释显式运行 -->
+            <exclude>tests/Feature/RoleGuardrailApiTest.php</exclude>
         </testsuite>
     </testsuites>
     <source>
