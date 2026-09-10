@@ -65,8 +65,7 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business'])-
     Route::post('contracts/{id}/sign', [PurchaseFlowController::class, 'signContract'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('contracts/{id}/files', [PurchaseFlowController::class, 'listContractFiles'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::post('contracts/{id}/files', [PurchaseFlowController::class, 'uploadContractFile'])->whereNumber('id')->middleware('permission:purchase.detail');
-    Route::get('contracts/{id}/files/{fid}/download', [PurchaseFlowController::class, 'downloadContractFile'])
-        ->whereNumber('id')->whereNumber('fid')->name('purchase-flow.contract-files.download')->middleware('permission:purchase.detail');
+    Route::get('contracts/{id}/files/{fid}/download', [PurchaseFlowController::class, 'downloadContractFile'])->whereNumber('id')->whereNumber('fid')->name('purchase-flow.contract-files.download')->middleware('permission:purchase.detail');
     Route::delete('contracts/{id}/files/{fid}', [PurchaseFlowController::class, 'deleteContractFile'])->whereNumber('id')->whereNumber('fid')->middleware('permission:purchase.detail');
     Route::get('contracts/{id}/items', [PurchaseFlowController::class, 'listContractItems'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::post('contracts/{id}/items', [PurchaseFlowController::class, 'addContractItem'])->whereNumber('id')->middleware('permission:purchase.detail');
@@ -78,11 +77,9 @@ Route::prefix('purchase-flow')->middleware(['auth:sanctum', 'ensure_business'])-
     Route::get('contracts/{id}/shipping', [PurchaseFlowController::class, 'listShipping'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::get('payment-requests/{id}/vouchers', [PurchaseFlowController::class, 'listPaymentVouchers'])->whereNumber('id')->middleware('permission:purchase.detail');
     Route::post('payment-requests/{id}/voucher', [PurchaseFlowController::class, 'uploadPaymentVoucher'])->whereNumber('id')->middleware('permission:purchase.detail');
-    Route::get('payment-requests/{id}/vouchers/{vid}/download', [PurchaseFlowController::class, 'downloadPaymentVoucher'])
-        ->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download')->middleware('permission:purchase.detail');
+    Route::get('payment-requests/{id}/vouchers/{vid}/download', [PurchaseFlowController::class, 'downloadPaymentVoucher'])->whereNumber('id')->whereNumber('vid')->name('purchase-flow.payment-vouchers.download')->middleware('permission:purchase.detail');
     Route::post('payment-requests', [PurchaseFlowController::class, 'createPaymentRequest'])->middleware('permission:purchase.detail');
-    Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])
-        ->whereNumber('id')->middleware('permission:approval.mine|finance.pay');
+    Route::post('payment-requests/{id}/approve', [PurchaseFlowController::class, 'approvePaymentRequest'])->whereNumber('id')->middleware('permission:approval.mine|finance.pay');
     Route::post('payments', [PurchaseFlowController::class, 'executePayment'])->middleware('permission:finance.pay');
     Route::post('shipments', [PurchaseFlowController::class, 'createShipment'])->middleware('permission:purchase.detail');
     Route::post('shipments/{id}/update-status', [PurchaseFlowController::class, 'updateShipmentStatus'])->whereNumber('id')->middleware('permission:purchase.detail');

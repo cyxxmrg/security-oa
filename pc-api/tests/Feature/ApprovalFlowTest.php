@@ -6,6 +6,9 @@ use App\Models\ApprovalRecord;
 use App\Models\OvertimeRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -52,6 +55,22 @@ class ApprovalFlowTest extends TestCase
             'user_type' => 'business',
             'status'    => 'active',
         ]);
+
+        // 审批中心 operation 组路由走自定义 CheckPermission 中间件, hasActivePermissionTo 只认角色授权
+        // (直接 givePermissionTo 不计入) — 故以角色方式授予 approval.mine, 使审批用例真正跑通而非 403。
+        DB::table('permissions')->insertOrIgnore([
+            'name' => 'approval.mine',
+            'guard_name' => 'web',
+            'module' => '审批中心',
+            'description' => '审批中心操作权限',
+            'display_name' => '审批中心操作权限',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $role = Role::findOrCreate('approval_test', 'web');
+        $role->givePermissionTo(Permission::findByName('approval.mine', 'web'));
+        $this->applicant->assignRole($role);
+        $this->approver->assignRole($role);
     }
 
     /**
@@ -157,7 +176,18 @@ class ApprovalFlowTest extends TestCase
             'status' => ApprovalRecord::STATUS_PENDING,
             'applicant_id' => $this->applicant->id,
             'current_approver_id' => $this->approver->id,
-            'payload' => ['overtime_id' => $overtime->id],
+            'payload' => [
+                'overtime_id' => $overtime->id,
+                // 固化流程快照 (store 经 initFlow 固化, 直建记录需自带, 否则 advanceFlow 按 sub_type 找模板会抛错)
+                '_approval_flow' => [
+                    'template_name' => 'operation-overtime',
+                    'steps' => [[
+                        'name' => '审批人',
+                        'approver_user_id' => $this->approver->id,
+                        'approver' => $this->approver->id,
+                    ]],
+                ],
+            ],
             'flow' => [[
                 'operator' => $this->applicant->name,
                 'action' => 'submit',

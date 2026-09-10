@@ -22,7 +22,10 @@ class ConstructionRelationsTest extends TestCase
     public function test_work_process_relations(): void
     {
         $methods = $this->getMethods(\App\Models\WorkProcess::class);
-        foreach (['commencementOrder','project','parent','children','progress'] as $r) {
+        // 注: V0.4.x 曾规划工序树(parent/children)与开工单关联(commencementOrder),
+        // 后按"工序数据一致性"改为扁平模型(work_processes 无 parent_id/commencement_order_id 列),
+        // 仅保留 project/progress 两个已实现关系。
+        foreach (['project', 'progress'] as $r) {
             $this->assertContains($r, $methods, "WorkProcess::$r 缺失");
         }
     }

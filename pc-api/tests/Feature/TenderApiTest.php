@@ -100,8 +100,8 @@ class TenderApiTest extends TestCase
         $projectId = $r->json('data.id');
         $this->assertNotNull($projectId);
 
-        // ② 发布
-        $this->actingAs($this->reviewer, 'sanctum')->postJson("/api/tenders/{$projectId}/publish")
+        // ② 发布 (由创建人执行: 行级 DataScope 按 created_by 可见, 创建人持 tender.approve 权限)
+        $this->actingAs($this->creator, 'sanctum')->postJson("/api/tenders/{$projectId}/publish")
             ->assertJson(['code' => 0, 'data' => ['status' => 'bidding']]);
 
         // ③ 公开门户：拉取（按 public_token）
@@ -121,8 +121,8 @@ class TenderApiTest extends TestCase
         $bid->assertJson(['code' => 0]);
         $bidId = $bid->json('data.id');
 
-        // ⑤ 内部：评标 + 中标
-        $this->actingAs($this->reviewer, 'sanctum')->postJson("/api/tenders/{$projectId}/evaluate", [
+        // ⑤ 内部：评标 + 中标 (创建人, 行级可见)
+        $this->actingAs($this->creator, 'sanctum')->postJson("/api/tenders/{$projectId}/evaluate", [
             'evaluations' => [[
                 'bid_id' => $bidId,
                 'technical' => 90,
@@ -131,7 +131,7 @@ class TenderApiTest extends TestCase
             ]],
         ])->assertJson(['code' => 0]);
 
-        $this->actingAs($this->reviewer, 'sanctum')->postJson("/api/tenders/{$projectId}/award", [
+        $this->actingAs($this->creator, 'sanctum')->postJson("/api/tenders/{$projectId}/award", [
             'bid_id' => $bidId,
         ])->assertJson(['code' => 0, 'data' => ['tender' => ['status' => 'awarded']]]);
     }
