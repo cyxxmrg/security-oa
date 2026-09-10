@@ -32,9 +32,11 @@ return new class extends Migration {
             $table->index('customer_id');
         });
 
-        // GRANT (用 OA 自己的数据库用户)
-        \Illuminate\Support\Facades\DB::statement('GRANT ALL PRIVILEGES ON TABLE customer_invoice_infos TO oa_user');
-        \Illuminate\Support\Facades\DB::statement('GRANT USAGE, SELECT ON SEQUENCE customer_invoice_infos_id_seq TO oa_user');
+        // GRANT (用 OA 自己的数据库用户; 目标角色不存在时跳过, 兼容 CI 等测试库)
+        if (\Illuminate\Support\Facades\DB::selectOne("SELECT 1 FROM pg_roles WHERE rolname = ?", ['oa_user'])) {
+            \Illuminate\Support\Facades\DB::statement('GRANT ALL PRIVILEGES ON TABLE customer_invoice_infos TO oa_user');
+            \Illuminate\Support\Facades\DB::statement('GRANT USAGE, SELECT ON SEQUENCE customer_invoice_infos_id_seq TO oa_user');
+        }
     }
 
     public function down(): void

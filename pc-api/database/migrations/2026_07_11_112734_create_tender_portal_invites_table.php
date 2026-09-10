@@ -38,8 +38,10 @@ return new class extends Migration {
             $table->index('expires_at');
         });
 
-        DB::statement("GRANT ALL PRIVILEGES ON TABLE tender_portal_invites TO oa_user");
-        DB::statement("GRANT USAGE, SELECT ON SEQUENCE tender_portal_invites_id_seq TO oa_user");
+        if (DB::selectOne("SELECT 1 FROM pg_roles WHERE rolname = ?", ['oa_user'])) {
+            DB::statement("GRANT ALL PRIVILEGES ON TABLE tender_portal_invites TO oa_user");
+            DB::statement("GRANT USAGE, SELECT ON SEQUENCE tender_portal_invites_id_seq TO oa_user");
+        }
     }
 
     public function down(): void

@@ -97,11 +97,13 @@ return new class extends Migration {
             $table->index(['tender_project_id', 'category']);
         });
 
-        // GRANT
+        // GRANT (目标角色不存在时跳过, 兼容 CI 等测试库)
         $tables = ['tender_projects', 'tender_bids', 'tender_bid_items', 'tender_attachments'];
-        foreach ($tables as $t) {
-            DB::statement("GRANT ALL PRIVILEGES ON TABLE {$t} TO oa_user");
-            DB::statement("GRANT USAGE, SELECT ON SEQUENCE {$t}_id_seq TO oa_user");
+        if (DB::selectOne("SELECT 1 FROM pg_roles WHERE rolname = ?", ['oa_user'])) {
+            foreach ($tables as $t) {
+                DB::statement("GRANT ALL PRIVILEGES ON TABLE {$t} TO oa_user");
+                DB::statement("GRANT USAGE, SELECT ON SEQUENCE {$t}_id_seq TO oa_user");
+            }
         }
     }
 
