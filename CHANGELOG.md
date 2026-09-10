@@ -4,6 +4,32 @@ Security OA 使用 `主版本.次版本.补丁` 的版本号规则。本文记�
 
 ---
 
+## v1.4.5 · 2026-09-09
+
+### 安全与权限修复（代码审查 REVIEW P0/P1）
+
+- **前端按钮级权限链路修复**：恢复 `/auth/userinfo` 返回当前用户有效权限与角色（改用 `activePermissionNames()`/`activeRoles()` 绕过 Spatie 缓存问题）；`userStore.hasPermission` 委托 permission store（带 admin 旁路与模块前缀兜底），报销等页面按钮权限恢复生效。
+- **备份 cron token 补齐写入方**：新增 `php artisan oa:backup-token [--rotate]` 命令与 `GET/POST /api/backups/cron-token(/:rotate)` 接口；`POST /api/backups/run-due` 不再被控制器 system 守卫误拦截，token 校验对齐中间件（支持 `X-Backup-Cron-Token` 头或 `?token=`），并区分"未配置/不正确"错误提示。
+- **菜单按权限过滤**：侧边栏菜单按路由 `meta.permission` 过滤（与路由守卫同语义），消除"菜单可见但无权限"漂移。
+- **审计日志 PII 脱敏**：`updateProfile` 写入 system_logs 的手机号/邮箱脱敏（`138****1234` / `a***@domain`）。
+- 版本号统一升至 `v1.4.5`（README/CHANGELOG/config 同步）。
+
+## v1.4.4 · 2026-09-06
+
+### 安全加固（本版已入库，本次补记）
+
+- 车辆相关路由权限细粒度拆分：`vehicle.*` 及 `vehicle.apply/dispatch/insurance/maintenance`；油卡读写分权（`vehicle.fuel.edit`）；资金/资产 `finance.asset`、质保金 `deposit.release` 独立权限点（迁移 `2026_09_06_*` 系列）。
+- 审批中心、维修、巡检等模块继续补充细分权限与数据范围规则。
+
+## v1.4.3 · 2026-09
+
+### 安全修复（本版已入库，本次补记）
+
+- RBAC 提权护栏：内置角色只读保护、非 system 不可授予 admin、不可修改自身角色、批量授权排除 admin。
+- 巡检任务执行人绑定：打卡/提交/跳过校验 `assigned_to`（admin/finance/manager 可代操作）。
+- 返修公开查询防爆破：同 IP 失败 5 次锁 15 分钟，单号不存在同样计失败防枚举。
+- CheckPermission 支持 `权限a|权限b` 表达式与 `module.*` 通配解析。
+
 ## v1.4.2 · 2026-08-02
 
 ### 产品能力

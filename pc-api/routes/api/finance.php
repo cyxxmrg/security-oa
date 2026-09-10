@@ -246,6 +246,9 @@ Route::prefix('backups')->middleware(['auth:sanctum', 'ensure_system', 'permissi
     Route::post('/', [BackupController::class, 'store'])->withoutMiddleware('ensure_business');
     Route::get('schedule', [BackupController::class, 'schedule'])->withoutMiddleware('ensure_business');
     Route::put('schedule', [BackupController::class, 'updateSchedule'])->withoutMiddleware('ensure_business');
+    // V1.4.5 (REVIEW P0-2 修复): 备份 cron token 查看/轮换 (system-only), 配合公开端点 backups/run-due
+    Route::get('cron-token', [BackupController::class, 'cronToken'])->withoutMiddleware('ensure_business');
+    Route::post('cron-token/rotate', [BackupController::class, 'rotateCronToken'])->withoutMiddleware('ensure_business');
     Route::get('{filename}/download', [BackupController::class, 'download'])->withoutMiddleware('ensure_business');
     Route::delete('{filename}', [BackupController::class, 'destroy'])->withoutMiddleware('ensure_business');
 });

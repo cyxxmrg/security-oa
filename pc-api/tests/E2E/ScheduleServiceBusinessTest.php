@@ -17,8 +17,9 @@ class ScheduleServiceBusinessTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    private const ADMIN = ['system', '<已脱敏>']; // system 账号: 全权限, 不受 ensure_business 限制
-    private const USER  = ['oa_business_admin', '<已脱敏>'];
+    // V1.4.5 (REVIEW P2-7/P1-4): 账号密码从环境变量读取, 不硬编码入库
+    private static function adminCreds(): array { return ['system', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_ADMIN_PASS')]; }
+    private static function userCreds(): array  { return ['oa_business_admin', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_BUSINESS_PASS')]; }
 
     private static array $tokens = [];
 
@@ -33,6 +34,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
         [$u, $p] = $user;
         $key = $u . ':' . $p;
         if (isset(self::$tokens[$key])) return self::$tokens[$key];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS / OA_E2E_BUSINESS_PASS)');
 
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
@@ -67,7 +69,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
 
     private function pickShift(): array
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $r = $this->call('GET', $token, '/schedules/shifts');
         if (($r['code'] ?? 1) === 0 && !empty($r['data']['data'])) {
             return $r['data']['data'][0];
@@ -81,7 +83,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
 
     private function pickUserId(): int
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $r = $this->call('GET', $token, '/employees?per_page=1');
         if (($r['code'] ?? 1) === 0 && !empty($r['data']['data'])) {
             return (int) $r['data']['data'][0]['id'];
@@ -94,7 +96,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
      */
     public function test_batch_save_creates_new_schedule(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $shift = $this->pickShift();
         $userId = $this->pickUserId();
         $date = '2026-09-01';
@@ -118,7 +120,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
      */
     public function test_batch_save_overwrites_existing(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $shift = $this->pickShift();
         $userId = $this->pickUserId();
         $date = '2026-09-02';
@@ -149,7 +151,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
      */
     public function test_batch_by_group_skips_weekends(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $shift = $this->pickShift();
 
         // 找一个班组
@@ -184,7 +186,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
      */
     public function test_smart_suggest_returns_fallback_for_no_history(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         $r = $this->call('GET', $token, '/schedules/smart-suggest?start_date=2026-10-01');
 
@@ -214,7 +216,7 @@ class ScheduleServiceBusinessTest extends E2ETestCase
      */
     public function test_monthly_stats_returns_aggregation(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         $r = $this->call('GET', $token, '/schedules/stats?month=2026-09');
 

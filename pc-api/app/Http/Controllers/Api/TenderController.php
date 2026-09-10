@@ -336,7 +336,7 @@ class TenderController extends Controller
                     'due_date'         => now()->addDays(30)->toDateString(),
                     'payment_term'     => '月结30天',
                     'status'           => 'pending',
-                    'ref_no'           => 'AP-' . date('Ymd') . '-' . str_pad($po->id, 4, '0', STR_PAD_LEFT),
+                    'ref_no'           => $this->nextApRefNo(),
                     'description'      => "招标中标应付款: {$t->name}",
                     'tender_id'        => $t->id,
                 ]
@@ -819,5 +819,22 @@ class TenderController extends Controller
         });
 
         return 'BID-' . $today . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-6): AP 应付编号统一走 NumberSequenceService (原 PO id 双轨),
+     * 与 PurchaseFlowService 共享同一 payable-ref 序列
+     */
+    private function nextApRefNo(): string
+    {
+        $today = date('Ymd');
+        $fullPrefix = 'AP-' . $today . '-';
+        $sequence = \App\Services\NumberSequenceService::next("payable-ref:{$today}", static function () use ($fullPrefix): int {
+            return (int) \App\Models\Payable::allData()->where('ref_no', 'like', $fullPrefix . '%')
+                ->pluck('ref_no')
+                ->map(static fn (string $n): int => (int) substr($n, strlen($fullPrefix)))
+                ->max();
+        });
+        return $fullPrefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 }

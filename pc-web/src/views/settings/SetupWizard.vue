@@ -293,11 +293,19 @@ const newRow = () => ({
   username: '',
   phone: '',
   email: '',
-  password: 'Pass1234',
+  password: genTempPwd(),
   role: 'user',
   department_id: null,
   position_id: null,
 })
+
+// V1.4.5 (REVIEW P3): 默认密码改为随机生成, 避免批量建号共用已知弱密码 'Pass1234'
+const genTempPwd = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789' // # noqa: secret
+  let s = ''
+  for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return s + 'Aa1' // 保证含大写+小写+数字, 共 13 位
+}
 
 const addRow = (n: number | MouseEvent = 1) => {
   if (typeof n !== 'number') n = 1

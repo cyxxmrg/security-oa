@@ -23,12 +23,17 @@
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>
         <env name="APP_URL" value="http://localhost"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
-        <env name="DB_HOST" value="127.0.0.1"/>
-        <env name="DB_PORT" value="5432"/>
-        <env name="DB_DATABASE" value="security_oa_test"/>
-        <env name="DB_USERNAME" value="oa_test"/>
-        <env name="DB_PASSWORD" value="test_pass_2026"/>
+        <!-- V1.4.5 (REVIEW P2-7): 数据库配置可被真实环境变量覆盖 (force=false 默认);
+             CI 通过 DB_HOST/DB_DATABASE/DB_USERNAME/DB_PASSWORD 注入测试库,
+             此处默认值仅供本地直连 117 隔离测试库使用。
+             E2E 测试(tests/E2E)需要 OA_E2E_ALLOW_MUTATION=1 + OA_E2E_ADMIN_PASS/OA_E2E_BUSINESS_PASS
+             等账号密码环境变量, 未配置会自动 skip, 不进默认 phpunit 套件。 -->
+        <env name="DB_CONNECTION" value="pgsql" force="false"/>
+        <env name="DB_HOST" value="127.0.0.1" force="false"/>
+        <env name="DB_PORT" value="5432" force="false"/>
+        <env name="DB_DATABASE" value="security_oa_test" force="false"/>
+        <env name="DB_USERNAME" value="oa_test" force="false"/>
+        <env name="DB_PASSWORD" value="test_pass_2026" force="false"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

@@ -709,7 +709,7 @@ class PurchaseFlowService
                         'due_date'         => today()->addDays(30),
                         'payment_term'     => '月结30天',
                         'status'           => 'pending',
-                        'ref_no'           => 'AP-' . date('Ymd') . '-' . str_pad($order->id, 4, '0', STR_PAD_LEFT),
+                        'ref_no'           => $this->nextApRefNo(),
                         'description'      => "采购单 {$order->po_no} 应付",
                         'tender_id'        => $order->tender_id,
                     ]
@@ -938,7 +938,7 @@ class PurchaseFlowService
                 $inventoryItem->increment('current_stock', $quantity);
                 $inventoryItem->refresh();
                 $lastRecord = StockRecord::create([
-                    'record_no'         => 'INB-' . date('Ymd') . '-' . str_pad($sh->id, 4, '0', STR_PAD_LEFT) . '-' . str_pad($index + 1, 2, '0', STR_PAD_LEFT),
+                    'record_no'         => $this->nextInbRecordNo($index + 1),
                     'inventory_item_id' => $inventoryItem->id,
                     'warehouse_id'      => $warehouseId,
                     'type'              => 'in',
@@ -1697,5 +1697,39 @@ class PurchaseFlowService
             throw new \InvalidArgumentException('采购需求项目与来源项目不匹配');
         }
         $this->assertUserAccess($user, $sourceProjectId, $ownerIds, '无权访问采购需求来源');
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-6): AP 应付编号统一走 NumberSequenceService (原 PO id 双轨),
+     * 与 TenderController 共享同一 payable-ref 序列
+     */
+    private function nextApRefNo(): string
+    {
+        $today = now()->format('Ymd');
+        $fullPrefix = 'AP-' . $today . '-';
+        $seq = \App\Services\NumberSequenceService::next("payable-ref:{$today}", function () use ($fullPrefix): int {
+            return (int) \App\Models\Payable::allData()->where('ref_no', 'like', $fullPrefix . '%')
+                ->pluck('ref_no')
+                ->map(fn (string $n): int => (int) substr($n, strlen($fullPrefix)))
+                ->max();
+        });
+        return $fullPrefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-6): INB 采购入库流水编号统一走 NumberSequenceService (原发货单 id 双轨);
+     * 行后缀 -NN 保留用于同批发货多行的可读区分
+     */
+    private function nextInbRecordNo(int $lineIndex): string
+    {
+        $today = now()->format('Ymd');
+        $fullPrefix = 'INB-' . $today . '-';
+        $seq = \App\Services\NumberSequenceService::next("stock-record:inb:{$today}", function () use ($fullPrefix): int {
+            return (int) \App\Models\StockRecord::allData()->where('record_no', 'like', $fullPrefix . '%')
+                ->pluck('record_no')
+                ->map(fn (string $n): int => (int) substr($n, strlen($fullPrefix)))
+                ->max();
+        });
+        return $fullPrefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT) . '-' . str_pad((string) $lineIndex, 2, '0', STR_PAD_LEFT);
     }
 }

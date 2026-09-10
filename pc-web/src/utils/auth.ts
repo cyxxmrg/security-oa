@@ -21,7 +21,7 @@ export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-export function getUserInfo(): Record<string, unknown> {
+export function getUserInfo(): Record<string, unknown> | null {
   localStorage.removeItem(USER_KEY)
   const data = sessionStorage.getItem(USER_KEY)
   return data ? JSON.parse(data) : null

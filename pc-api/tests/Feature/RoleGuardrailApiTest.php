@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
  * V1.4.3 RBAC 提权护栏回归测试 (对应 REVIEW_security-audit.md P0-1)
  *
  * 走真实 HTTP 打本地 API (与 UserRoleApiTest 一致, 前置: API 服务在跑 + 业务管理员账号可用)
- * 账号默认 admin/<已脱敏>, 可用环境变量覆盖: OA_TEST_USER / OA_TEST_PASS
+ * 账号由环境变量注入: OA_TEST_USER / OA_TEST_PASS (V1.4.5 起不再硬编码默认密码)
  *  (示例: OA_TEST_USER=oa_business_admin OA_TEST_PASS='<已脱敏>' php vendor/bin/phpunit tests/Feature/RoleGuardrailApiTest.php)
  *
  * 覆盖的护栏 (RoleController):
@@ -36,11 +36,16 @@ class RoleGuardrailApiTest extends TestCase
 
     private static function testPass(): string
     {
-        return getenv('OA_TEST_PASS') ?: '<已脱敏>';
+        // V1.4.5 (REVIEW P2-7/P1-4): 密码必须从环境变量注入, 不硬编码入库
+        return getenv('OA_TEST_PASS') ?: '';
     }
 
     public static function setUpBeforeClass(): void
     {
+        if (self::testPass() === '') {
+            // 静态方法无法 markTestSkipped → 用失败信息引导配置 (同 requireMutationOptIn 风格)
+            throw new \RuntimeException('未配置 OA_TEST_PASS 环境变量 (E2E/RoleGuardrail 测试需要真实账号密码)');
+        }
         self::doFlush();
         self::$lastFlush = time();
     }

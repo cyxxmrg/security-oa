@@ -27,4 +27,14 @@ abstract class E2ETestCase extends TestCase
             );
         }
     }
+
+    /**
+     * V1.4.5 (REVIEW P2-7/P1-4): E2E 账号密码从环境变量读取, 不硬编码入库。
+     * 未配置时返回 '' (调用方应 markTestSkipped, 避免 CI 无凭据时失败)。
+     */
+    protected static function e2ePass(string $envKey): string
+    {
+        $v = getenv($envKey);
+        return ($v === false || $v === '') ? '' : $v;
+    }
 }

@@ -20,13 +20,14 @@ class BackupController extends Controller
         $this->backupDir = storage_path('app/backups');
         // Keep the controller-level guard, but defer it until request handling so
         // route discovery and cache commands can instantiate the controller.
+        // V1.4.5 (REVIEW P0-2 修复): runDue 是公开 cron 端点(token 认证), 无登录用户, 必须豁免此守卫
         $this->middleware(function (Request $request, \Closure $next) {
             if (!$request->user() || $request->user()->user_type !== 'system') {
                 abort(403, '备份管理仅限 system 账号');
             }
 
             return $next($request);
-        });
+        })->except(['runDue']);
     }
 
     public function index(): JsonResponse
@@ -98,8 +99,14 @@ class BackupController extends Controller
 
     public function runDue(Request $request): JsonResponse
     {
+        // V1.4.5 (REVIEW P0-2 修复): 与 VerifyBackupCronToken 中间件同语义 —
+        // 接受 X-Backup-Cron-Token 头或 ?token=, 并区分"未配置/不正确", 提升可运维性
         $expectedToken = $this->settingString('backup_cron_token', '');
-        if ($expectedToken !== '' && !hash_equals($expectedToken, (string) $request->query('token', ''))) {
+        $provided = (string) ($request->header('X-Backup-Cron-Token') ?: $request->query('token', ''));
+        if ($expectedToken === '') {
+            return response()->json(['code' => 403, 'message' => '备份任务 token 未配置, 请先在系统设置或执行 php artisan oa:backup-token 生成'], 403);
+        }
+        if ($provided === '' || !hash_equals($expectedToken, $provided)) {
             return response()->json(['code' => 403, 'message' => '备份任务 token 不正确'], 403);
         }
 
@@ -154,6 +161,42 @@ class BackupController extends Controller
             unlink($path);
         }
         return response()->json(['code' => 0, 'message' => '已删除']);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P0-2 修复): 查看当前备份 cron token (system-only)
+     */
+    public function cronToken(): JsonResponse
+    {
+        $token = $this->settingString('backup_cron_token', '');
+        return response()->json(['code' => 0, 'data' => [
+            'configured' => $token !== '',
+            'token'      => $token,
+            'cron_url'   => url('/api/backups/run-due'),
+            'cron_example' => 'curl -X POST ' . url('/api/backups/run-due') . '?token=' . $token,
+        ]]);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P0-2 修复): 生成/轮换备份 cron token (system-only)
+     */
+    public function rotateCronToken(Request $request): JsonResponse
+    {
+        $token = bin2hex(random_bytes(24)); // 48 hex chars
+        DB::table('system_settings')->updateOrInsert(
+            ['key' => 'backup_cron_token'],
+            [
+                'value'       => json_encode($token, JSON_UNESCAPED_UNICODE),
+                'description' => '自动备份 cron 触发 token (X-Backup-Cron-Token 头或 ?token=)',
+                'updated_at'  => now(),
+                'updated_by'  => $request->user()?->id,
+            ]
+        );
+        return response()->json([
+            'code' => 0,
+            'message' => '备份 cron token 已重新生成',
+            'data' => ['token' => $token, 'cron_url' => url('/api/backups/run-due')],
+        ]);
     }
 
     private function createBackup(string $label): JsonResponse

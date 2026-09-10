@@ -7,9 +7,9 @@
 从客户、商机与报价，到项目、施工、采购、库存、售后与财务，<br>
 用统一权限、统一审批和统一数据口径连接企业经营全过程。
 
-[![Version](https://img.shields.io/badge/version-v1.4.2-0C447C?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.4.5-0C447C?style=flat-square)](./CHANGELOG.md)
 [![Vue](https://img.shields.io/badge/Vue-3.5-42B883?style=flat-square&logo=vuedotjs&logoColor=white)](./pc-web)
-[![Laravel](https://img.shields.io/badge/Laravel-11-FF2D20?style=flat-square&logo=laravel&logoColor=white)](./pc-api)
+[![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat-square&logo=laravel&logoColor=white)](./pc-api)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square)](./LICENSE)
 
@@ -52,7 +52,7 @@ Security OA 不是单一的行政办公系统，而是一套围绕安防工程�
 flowchart LR
     U["员工 / 管理者 / 决策者"] --> W["Vue 3 Web Client"]
     W --> G["Nginx / API Gateway"]
-    G --> A["Laravel 11 Application"]
+    G --> A["Laravel 12 Application"]
     A --> S["Domain Services"]
     S --> P[("PostgreSQL")]
     S --> R[("Redis Cache / Queue")]
@@ -63,7 +63,7 @@ flowchart LR
 | 层级 | 技术选择 | 设计重点 |
 | --- | --- | --- |
 | **体验层** | Vue 3、TypeScript、Element Plus、Pinia、Vite | 路由级拆包、按需组件、响应式工作台 |
-| **应用层** | Laravel 11、Sanctum、Horizon、Spatie Permission | 领域服务、表单校验、审批编排、异步任务 |
+| **应用层** | Laravel 12、Sanctum、Horizon、Spatie Permission | 领域服务、表单校验、审批编排、异步任务 |
 | **数据层** | PostgreSQL 15+、Redis | 事务一致性、统计视图、缓存与队列 |
 | **交付层** | Nginx、PHP-FPM、Ubuntu LTS | 同源部署、健康探针、日志、备份与缓存预热 |
 
@@ -95,7 +95,7 @@ flowchart LR
 | 依赖 | 建议版本 |
 | --- | --- |
 | Node.js | 20 LTS |
-| PHP | 8.5（后端代码最低 8.2） |
+| PHP | 8.5（后端代码要求 8.4+，见 pc-api/composer.json） |
 | PostgreSQL | 15+ |
 | Redis | 6+ |
 | Composer | 2.x |
@@ -141,7 +141,7 @@ sudo bash install.sh --domain oa.example.com
 
 ## 当前版本
 
-**V1.4.2** 聚焦工具领用/归还明细、前端版本一致性、审批业务状态同步和首屏依赖拆分。完整变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)。
+**V1.4.5** 聚焦代码审查后的安全与一致性修复：恢复前端按钮级权限链路、补齐备份 cron token 生成入口、菜单按权限过滤、审计日志 PII 脱敏。完整变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)。
 
 ## 许可
 

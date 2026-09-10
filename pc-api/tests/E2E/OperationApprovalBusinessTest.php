@@ -18,8 +18,9 @@ class OperationApprovalBusinessTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    private const ADMIN = ['system', '<已脱敏>'];
-    private const USER  = ['oa_business_admin', '<已脱敏>'];
+    // V1.4.5 (REVIEW P2-7/P1-4): 账号密码从环境变量读取, 不硬编码入库
+    private static function adminCreds(): array { return ['system', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_ADMIN_PASS')]; }
+    private static function userCreds(): array  { return ['oa_business_admin', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_BUSINESS_PASS')]; }
 
     private static array $tokens = [];
 
@@ -34,6 +35,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
         [$u, $p] = $user;
         $key = $u . ':' . $p;
         if (isset(self::$tokens[$key])) return self::$tokens[$key];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS / OA_E2E_BUSINESS_PASS)');
 
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
@@ -88,7 +90,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_create_operation_approval(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'create');
 
         // 详情验证
@@ -111,7 +113,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_approve_operation_succeeds(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'approve');
 
         $r = $this->call('POST', $token, "/approvals/operation/{$id}/approve", [
@@ -131,7 +133,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_reject_without_comment_422(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'reject-422');
 
         $r = $this->call('POST', $token, "/approvals/operation/{$id}/reject", []);
@@ -145,7 +147,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_reject_with_comment_succeeds(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'reject-ok');
 
         $r = $this->call('POST', $token, "/approvals/operation/{$id}/reject", [
@@ -161,7 +163,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_forward_operation(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'forward');
 
         $r = $this->call('POST', $token, "/approvals/operation/{$id}/forward", [
@@ -186,7 +188,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_cannot_operate_on_finished_approval(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
         $id = $this->createOperation($token, 'finished');
 
         // 先通过
@@ -209,7 +211,7 @@ class OperationApprovalBusinessTest extends E2ETestCase
      */
     public function test_material_request_approval_insufficient_stock(): void
     {
-        $token = $this->login(self::USER);
+        $token = $this->login(self::userCreds());
 
         // 找一个物料, 入库 1 个
         $listR = $this->call('GET', $token, '/inventory?per_page=1');

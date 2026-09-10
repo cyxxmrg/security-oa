@@ -18,8 +18,9 @@ class InventoryBusinessTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    private const ADMIN = ['system', '<已脱敏>'];
-    private const USER  = ['oa_business_admin', '<已脱敏>'];
+    // V1.4.5 (REVIEW P2-7/P1-4): 账号密码从环境变量读取, 不硬编码入库
+    private static function adminCreds(): array { return ['system', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_ADMIN_PASS')]; }
+    private static function userCreds(): array  { return ['oa_business_admin', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_BUSINESS_PASS')]; }
 
     private static array $tokens = [];
 
@@ -34,6 +35,7 @@ class InventoryBusinessTest extends E2ETestCase
         [$u, $p] = $user;
         $key = $u . ':' . $p;
         if (isset(self::$tokens[$key])) return self::$tokens[$key];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS / OA_E2E_BUSINESS_PASS)');
 
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
@@ -71,7 +73,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     private function pickOrCreateItem(string $suffix): array
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         // 现有列表
         $r = $this->call('GET', $token, '/inventory?per_page=20');
@@ -107,7 +109,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     public function test_stock_in_increases_stock(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $item = $this->pickOrCreateItem('in');
         $before = $item['current_stock'];
 
@@ -130,7 +132,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     public function test_stock_out_decreases_stock(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $item = $this->pickOrCreateItem('out');
 
         // 确保有足够库存
@@ -159,7 +161,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     public function test_stock_out_insufficient_stock_rolls_back(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $item = $this->pickOrCreateItem('insuf');
 
         // 先入库 5
@@ -192,7 +194,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     public function test_stock_out_zero_quantity_rejected(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $item = $this->pickOrCreateItem('zero');
 
         $r = $this->call('POST', $token, '/inventory/stock-out', [
@@ -210,7 +212,7 @@ class InventoryBusinessTest extends E2ETestCase
      */
     public function test_stock_in_missing_item_id_rejected(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         $r = $this->call('POST', $token, '/inventory/stock-in', [
             'quantity' => 10,

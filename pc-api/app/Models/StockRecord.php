@@ -12,7 +12,7 @@ class StockRecord extends Model
 {
     use HasFactory, HasDataScope;
 
-    protected $fillable = ['record_no', 'inventory_item_id', 'warehouse_id', 'source_warehouse_id', 'target_warehouse_id', 'is_transfer', 'type', 'quantity', 'remaining_stock', 'related_id', 'related_type', 'party_type', 'party_id', 'settle_id', 'project_id', 'out_method', 'logistics_company', 'logistics_no', 'parent_request_id', 'order_no', 'operator_id', 'remark', 'unit_cost', 'total_amount', 'payment_method', 'account_id'];
+    protected $fillable = ['record_no', 'request_id', 'inventory_item_id', 'warehouse_id', 'source_warehouse_id', 'target_warehouse_id', 'is_transfer', 'type', 'quantity', 'remaining_stock', 'related_id', 'related_type', 'party_type', 'party_id', 'settle_id', 'project_id', 'out_method', 'logistics_company', 'logistics_no', 'parent_request_id', 'order_no', 'operator_id', 'remark', 'unit_cost', 'total_amount', 'payment_method', 'account_id'];
 
     protected $casts = ['quantity' => 'integer', 'remaining_stock' => 'integer', 'is_transfer' => 'boolean'];
 

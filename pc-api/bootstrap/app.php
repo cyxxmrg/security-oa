@@ -33,6 +33,12 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Providers\RouteServiceProvider::class,
         // V1.2.7 P2-1: 队列与 Horizon (Laravel Queue 监控面板)
         Laravel\Horizon\HorizonServiceProvider::class,
+        // V1.4.5 (REVIEW P2-6 修复): 第三方生产包显式注册 —
+        // 部署若未生成 bootstrap/cache/services.php(package discovery), 这些包会静默不加载;
+        // Laravel 对重复注册去重, 与 package discovery 并存安全
+        Laravel\Sanctum\SanctumServiceProvider::class,
+        Spatie\Permission\PermissionServiceProvider::class,
+        Barryvdh\DomPDF\ServiceProvider::class,
     ])
     ->withRouting(
         web: __DIR__.'/../routes/web.php',

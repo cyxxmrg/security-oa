@@ -633,7 +633,7 @@ class SalesService
                 'project_id'      => $project->id,
                 'customer_id'     => $pool->customer_id,
                 'type'            => 'sales',
-                'contract_no'     => 'SC-' . date('Ymd') . '-' . str_pad($project->id, 4, '0', STR_PAD_LEFT),
+                'contract_no'     => $this->nextSalesContractNo(),
                 'contract_amount' => $contractAmount,
                 'contract_start'  => $data['start_date'] ?? today(),
                 'contract_end'    => $data['end_date'] ?? today()->addMonths(6),
@@ -1050,5 +1050,21 @@ class SalesService
                 }
             });
         }
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-6): 销售合同编号统一走 NumberSequenceService (原项目 id 双轨)
+     */
+    private function nextSalesContractNo(): string
+    {
+        $today = now()->format('Ymd');
+        $fullPrefix = 'SC-' . $today . '-';
+        $seq = \App\Services\NumberSequenceService::next("sales-contract:{$today}", function () use ($fullPrefix): int {
+            return (int) \App\Models\ProjectContract::allData()->where('contract_no', 'like', $fullPrefix . '%')
+                ->pluck('contract_no')
+                ->map(fn (string $n): int => (int) substr($n, strlen($fullPrefix)))
+                ->max();
+        });
+        return $fullPrefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
     }
 }

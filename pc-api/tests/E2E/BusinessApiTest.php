@@ -11,8 +11,10 @@ class BusinessApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    private function login(string $u, string $p = '<已脱敏>'): string
+    // V1.4.5 (REVIEW P2-7/P1-4): 密码从环境变量读取, 不硬编码入库
+    private function login(string $u, string $p = ''): string
     {
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS)');
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
             'header' => "Content-Type: application/json\r\n",

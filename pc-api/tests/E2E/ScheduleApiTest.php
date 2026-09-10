@@ -16,7 +16,8 @@ class ScheduleApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    private const ADMIN = ['system', '<已脱敏>'];
+    // V1.4.5 (REVIEW P2-7/P1-4): 账号密码从环境变量读取, 不硬编码入库
+    private static function adminCreds(): array { return ['system', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_ADMIN_PASS')]; }
 
     private static array $tokens = [];
 
@@ -39,6 +40,7 @@ class ScheduleApiTest extends E2ETestCase
         [$u, $p] = $user;
         $key = $u . ':' . $p;
         if (isset(self::$tokens[$key])) return self::$tokens[$key];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS / OA_E2E_BUSINESS_PASS)');
 
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
@@ -73,7 +75,7 @@ class ScheduleApiTest extends E2ETestCase
      */
     public function test_list_shifts_returns_default(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $r = $this->call('GET', $token, '/schedules/shifts');
 
         $this->assertSame(0, $r['code'] ?? 1, '班次列表应可访问');
@@ -96,7 +98,7 @@ class ScheduleApiTest extends E2ETestCase
      */
     public function test_batch_save_schedule(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         // 先拿到一个班次 id
         $shifts = $this->call('GET', $token, '/schedules/shifts');
@@ -133,7 +135,7 @@ class ScheduleApiTest extends E2ETestCase
      */
     public function test_batch_save_schedule_overwrites_existing(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $shifts = $this->call('GET', $token, '/schedules/shifts');
         $shiftId = $shifts['data'][0]['id'] ?? null;
 
@@ -162,7 +164,7 @@ class ScheduleApiTest extends E2ETestCase
      */
     public function test_batch_save_validation_failure(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
 
         // 缺 assignments
         $r = $this->call('POST', $token, '/schedules/', []);
@@ -184,7 +186,7 @@ class ScheduleApiTest extends E2ETestCase
      */
     public function test_schedule_stats(): void
     {
-        $token = $this->login(self::ADMIN);
+        $token = $this->login(self::adminCreds());
         $r = $this->call('GET', $token, '/schedules/stats?month=' . date('Y-m'));
 
         $this->assertSame(0, $r['code'] ?? 1, '排班统计应可访问');

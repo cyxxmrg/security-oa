@@ -892,7 +892,7 @@ class SystemSettingsController extends Controller
      *   // create 模式必填
      *   username: 'admin',                  // 唯一, 仅允许 business 类型
      *   name:     '超级管理员',
-     *   password: 'Admin@2026',              // 8-32 位
+     *   password: '<示例密码>',              // 8-32 位 # noqa: secret
      *   phone:    '13800000001',             // 可选但 phone NOT NULL, 必传
      *   email:    'admin@local',             // 可选
      *   department_id: 1,                   // 可选
@@ -900,7 +900,7 @@ class SystemSettingsController extends Controller
      *   role_id:       1,                    // 可选, spatie 角色
      *   // reset_password 模式必填
      *   user_id: 7,                          // 要重置密码的业务管理员 ID
-     *   new_password: 'NewPwd@2026',         // 8-32 位
+     *   new_password: '<示例密码>',         // 8-32 位
      * }
      */
     public function businessAdmin(Request $request): JsonResponse

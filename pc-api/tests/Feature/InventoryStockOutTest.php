@@ -204,4 +204,31 @@ class InventoryStockOutTest extends TestCase
         $this->assertEquals(1, $this->item->current_stock, '10 - 3 - 4 - 2 = 1');
         $this->assertEquals(3, StockRecord::where('inventory_item_id', $this->item->id)->count());
     }
+
+    /**
+     * 6) V1.4.5 (REVIEW P2-8): request_id 幂等 — 重复提交返回历史结果, 不重复扣减/建单
+     */
+    public function test_stock_out_request_id_is_idempotent(): void
+    {
+        $svc = app(InventoryService::class);
+
+        $req = $this->stockOutReq(3, '幂等测试');
+        $req->merge(['request_id' => 'idem-' . uniqid('', true)]);
+
+        $r1 = $svc->stockOut($req);
+        $r2 = $svc->stockOut($req);
+
+        // 第二次是重放
+        $this->assertTrue($r2['replayed'] ?? false, '第二次应标记 replayed');
+        $this->assertSame($r1['record_no'], $r2['record_no'], '两次应返回同一 record_no');
+
+        // 库存只扣一次: 10 - 3 = 7
+        $this->item->refresh();
+        $this->assertEquals(7, $this->item->current_stock, '重复提交不应重复扣库存');
+
+        // 只 1 条 StockRecord, 且 request_id 落库
+        $records = StockRecord::where('inventory_item_id', $this->item->id)->get();
+        $this->assertCount(1, $records);
+        $this->assertSame($req->input('request_id'), $records->first()->request_id);
+    }
 }

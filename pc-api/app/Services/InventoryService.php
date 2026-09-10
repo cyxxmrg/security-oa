@@ -336,6 +336,7 @@ class InventoryService
             'project_id'    => 'nullable|integer|exists:projects,id',
             'batch_no'      => 'nullable|string|max:100',
             'remark'        => 'nullable|string',
+            'request_id'    => 'nullable|string|max:64', // V1.4.5 (REVIEW P2-8): 幂等键, 重复提交防重
             'type'          => 'nullable|in:in,return',  // V1.2.14p: 退料入库用 'return'
         ];
         $hasItems = $request->has('items') && is_array($request->items);
@@ -356,6 +357,7 @@ class InventoryService
         if (($data['project_id'] ?? null) !== null) {
             \App\Models\Project::findOrFail((int) $data['project_id']);
         }
+        $requestId = $data['request_id'] ?? null;
 
         $itemsPayload = $hasItems
             ? $data['items']
@@ -366,13 +368,18 @@ class InventoryService
                 'total_amount' => $data['total_amount'] ?? null,
             ]];
 
-        return DB::transaction(function () use ($itemsPayload, $data, $request) {
-            // 一次提交的所有物料共用一个 record_no
-            $recordNo = $this->nextRecordNo('IN');
-            $records  = [];
-            $lastItem = null;
-            $totalAmount = 0.0;
-            foreach ($itemsPayload as $it) {
+        // V1.4.5 (REVIEW P2-8 修复): 幂等防重 — 带 request_id 且已处理过的请求直接返回历史结果
+        try {
+            return DB::transaction(function () use ($itemsPayload, $data, $request, $requestId) {
+                if ($requestId !== null && $requestId !== '' && StockRecord::where('request_id', $requestId)->exists()) {
+                    return $this->replayStockRequest($requestId);
+                }
+                // 一次提交的所有物料共用一个 record_no
+                $recordNo = $this->nextRecordNo('IN');
+                $records  = [];
+                $lastItem = null;
+                $totalAmount = 0.0;
+                foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
                 $unitCost = array_key_exists('unit_cost', $it) && $it['unit_cost'] !== null
                     ? round((float) $it['unit_cost'], 2)
@@ -395,6 +402,7 @@ class InventoryService
                 }
                 $records[] = StockRecord::create([
                     'record_no'         => $recordNo,
+                    'request_id'        => $requestId,
                     'inventory_item_id' => $item->id,
                     'warehouse_id'      => $warehouseId,
                     'type'              => $data['type'] ?? 'in',
@@ -472,7 +480,14 @@ class InventoryService
                 'payable_id'        => $payableId,
                 'finance_payment_id'=> $financePaymentId,
             ];
-        });
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            // 并发重复提交 → 唯一索引 23505 → 返回历史结果
+            if ($requestId !== null && $requestId !== '' && ($e->errorInfo[0] ?? '') === '23505') {
+                return $this->replayStockRequest($requestId);
+            }
+            throw $e;
+        }
     }
 
     public function stockOut(Request $request): array
@@ -492,6 +507,7 @@ class InventoryService
             'batch_no'     => 'nullable|string|max:100',
             'type'         => 'nullable|in:out,sale,scrap',
             'remark'       => 'nullable|string',
+            'request_id'   => 'nullable|string|max:64', // V1.4.5 (REVIEW P2-8): 幂等键, 重复提交防重
         ];
         $hasItems = $request->has('items') && is_array($request->items);
         if ($hasItems) {
@@ -511,6 +527,7 @@ class InventoryService
         if (($data['project_id'] ?? null) !== null) {
             \App\Models\Project::findOrFail((int) $data['project_id']);
         }
+        $requestId = $data['request_id'] ?? null;
 
         $itemsPayload = $hasItems
             ? $data['items']
@@ -521,13 +538,18 @@ class InventoryService
                 'total_amount' => $data['total_amount'] ?? null,
             ]];
 
-        return DB::transaction(function () use ($itemsPayload, $data, $request) {
-            // V1.2.14p: 一次出库的多物料共享 record_no
-            $recordNo = $this->nextRecordNo('OUT');
-            $records  = [];
-            $lastItem = null;
-            $totalAmount = 0.0;
-            foreach ($itemsPayload as $it) {
+        // V1.4.5 (REVIEW P2-8 修复): 幂等防重 — 带 request_id 且已处理过的请求直接返回历史结果
+        try {
+            return DB::transaction(function () use ($itemsPayload, $data, $request, $requestId) {
+                if ($requestId !== null && $requestId !== '' && StockRecord::where('request_id', $requestId)->exists()) {
+                    return $this->replayStockRequest($requestId);
+                }
+                // V1.2.14p: 一次出库的多物料共享 record_no
+                $recordNo = $this->nextRecordNo('OUT');
+                $records  = [];
+                $lastItem = null;
+                $totalAmount = 0.0;
+                foreach ($itemsPayload as $it) {
                 $item = InventoryItem::lockForUpdate()->findOrFail($it['item_id']);
                 $unitPrice = array_key_exists('unit_price', $it) && $it['unit_price'] !== null
                     ? round((float) $it['unit_price'], 2)
@@ -547,6 +569,7 @@ class InventoryService
                 }
                 $records[] = StockRecord::create([
                     'record_no'         => $recordNo,
+                    'request_id'        => $requestId,
                     'inventory_item_id' => $item->id,
                     'warehouse_id'      => $data['warehouse_id'],
                     'type'              => $data['type'] ?? 'out',
@@ -623,7 +646,14 @@ class InventoryService
                 'receivable_id'     => $receivableId,
                 'finance_payment_id'=> $financePaymentId,
             ];
-        });
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            // 并发重复提交 → 唯一索引 23505 → 返回历史结果
+            if ($requestId !== null && $requestId !== '' && ($e->errorInfo[0] ?? '') === '23505') {
+                return $this->replayStockRequest($requestId);
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -1648,5 +1678,30 @@ class InventoryService
         }
 
         return $account;
+    }
+
+    /**
+     * V1.4.5 (REVIEW P2-8 修复): 幂等重放 — 按 request_id 返回历史出入库结果
+     * 供重复提交(网络重试/双击/并发竞态)时复用, 避免重复入账。
+     */
+    private function replayStockRequest(string $requestId): array
+    {
+        $records = StockRecord::where('request_id', $requestId)->orderBy('id')->get();
+        if ($records->isEmpty()) {
+            throw new \RuntimeException('幂等请求未找到历史记录, 请重试');
+        }
+        $first = $records->first();
+
+        return [
+            'record_no'         => $first->record_no,
+            'item_count'        => $records->count(),
+            'item'              => $first->inventoryItem,
+            'record'            => $first,
+            'records'           => $records,
+            'payable_id'        => null,
+            'receivable_id'     => null,
+            'finance_payment_id'=> null,
+            'replayed'          => true,
+        ];
     }
 }

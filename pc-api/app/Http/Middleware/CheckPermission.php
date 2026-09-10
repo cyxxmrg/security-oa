@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -82,24 +83,28 @@ class CheckPermission
      */
     private function resolveCandidates(string $expression): array
     {
-        $parts = array_filter(array_map('trim', explode('|', $expression)), fn($p) => $p !== '');
-        $resolved = [];
-        foreach ($parts as $part) {
-            if (str_ends_with($part, '.*')) {
-                $prefix = substr($part, 0, -1); // 'vehicle.*' → 'vehicle.'
-                $names = \Spatie\Permission\Models\Permission::where('guard_name', 'web')
-                    ->where('name', 'like', $prefix . '%')
-                    ->pluck('name')->all();
-                $resolved = array_merge($resolved, $names);
-                continue;
+        // V1.4.5 (REVIEW P2-2): 候选解析结果短 TTL 缓存 — 权限点注册只在迁移/后台变更,
+        // 60s 陈旧窗口对"新权限名未定义"判定影响可忽略, 避免每个请求重复 LIKE 查 permissions 表
+        return Cache::remember('perm:candidates:' . md5($expression), 60, function () use ($expression) {
+            $parts = array_filter(array_map('trim', explode('|', $expression)), fn($p) => $p !== '');
+            $resolved = [];
+            foreach ($parts as $part) {
+                if (str_ends_with($part, '.*')) {
+                    $prefix = substr($part, 0, -1); // 'vehicle.*' → 'vehicle.'
+                    $names = \Spatie\Permission\Models\Permission::where('guard_name', 'web')
+                        ->where('name', 'like', $prefix . '%')
+                        ->pluck('name')->all();
+                    $resolved = array_merge($resolved, $names);
+                    continue;
+                }
+                $exists = \Spatie\Permission\Models\Permission::where('name', $part)
+                    ->where('guard_name', 'web')->exists();
+                if ($exists) {
+                    $resolved[] = $part;
+                }
             }
-            $exists = \Spatie\Permission\Models\Permission::where('name', $part)
-                ->where('guard_name', 'web')->exists();
-            if ($exists) {
-                $resolved[] = $part;
-            }
-        }
-        return array_values(array_unique($resolved));
+            return array_values(array_unique($resolved));
+        });
     }
 
     private function deny(Request $request, string $permission, string $reason): Response

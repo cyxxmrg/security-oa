@@ -171,6 +171,7 @@ import { computed, watch, onMounted, ref } from 'vue'
 import { useRoute, useRouter, type RouteRecordRaw } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/utils/permission'
 import { useSystemConfigStore } from '@/stores/systemConfig'
 import { ElMessageBox } from 'element-plus'
 import { get as httpGet } from '@/utils/request'
@@ -193,6 +194,7 @@ const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 const userStore = useUserStore()
+const permStore = usePermissionStore()
 const systemConfigStore = useSystemConfigStore()
 const cachedViews = ref<string[]>([])
 type MenuRoute = { path: string; meta?: { title?: string; icon?: string }; children?: MenuRoute[] }
@@ -295,6 +297,10 @@ const menuRoutes = computed<MenuRoute[]>(() => {
     if (!meta?.title || meta.hidden || meta.hideInMenu) return false
     if (meta.systemOnly && !isSystem) return false
     if (meta.businessOnly && isSystem) return false
+    // V1.4.5 (REVIEW P1-1 修复): 菜单按权限过滤 — 与 main.ts 路由守卫同语义
+    // 有 meta.permission 且当前用户无权限 → 隐藏该项(不再出现"菜单可见但点进去 403"的漂移)
+    const perm = meta.permission
+    if (typeof perm === 'string' && perm && !permStore.hasPermission(perm)) return false
     return true
   }
 

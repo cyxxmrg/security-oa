@@ -15,6 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  *  - 5 分钟内连续失败 5 次 → 锁 30 分钟
  *  - 锁定后所有 login 请求直接 429, 不走 password 校验
  *  - 登录成功清零失败计数
+ *  - V1.4.5 (REVIEW P2-1 修复): 失败/锁定键加入 IP 维度 —
+ *    防止攻击者用任意 IP 对目标账号刷 5 次失败锁死账号(账号 DoS);
+ *    分布式爆破仍受路由级 throttle:api(30/min/IP) 约束
  */
 class LoginThrottle
 {
@@ -27,8 +30,9 @@ class LoginThrottle
         if ($username === '') {
             return $next($request);
         }
+        $ip = (string) $request->ip();
 
-        $lockKey = "login:lock:{$username}";
+        $lockKey = "login:lock:{$username}:{$ip}";
 
         // 已锁定
         if (Cache::has($lockKey)) {
@@ -45,7 +49,7 @@ class LoginThrottle
         // 登录失败 (非 200) → 累加
         $status = $response->getStatusCode();
         if ($status === 401 || $status === 422) {
-            $failKey = "login:fail:{$username}";
+            $failKey = "login:fail:{$username}:{$ip}";
             Cache::add($failKey, 0, now()->addMinutes(self::DECAY_MINUTES));
             $count = (int) Cache::increment($failKey);
 
@@ -56,7 +60,7 @@ class LoginThrottle
                     'username' => $username,
                     'attempts' => $count,
                     'lock_min' => self::LOCK_MINUTES,
-                    'ip'       => $request->ip(),
+                    'ip'       => $ip,
                 ]);
                 return response()->json([
                     'code'    => 429,
@@ -67,7 +71,7 @@ class LoginThrottle
 
         // 登录成功 → 清零
         if ($status === 200) {
-            Cache::forget("login:fail:{$username}");
+            Cache::forget("login:fail:{$username}:{$ip}");
         }
 
         return $response;

@@ -17,10 +17,10 @@ class LeaveRequestApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
 
-    /** 业务用户 (请假申请人) */
-    private const BUSINESS_USER = ['oa_business_admin', '<已脱敏>'];
+    /** V1.4.5 (REVIEW P2-7/P1-4): 账号密码从环境变量读取, 不硬编码入库 */
+    private static function businessUserCreds(): array { return ['oa_business_admin', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_BUSINESS_PASS')]; }
     /** 业务管理员 (审批人) */
-    private const APPROVER      = ['manager', '123456'];
+    private static function approverCreds(): array  { return ['manager', \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_APPROVER_PASS')]; }
 
     private static array $tokens = [];
 
@@ -55,6 +55,7 @@ class LeaveRequestApiTest extends E2ETestCase
         [$u, $p] = $user;
         $key = $u . ':' . $p;
         if (isset(self::$tokens[$key])) return self::$tokens[$key];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_BUSINESS_PASS / OA_E2E_APPROVER_PASS)');
 
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
@@ -92,7 +93,7 @@ class LeaveRequestApiTest extends E2ETestCase
      */
     public function test_business_user_submits_leave_success(): void
     {
-        $token = $this->login(self::BUSINESS_USER);
+        $token = $this->login(self::businessUserCreds());
         $r = $this->call('POST', $token, '/attendance/leave', [
             'type'       => 'personal',
             'start_date' => '2026-07-01',
@@ -112,7 +113,7 @@ class LeaveRequestApiTest extends E2ETestCase
      */
     public function test_leave_creates_approval_center_record(): void
     {
-        $token = $this->login(self::BUSINESS_USER);
+        $token = $this->login(self::businessUserCreds());
 
         // 1. 提交一条请假
         $submit = $this->call('POST', $token, '/attendance/leave', [
@@ -145,7 +146,7 @@ class LeaveRequestApiTest extends E2ETestCase
      */
     public function test_leave_validation_failure(): void
     {
-        $token = $this->login(self::BUSINESS_USER);
+        $token = $this->login(self::businessUserCreds());
 
         // 缺 reason + days 小于 0.5 + 结束日期早于开始
         $r = $this->call('POST', $token, '/attendance/leave', [
@@ -165,8 +166,8 @@ class LeaveRequestApiTest extends E2ETestCase
      */
     public function test_manager_approves_leave(): void
     {
-        $userToken = $this->login(self::BUSINESS_USER);
-        $adminToken = $this->login(self::APPROVER);
+        $userToken = $this->login(self::businessUserCreds());
+        $adminToken = $this->login(self::approverCreds());
 
         // 业务用户提交
         $submit = $this->call('POST', $userToken, '/attendance/leave', [
@@ -194,7 +195,7 @@ class LeaveRequestApiTest extends E2ETestCase
      */
     public function test_approve_nonexistent_leave_404(): void
     {
-        $token = $this->login(self::APPROVER);
+        $token = $this->login(self::approverCreds());
         $r = $this->call('POST', $token, '/attendance/leave/999999/approve', [
             'action' => 'approved',
         ]);

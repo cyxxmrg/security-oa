@@ -95,8 +95,11 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // 检查权限
+  // V1.4.5 (REVIEW P0-1 修复): 委托给 permission store —
+  // userStore.permissions 依赖 /auth/userinfo 返回, 曾因后端注释掉而恒为空;
+  // permission store 从 /permissions/my 加载且带 admin 旁路 + 模块前缀兜底
   function hasPermission(permission: string): boolean {
-    return permissions.value.includes(permission)
+    return usePermissionStore().hasPermission(permission)
   }
 
   function hasRole(role: string): boolean {

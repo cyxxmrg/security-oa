@@ -1,0 +1,102 @@
+# OA 前后端一致性检查报告
+
+**时间**: 2026-07-17 08:34:55
+**通过**: 70 | **问题**: 24
+
+## 问题
+- ❌ 入职档案: 404 NOT FOUND:
+- ❌ 离职管理: 404 NOT FOUND:
+- ❌ 跟进日历: 404 NOT FOUND:
+- ❌ 居间费结算: 404 NOT FOUND:
+- ❌ 招标项目: 404 NOT FOUND:
+- ❌ 项目池: 404 NOT FOUND:
+- ❌ 质保金: 404 NOT FOUND:
+- ❌ 采购计划: 500 服务器错误:
+- ❌ 客户账龄: 404 NOT FOUND:
+- ❌ 供应商账龄: 404 NOT FOUND:
+- ❌ 利润报表: 404 NOT FOUND:
+- ❌ 用车申请: 404 NOT FOUND:
+- ❌ 油卡管理: 404 NOT FOUND:
+- ❌ 开工管理: 404 NOT FOUND:
+- ❌ 权限矩阵: 404 NOT FOUND:
+- ❌ 系统字典: 404 NOT FOUND:
+- ❌ 系统监控: 404 NOT FOUND:
+- ❌ 操作日志: 404 NOT FOUND:
+- ❌ 组织架构: 404 NOT FOUND:
+- ❌ 部门列表: 404 NOT FOUND:
+- ❌ 巡检总览: 404 NOT FOUND:
+- ❌ 巡检计划: 404 NOT FOUND:
+- ❌ 巡检任务: 404 NOT FOUND:
+- ❌ 巡检问题: 404 NOT FOUND:
+
+## 全部端点
+- ✅ 登录成功
+- ✅ 工作台数据: 200 708ms
+- ✅ 仪表盘统计: 200 696ms
+- ✅ 仪表盘组件(all): 200 571ms
+- ✅   widget/method-distribution: 200 503ms
+- ✅   widget/cycle-percentile: 200 556ms
+- ✅   widget/fault-top: 200 504ms
+- ✅   widget/technician-rank: 200 534ms
+- ✅ 营收分析: 200 499ms
+- ✅ 销售漏斗: 200 522ms
+- ✅ 项目健康度: 200 524ms
+- ✅ 库存账龄: 200 542ms
+- ✅ 客户RFM: 200 509ms
+- ✅ 利润表: 200 535ms
+- ✅ 考勤总览: 200 542ms
+- ✅   DB:attendance_records=198 API≈198
+- ✅   DB:leave_requests=213 API≈213
+- ✅   DB:overtime_requests=212 API≈212
+- ✅ 考勤报表: 200 2014ms
+- ✅ 员工列表: 200 1324ms
+- ✅   DB:users=27 API≈26
+- ✅ 客户列表: 200 1165ms
+- ✅   DB:customers=24 API≈24
+- ✅   DB:opportunities=147 API≈147
+- ✅ 商机看板(轻量): 200 596ms
+- ✅   DB:opportunities=147 API≈147
+- ✅ 推荐人: 200 651ms
+- ✅ 项目列表: 200 4213ms
+- ✅   DB:projects=29 API≈29
+- ✅ 质保期: 200 1054ms
+- ✅ 采购合同: 200 662ms
+- ✅   DB:purchase_orders=0 API≈1
+- ✅ 供应商: 200 783ms
+- ✅   DB:suppliers=14 API≈14
+- ✅ 采购付款: 200 573ms
+- ✅   DB:inventory_items=1068 API≈1068
+- ✅ 库存统计: 200 624ms
+- ✅ 低库存预警: 200 1547ms
+- ✅ 库存变动记录: 200 629ms
+- ✅ 仓库列表: 200 613ms
+- ✅   DB:warehouses=2 API≈2
+- ✅ 入库单: 200 622ms
+- ✅ 出库单: 200 621ms
+- ✅ 资金账户: 200 797ms
+- ✅   DB:finance_accounts=17 API≈17
+- ✅   DB:receivables=140 API≈140
+- ✅ 应付账款: 200 1143ms
+- ✅   DB:payables=18 API≈18
+- ✅ 财务收款: 200 1179ms
+- ✅   DB:expense_claims=133 API≈133
+- ✅ 报销统计: 200 572ms
+- ✅ 审批中心统计: 200 639ms
+- ✅ 财务审批: 200 878ms
+- ✅ 运营审批: 200 956ms
+- ✅ 项目审批: 200 614ms
+- ✅ 审批模板: 200 496ms
+- ✅   DB:work_orders=132 API≈132
+- ✅   DB:service_orders=200 API≈200
+- ✅ 服务统计: 200 556ms
+- ✅ 维保合同: 200 598ms
+- ✅ 车辆列表: 200 719ms
+- ✅   DB:vehicles=11 API≈11
+- ✅ 施工日志: 200 998ms
+- ✅ 施工班组: 200 854ms
+- ✅ 外包管理: 200 716ms
+- ✅ 角色管理: 200 1784ms
+- ✅ 网盘统计: 200 591ms
+- ✅ 文件树: 200 633ms
+- ✅ 通知列表: 200 530ms
+- ✅ 未读计数: 200 542ms

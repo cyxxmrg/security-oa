@@ -49,7 +49,7 @@ class ProjectController extends Controller
         $perPage = max(1, min((int)($request->per_page ?? 15), 200));
         $result = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
-        // 缓存 JSON 到 Redis, 60s TTL
+        // 缓存 JSON 到 Redis, 30s TTL
         $json = json_encode(['code' => 0, 'data' => $result->toArray()]);
         Cache::put($cacheKey, $json, 30);
 

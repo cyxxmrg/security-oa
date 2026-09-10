@@ -614,7 +614,16 @@ class DataScope implements Scope
         // 3. 拿到表名 + 拼 OR 条件
         $table = $model->getTable();
         $clauses = self::tableClauses($table, (int) $user->id);
-        if (empty($clauses)) return;
+        if (empty($clauses)) {
+            // V1.4.5 (REVIEW P1-3 加固): 未映射表对业务用户不做行级过滤 → 限流告警,
+            // 使"静默全量读取"可观测; 每 (表,用户) 5 分钟最多记一条, 不改任何查询行为
+            if (\Illuminate\Support\Facades\Cache::add("datascope:unmapped:{$table}:{$user->id}", 1, 300)) {
+                \Illuminate\Support\Facades\Log::warning(
+                    "DataScope: 表 {$table} 未配置行级规则, 用户 #{$user->id}({$user->username ?? ''}) 的查询未过滤"
+                );
+            }
+            return;
+        }
 
         $builder->where(function (Builder $q) use ($clauses) {
             foreach ($clauses as $c) {

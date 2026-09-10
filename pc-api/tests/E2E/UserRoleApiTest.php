@@ -39,9 +39,11 @@ class UserRoleApiTest extends E2ETestCase
         }
     }
 
-    private function login(string $username, string $password = '<已脱敏>'): ?string
+    // V1.4.5 (REVIEW P2-7/P1-4): 密码从环境变量读取, 不硬编码入库
+    private function login(string $username, string $password = ''): ?string
     {
         if (isset(self::$tokens[$username])) return self::$tokens[$username];
+        if ($password === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS)');
 
         self::$loginAttempts++;
         if (self::$loginAttempts > 3) {

@@ -27,11 +27,9 @@ class AuthController extends Controller
 
         // V1.2.7 P0-2 fix: 删空密码登录（之前 system 空密码可 bypass Hash::check 直接发 token）
         // system 刚 wipeAll（password=null）时拒绝登录，走重置密码流程
+        // V1.4.5 (REVIEW P2-4 fix): 统一文案, 不区分 system/普通账号, 避免账号枚举
         if (empty($user->password)) {
-            if ($user->is_system) {
-                return response()->json(['code' => 401, 'message' => 'system 密码未设置, 请先通过部署脚本重置'], 401);
-            }
-            return response()->json(['code' => 401, 'message' => '密码未设置'], 401);
+            return response()->json(['code' => 401, 'message' => '该账号未设置密码, 请联系系统管理员重置'], 401);
         }
         if (! \Hash::check($request->password, $user->password)) {
             return response()->json(['code' => 401, 'message' => '用户名或密码错误'], 401);
@@ -108,13 +106,19 @@ class AuthController extends Controller
         // V1.2: 透出 must_change_password 给前端
         $userPayload = $user->toArray();
         $userPayload['must_change_password'] = (bool) ($user->must_change_password ?? false);
+        // V1.4.5 (REVIEW P0-1 修复): 恢复透出有效权限/角色 —
+        // 用自定义 activePermissionNames()/activeRoles() 绕过 Spatie 内置缓存
+        // (此前因 Spatie 缓存错误而注释掉, 导致前端 userStore.permissions 恒为空、按钮级权限失效)
+        $permissionNames = $user->activePermissionNames();
+        $roleNames = $user->activeRoles()->pluck('roles.name')->values()->all();
+        $userPayload['permissions'] = $permissionNames;
+        $userPayload['roles'] = $roleNames;
         return response()->json([
             'code' => 0,
             'data' => [
                 'user' => $userPayload,
-                // 暂时注释掉 permissions 和 roles（避免 Spatie 错误）
-                // 'permissions' => $user->getAllPermissions()->pluck('name'),
-                // 'roles' => $user->getRoleNames(),
+                'permissions' => $permissionNames,
+                'roles' => $roleNames,
             ],
         ]);
     }
@@ -207,12 +211,19 @@ class AuthController extends Controller
             $user->update($data);
         }
 
-        // 记录审计
+        // 记录审计 — V1.4.5 (REVIEW P1-5 修复): 手机/邮箱脱敏后落库, 避免明文 PII 常驻 system_logs
         if (! empty($data)) {
+            $auditData = $data;
+            if (isset($auditData['phone']) && is_string($auditData['phone'])) {
+                $auditData['phone'] = $this->maskPhone($auditData['phone']);
+            }
+            if (isset($auditData['email']) && is_string($auditData['email'])) {
+                $auditData['email'] = $this->maskEmail($auditData['email']);
+            }
             DB::table('system_logs')->insert([
                 'user_id' => $user->id, 'type' => 'update', 'module' => 'auth',
                 'action' => 'update_profile', 'description' => '用户更新资料',
-                'request_data' => json_encode($data, JSON_UNESCAPED_UNICODE),
+                'request_data' => json_encode($auditData, JSON_UNESCAPED_UNICODE),
                 'ip' => $request->ip(), 'user_agent' => $request->userAgent(),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -227,5 +238,32 @@ class AuthController extends Controller
                 'position' => $user->position?->name,
             ],
         ]);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-5 修复): 手机号脱敏 138****1234
+     */
+    private function maskPhone(string $phone): string
+    {
+        $phone = trim($phone);
+        if (strlen($phone) >= 7) {
+            return substr($phone, 0, 3) . '****' . substr($phone, -4);
+        }
+        return '****';
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-5 修复): 邮箱脱敏 a***@domain.com
+     */
+    private function maskEmail(string $email): string
+    {
+        $parts = explode('@', $email, 2);
+        $name = $parts[0];
+        $domain = $parts[1] ?? '';
+        if ($name === '') {
+            return '***@' . $domain;
+        }
+        $masked = substr($name, 0, 1) . str_repeat('*', max(3, strlen($name) - 1));
+        return $masked . '@' . $domain;
     }
 }

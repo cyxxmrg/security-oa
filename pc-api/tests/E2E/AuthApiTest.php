@@ -13,12 +13,17 @@ namespace Tests\E2E;
 class AuthApiTest extends E2ETestCase
 {
     private const API = 'http://127.0.0.1:8081/api';
-    private const USERS = [
-        'admin'    => ['admin1', '<已脱敏>'],
-        'finance'  => ['fin_wu', '<已脱敏>'],
-        'manager'  => ['sales_yang', '<已脱敏>'],
-        'user'     => ['eng_qian', '<已脱敏>'],
-    ];
+    // V1.4.5 (REVIEW P2-7/P1-4): 密码从环境变量读取, 不硬编码入库
+    private static function users(): array
+    {
+        $pass = \Tests\E2E\E2ETestCase::e2ePass('OA_E2E_ADMIN_PASS');
+        return [
+            'admin'    => ['admin1', $pass],
+            'finance'  => ['fin_wu', $pass],
+            'manager'  => ['sales_yang', $pass],
+            'user'     => ['eng_qian', $pass],
+        ];
+    }
 
     private static array $tokens = [];
     private static int $loginAttempts = 0;
@@ -63,7 +68,8 @@ class AuthApiTest extends E2ETestCase
     private function login(string $role): string
     {
         if (isset(self::$tokens[$role])) return self::$tokens[$role];
-        [$u, $p] = self::USERS[$role];
+        [$u, $p] = self::users()[$role];
+        if ($p === '') $this->markTestSkipped('未配置 E2E 账号密码 (OA_E2E_ADMIN_PASS)');
 
         // 每 3 次新 login 清一次 throttle
         self::$loginAttempts++;
@@ -100,7 +106,7 @@ class AuthApiTest extends E2ETestCase
 
     public function test_login_admin_success(): void
     {
-        [$u, $p] = self::USERS['admin'];
+        [$u, $p] = self::users()['admin'];
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'ignore_errors' => true,
             'header' => "Content-Type: application/json\r\n",
