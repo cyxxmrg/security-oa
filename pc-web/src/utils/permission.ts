@@ -17,6 +17,25 @@ import { ref, type ObjectDirective, type DirectiveBinding } from 'vue'
 import { getUserInfo } from './auth'
 import http from './request'
 
+function normalizeNameList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item: unknown) => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object' && 'name' in item) return String((item as { name?: unknown }).name ?? '')
+      return ''
+    })
+    .filter((item): item is string => Boolean(item))
+}
+
+function matchesWildcardPermission(permission: string, candidates: string[]): boolean {
+  return candidates.some(candidate => {
+    if (!candidate.endsWith('.*')) return false
+    const prefix = candidate.slice(0, -1)
+    return permission.startsWith(prefix)
+  })
+}
+
 export const usePermissionStore = defineStore('permission', () => {
   const permissions = ref<string[]>([])
   const roles = ref<string[]>([])
@@ -28,15 +47,11 @@ export const usePermissionStore = defineStore('permission', () => {
       const user = getUserInfo()
       if (user && Array.isArray(user.roles)) {
         // 兼容两种形态: ['admin','user'] 或 [{name:'admin'}, {name:'user'}]
-        roles.value = user.roles
-          .map((r: unknown) => typeof r === 'string' ? r : (r && typeof r === 'object' && 'name' in r ? String(r.name) : ''))
-          .filter((r): r is string => Boolean(r))
+        roles.value = normalizeNameList(user.roles)
       }
       const res = await http.get('/permissions/my')
       const list = Array.isArray(res) ? res : (res?.data || [])
-      permissions.value = list
-        .map((p: unknown) => typeof p === 'string' ? p : (p && typeof p === 'object' && 'name' in p ? String(p.name) : ''))
-        .filter((p: string): p is string => Boolean(p))
+      permissions.value = normalizeNameList(list)
       loaded.value = true
     } catch (e) {
       // 静默失败 — 视为无权限
@@ -47,10 +62,15 @@ export const usePermissionStore = defineStore('permission', () => {
 
   function hasPermission(perm: string): boolean {
     if (roles.value.includes('admin') || roles.value.includes('system_admin')) return true
-    if (permissions.value.includes(perm)) return true
-    // 兼容 'customer.view' → 'customer' 这种 DB 里只存 module name 的旧 perms
+
+    const permissionSet = new Set(permissions.value)
+    if (permissionSet.has(perm)) return true
+
     const [module] = perm.split('.')
-    if (module && permissions.value.includes(module)) return true
+    if (module && permissionSet.has(module)) return true
+
+    if (matchesWildcardPermission(perm, permissions.value)) return true
+
     return false
   }
 
@@ -109,8 +129,8 @@ function applyPermission(el: HTMLElement, binding: DirectiveBinding<string | str
 
   const isOrMode = modifiers?.or
   const has = isOrMode
-    ? perms.some(p => store.permissions.includes(p))
-    : perms.every(p => store.permissions.includes(p))
+    ? perms.some(p => store.hasPermission(p))
+    : perms.every(p => store.hasPermission(p))
 
   if (!has) {
     el.style.display = 'none'

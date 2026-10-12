@@ -135,4 +135,29 @@ class FieldMaskTest extends TestCase
         $out = FieldMask::apply($data, $u, '/api/finance/receivables');
         $this->assertSame('***', $out['amount']);
     }
+
+    public function test_profile_audit_payload_only_keeps_allowlisted_pii_fields(): void
+    {
+        $controller = new \App\Http\Controllers\Api\AuthController();
+        $method = new \ReflectionMethod(\App\Http\Controllers\Api\AuthController::class, 'sanitizeAuditPayload');
+        $method->setAccessible(true);
+
+        $payload = [
+            'name' => 'Alice',
+            'phone' => '13812345678',
+            'email' => 'alice@example.com',
+            'avatar' => '/avatars/a.png',
+            'password' => 'should-not-be-logged',
+            'secret_token' => 'should-not-be-logged',
+        ];
+
+        $sanitized = $method->invoke($controller, $payload);
+
+        $this->assertSame([
+            'name' => 'Alice',
+            'phone' => '138****5678',
+            'email' => 'a****@example.com',
+            'avatar' => '/avatars/a.png',
+        ], $sanitized);
+    }
 }

@@ -7,14 +7,32 @@ use App\Http\Requests\Role\StoreRoleRequest;
 use App\Http\Requests\Role\AssignPermissionsRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Log;
+use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends Controller
 {
+    private function clearPermissionCaches(): void
+    {
+        // V1.4.5 安全修正: 仅清理权限相关缓存，避免全局 cache::flush 误伤其他业务缓存。
+        try {
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        } catch (\Throwable $e) {
+            Log::warning('clearPermissionCaches::forgetCachedPermissions failed: ' . $e->getMessage());
+        }
+
+        try {
+            Cache::forget('spatie.permission.cache');
+        } catch (\Throwable $e) {
+            Log::warning('clearPermissionCaches::forget spatie.permission.cache failed: ' . $e->getMessage());
+        }
+    }
+
     /**
      * 角色分配明细仅允许本人、system 账号或具备角色管理权限的用户查看。
      */
@@ -255,6 +273,8 @@ class RoleController extends Controller
             $role->syncPermissions($data['permissions']);
         }
 
+        $this->clearPermissionCaches();
+
         return response()->json(['code' => 0, 'message' => '角色已创建', 'data' => ['id' => $role->id]]);
     }
 
@@ -295,6 +315,8 @@ class RoleController extends Controller
             $r->syncPermissions($data['permissions']);
         }
 
+        $this->clearPermissionCaches();
+
         return response()->json(['code' => 0, 'message' => '角色已更新']);
     }
 
@@ -306,7 +328,7 @@ class RoleController extends Controller
      *     - role_has_permissions (老 spatie 表, 跟 permission_role 之一存在, 兼容)
      *     - permission_role  (新 spatie 表)
      */
-    public function destroy(string $role): JsonResponse
+    public function destroy(Request $request, string $role): JsonResponse
     {
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
@@ -348,6 +370,8 @@ class RoleController extends Controller
             DB::table('roles')->where('id', $roleId)->delete();
         });
 
+        $this->clearPermissionCaches();
+
         return response()->json([
             'code'    => 0,
             'message' => '角色已删除, 关联的用户绑定和权限关联也已清除',
@@ -378,6 +402,7 @@ class RoleController extends Controller
         // V0.5.2 业务侧赋权限时, 自动同步继承链
         $r->syncPermissions($perms);
         \App\Support\PermissionInheritance::propagateToChildren($r->name, $perms);
+        $this->clearPermissionCaches();
 
         return response()->json([
             'code' => 0,
@@ -517,6 +542,7 @@ class RoleController extends Controller
 
         $r->syncPermissions($perms);
         \App\Support\PermissionInheritance::propagateToChildren($r->name, $perms);
+        $this->clearPermissionCaches();
 
         return response()->json([
             'code'    => 0,
