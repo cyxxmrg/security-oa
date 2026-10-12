@@ -14,7 +14,6 @@
  */
 import { defineStore } from 'pinia'
 import { ref, type ObjectDirective, type DirectiveBinding } from 'vue'
-import { getUserInfo } from './auth'
 import http from './request'
 
 function normalizeNameList(value: unknown): string[] {
@@ -28,54 +27,45 @@ function normalizeNameList(value: unknown): string[] {
     .filter((item): item is string => Boolean(item))
 }
 
-function matchesWildcardPermission(permission: string, candidates: string[]): boolean {
-  return candidates.some(candidate => {
-    if (!candidate.endsWith('.*')) return false
-    const prefix = candidate.slice(0, -1)
-    return permission.startsWith(prefix)
-  })
-}
-
 export const usePermissionStore = defineStore('permission', () => {
   const permissions = ref<string[]>([])
   const roles = ref<string[]>([])
   const loaded = ref(false)
+  let loading: Promise<void> | null = null
 
-  async function load() {
-    if (loaded.value) return
-    try {
-      const user = getUserInfo()
-      if (user && Array.isArray(user.roles)) {
-        // 兼容两种形态: ['admin','user'] 或 [{name:'admin'}, {name:'user'}]
-        roles.value = normalizeNameList(user.roles)
+  function load(): Promise<void> {
+    if (loaded.value) return Promise.resolve()
+    if (loading) return loading
+
+    loading = (async () => {
+      try {
+        const res = await http.get('/permissions/my')
+        const list = Array.isArray(res) ? res : (res?.data || [])
+        permissions.value = normalizeNameList(list)
+        if (Array.isArray(res?.roles)) {
+          roles.value = normalizeNameList(res.roles)
+        }
+        loaded.value = true
+      } catch (e) {
+        // Fail closed, but keep the store retryable on the next load() call.
+        permissions.value = []
+        roles.value = []
+        console.warn('[permissionStore] permission load failed; access remains denied until retry:', e)
+      } finally {
+        loading = null
       }
-      const res = await http.get('/permissions/my')
-      const list = Array.isArray(res) ? res : (res?.data || [])
-      permissions.value = normalizeNameList(list)
-      loaded.value = true
-    } catch (e) {
-      // 静默失败 — 视为无权限
-      permissions.value = []
-      loaded.value = true
-    }
+    })()
+
+    return loading
   }
 
   function hasPermission(perm: string): boolean {
-    if (roles.value.includes('admin') || roles.value.includes('system_admin')) return true
-
-    const permissionSet = new Set(permissions.value)
-    if (permissionSet.has(perm)) return true
-
-    const [module] = perm.split('.')
-    if (module && permissionSet.has(module)) return true
-
-    if (matchesWildcardPermission(perm, permissions.value)) return true
-
-    return false
+    if (roles.value.includes('admin')) return true
+    return permissions.value.includes(perm)
   }
 
   function hasAnyPermission(perms: string[]): boolean {
-    if (roles.value.includes('admin') || roles.value.includes('system_admin')) return true
+    if (roles.value.includes('admin')) return true
     return perms.some(p => hasPermission(p))
   }
 
@@ -123,9 +113,6 @@ function applyPermission(el: HTMLElement, binding: DirectiveBinding<string | str
   const { value, modifiers } = binding
   const perms = Array.isArray(value) ? value : [value]
   const store = usePermissionStore()
-
-  // admin / system_admin 永远显示
-  if (store.roles.includes('admin') || store.roles.includes('system_admin')) return
 
   const isOrMode = modifiers?.or
   const has = isOrMode
