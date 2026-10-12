@@ -13,17 +13,23 @@ use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Log;
+use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends Controller
 {
     private function clearPermissionCaches(): void
     {
-        // V1.4.5 安全修正: 权限/角色更新会影响 Spatie cache 与本地 perm:candidates 缓存。
-        // custom candidate keys 使用 md5 生成，无法枚举全部 key，因此在 RBAC 变更时做一次显式缓存清理。
+        // V1.4.5 安全修正: 仅清理权限相关缓存，避免全局 cache::flush 误伤其他业务缓存。
         try {
-            Cache::flush();
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
         } catch (\Throwable $e) {
-            Log::warning('clearPermissionCaches failed: ' . $e->getMessage());
+            Log::warning('clearPermissionCaches::forgetCachedPermissions failed: ' . $e->getMessage());
+        }
+
+        try {
+            Cache::forget('spatie.permission.cache');
+        } catch (\Throwable $e) {
+            Log::warning('clearPermissionCaches::forget spatie.permission.cache failed: ' . $e->getMessage());
         }
     }
 
