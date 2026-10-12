@@ -15,7 +15,7 @@ class EmployeeRoleAssignmentTest extends TestCase
     public function test_employee_creator_cannot_assign_admin_role(): void
     {
         $operator = $this->createOperator();
-        $adminRole = Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
 
         $response = $this->actingAs($operator, 'sanctum')->postJson('/api/employees', [
             'name' => 'New Employee',
@@ -30,7 +30,7 @@ class EmployeeRoleAssignmentTest extends TestCase
     public function test_employee_creator_without_role_management_permission_cannot_assign_any_role(): void
     {
         $operator = $this->createOperator();
-        $role = Role::create(['name' => 'finance', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'finance', 'guard_name' => 'web']);
 
         $response = $this->actingAs($operator, 'sanctum')->postJson('/api/employees', [
             'name' => 'New Employee',
@@ -45,7 +45,7 @@ class EmployeeRoleAssignmentTest extends TestCase
     public function test_business_role_manager_can_assign_non_privileged_role(): void
     {
         $operator = $this->createOperator(true);
-        $role = Role::create(['name' => 'finance', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'finance', 'guard_name' => 'web']);
 
         $response = $this->actingAs($operator, 'sanctum')->postJson('/api/employees', [
             'name' => 'New Employee',
@@ -63,7 +63,7 @@ class EmployeeRoleAssignmentTest extends TestCase
 
     public function test_business_admin_cannot_assign_admin_role_to_new_employee(): void
     {
-        $adminRole = Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $operator = $this->createUser('business', 'business_admin_operator');
         $operator->assignRole($adminRole);
 
@@ -80,7 +80,7 @@ class EmployeeRoleAssignmentTest extends TestCase
     public function test_business_role_manager_cannot_assign_system_admin_role(): void
     {
         $operator = $this->createOperator(true);
-        $systemAdminRole = Role::create(['name' => 'system_admin', 'guard_name' => 'web']);
+        $systemAdminRole = Role::firstOrCreate(['name' => 'system_admin', 'guard_name' => 'web']);
 
         $response = $this->actingAs($operator, 'sanctum')->postJson('/api/employees', [
             'name' => 'New Employee',
@@ -103,7 +103,11 @@ class EmployeeRoleAssignmentTest extends TestCase
         foreach (['employee.view', 'employee.create'] as $name) {
             $permission = Permission::firstOrCreate(
                 ['name' => $name, 'guard_name' => 'web'],
-                ['module' => 'employee']
+                [
+                    'display_name' => $name,
+                    'description' => $name,
+                    'module' => 'employee',
+                ]
             );
             $role->givePermissionTo($permission);
         }
@@ -111,7 +115,11 @@ class EmployeeRoleAssignmentTest extends TestCase
         if ($canManageRoles) {
             $permission = Permission::firstOrCreate(
                 ['name' => 'system.role', 'guard_name' => 'web'],
-                ['module' => 'system']
+                [
+                    'display_name' => 'Role management',
+                    'description' => 'Role management',
+                    'module' => 'system',
+                ]
             );
             $role->givePermissionTo($permission);
         }

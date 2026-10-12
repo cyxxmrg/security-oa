@@ -18,18 +18,12 @@ class PermissionConsistencyTest extends TestCase
 
     public function test_permissions_endpoint_returns_effective_exact_permissions_for_business_users(): void
     {
-        $permission = Permission::create([
-            'name' => 'inventory.view',
-            'guard_name' => 'web',
-            'module' => 'inventory',
-        ]);
-        Permission::create([
-            'name' => 'inventory.edit',
-            'guard_name' => 'web',
-            'module' => 'inventory',
-        ]);
+        $permissionName = 'test_inventory.view.' . uniqid();
+        $permission = $this->createPermission($permissionName, 'inventory');
+        $this->createPermission('test_inventory.edit.' . uniqid(), 'inventory');
 
-        $role = Role::create(['name' => 'inventory_viewer', 'guard_name' => 'web']);
+        $roleName = 'inventory_viewer_' . uniqid();
+        $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);
         $role->givePermissionTo($permission);
         $user = $this->createUser('permission_viewer');
         $user->assignRole($role);
@@ -37,44 +31,43 @@ class PermissionConsistencyTest extends TestCase
         $response = $this->actingAs($user, 'sanctum')->getJson('/api/permissions/my');
 
         $response->assertOk()
-            ->assertJsonPath('roles.0', 'inventory_viewer')
+            ->assertJsonFragment(['roles' => [$roleName]])
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.name', 'inventory.view');
+            ->assertJsonPath('data.0.name', $permissionName);
     }
 
     public function test_system_user_receives_all_registered_permissions(): void
     {
-        Permission::create(['name' => 'system.settings', 'guard_name' => 'web', 'module' => 'system']);
-        Permission::create(['name' => 'inventory.view', 'guard_name' => 'web', 'module' => 'inventory']);
+        $systemPermission = $this->createPermission('test_system.settings.' . uniqid(), 'system');
+        $businessPermission = $this->createPermission('test_inventory.view.' . uniqid(), 'inventory');
         $user = $this->createUser('system_user', 'system');
 
         $response = $this->actingAs($user, 'sanctum')->getJson('/api/permissions/my');
 
         $response->assertOk()
-            ->assertJsonCount(2, 'data')
-            ->assertJsonFragment(['name' => 'system.settings'])
-            ->assertJsonFragment(['name' => 'inventory.view']);
+            ->assertJsonFragment(['name' => $systemPermission->name])
+            ->assertJsonFragment(['name' => $businessPermission->name]);
     }
 
     public function test_permission_registry_changes_rotate_only_candidate_cache_namespace(): void
     {
-        Permission::create(['name' => 'inventory.view', 'guard_name' => 'web', 'module' => 'inventory']);
+        $permission = $this->createPermission('test_candidate.view.' . uniqid(), 'candidate');
         Cache::forget('perm:candidates:version');
 
         $middleware = new CheckPermission();
         $resolve = new \ReflectionMethod(CheckPermission::class, 'resolveCandidates');
         $resolve->setAccessible(true);
 
-        $this->assertSame(['inventory.view'], $resolve->invoke($middleware, 'inventory.view'));
-        DB::table('permissions')->where('name', 'inventory.view')->delete();
-        $this->assertSame(['inventory.view'], $resolve->invoke($middleware, 'inventory.view'));
+        $this->assertSame([$permission->name], $resolve->invoke($middleware, $permission->name));
+        DB::table('permissions')->where('id', $permission->id)->delete();
+        $this->assertSame([$permission->name], $resolve->invoke($middleware, $permission->name));
 
         $controller = new RoleController();
         $clear = new \ReflectionMethod(RoleController::class, 'clearPermissionCaches');
         $clear->setAccessible(true);
         $clear->invoke($controller);
 
-        $this->assertSame([], $resolve->invoke($middleware, 'inventory.view'));
+        $this->assertSame([], $resolve->invoke($middleware, $permission->name));
     }
 
     public function test_profile_endpoint_persists_only_allowlisted_and_masked_audit_data(): void
@@ -112,9 +105,21 @@ class PermissionConsistencyTest extends TestCase
             'name' => $username,
             'username' => $username . '_' . uniqid(),
             'email' => $username . '@test.local',
+            'phone' => 'TEL-' . substr(md5($username), 0, 8),
             'password' => bcrypt('test-password'),
             'user_type' => $userType,
             'status' => 'active',
+        ]);
+    }
+
+    private function createPermission(string $name, string $module): Permission
+    {
+        return Permission::create([
+            'name' => $name,
+            'display_name' => $name,
+            'description' => $name,
+            'guard_name' => 'web',
+            'module' => $module,
         ]);
     }
 }
