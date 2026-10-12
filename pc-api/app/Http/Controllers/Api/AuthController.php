@@ -213,13 +213,7 @@ class AuthController extends Controller
 
         // 记录审计 — V1.4.5 (REVIEW P1-5 修复): 手机/邮箱脱敏后落库, 避免明文 PII 常驻 system_logs
         if (! empty($data)) {
-            $auditData = $data;
-            if (isset($auditData['phone']) && is_string($auditData['phone'])) {
-                $auditData['phone'] = $this->maskPhone($auditData['phone']);
-            }
-            if (isset($auditData['email']) && is_string($auditData['email'])) {
-                $auditData['email'] = $this->maskEmail($auditData['email']);
-            }
+            $auditData = $this->sanitizeAuditPayload($data);
             DB::table('system_logs')->insert([
                 'user_id' => $user->id, 'type' => 'update', 'module' => 'auth',
                 'action' => 'update_profile', 'description' => '用户更新资料',
@@ -238,6 +232,24 @@ class AuthController extends Controller
                 'position' => $user->position?->name,
             ],
         ]);
+    }
+
+    /**
+     * V1.4.5 (REVIEW P1-5 修复): 统一白名单审计字段，避免把未授权 PII 明文写入日志。
+     */
+    private function sanitizeAuditPayload(array $data): array
+    {
+        $allowed = array_flip(['name', 'phone', 'email', 'avatar']);
+        $auditData = array_intersect_key($data, $allowed);
+
+        if (isset($auditData['phone']) && is_string($auditData['phone'])) {
+            $auditData['phone'] = $this->maskPhone($auditData['phone']);
+        }
+        if (isset($auditData['email']) && is_string($auditData['email'])) {
+            $auditData['email'] = $this->maskEmail($auditData['email']);
+        }
+
+        return $auditData;
     }
 
     /**

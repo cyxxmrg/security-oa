@@ -7,6 +7,7 @@ use App\Http\Requests\Role\StoreRoleRequest;
 use App\Http\Requests\Role\AssignPermissionsRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Permission;
@@ -15,6 +16,17 @@ use Illuminate\Support\Facades\Log;
 
 class RoleController extends Controller
 {
+    private function clearPermissionCaches(): void
+    {
+        // V1.4.5 安全修正: 权限/角色更新会影响 Spatie cache 与本地 perm:candidates 缓存。
+        // custom candidate keys 使用 md5 生成，无法枚举全部 key，因此在 RBAC 变更时做一次显式缓存清理。
+        try {
+            Cache::flush();
+        } catch (\Throwable $e) {
+            Log::warning('clearPermissionCaches failed: ' . $e->getMessage());
+        }
+    }
+
     /**
      * 角色分配明细仅允许本人、system 账号或具备角色管理权限的用户查看。
      */
@@ -255,6 +267,8 @@ class RoleController extends Controller
             $role->syncPermissions($data['permissions']);
         }
 
+        $this->clearPermissionCaches();
+
         return response()->json(['code' => 0, 'message' => '角色已创建', 'data' => ['id' => $role->id]]);
     }
 
@@ -295,6 +309,8 @@ class RoleController extends Controller
             $r->syncPermissions($data['permissions']);
         }
 
+        $this->clearPermissionCaches();
+
         return response()->json(['code' => 0, 'message' => '角色已更新']);
     }
 
@@ -306,7 +322,7 @@ class RoleController extends Controller
      *     - role_has_permissions (老 spatie 表, 跟 permission_role 之一存在, 兼容)
      *     - permission_role  (新 spatie 表)
      */
-    public function destroy(string $role): JsonResponse
+    public function destroy(Request $request, string $role): JsonResponse
     {
         $r = is_numeric($role)
             ? Role::where('guard_name', 'web')->findOrFail((int) $role)
@@ -348,6 +364,8 @@ class RoleController extends Controller
             DB::table('roles')->where('id', $roleId)->delete();
         });
 
+        $this->clearPermissionCaches();
+
         return response()->json([
             'code'    => 0,
             'message' => '角色已删除, 关联的用户绑定和权限关联也已清除',
@@ -378,6 +396,7 @@ class RoleController extends Controller
         // V0.5.2 业务侧赋权限时, 自动同步继承链
         $r->syncPermissions($perms);
         \App\Support\PermissionInheritance::propagateToChildren($r->name, $perms);
+        $this->clearPermissionCaches();
 
         return response()->json([
             'code' => 0,
@@ -517,6 +536,7 @@ class RoleController extends Controller
 
         $r->syncPermissions($perms);
         \App\Support\PermissionInheritance::propagateToChildren($r->name, $perms);
+        $this->clearPermissionCaches();
 
         return response()->json([
             'code'    => 0,
