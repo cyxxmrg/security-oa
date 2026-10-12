@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Spatie\Permission\Models\Role;
 
 class EmployeeController extends Controller
 {
@@ -164,6 +165,38 @@ class EmployeeController extends Controller
     public function store(StoreEmployeeRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $roleId = $data['role_id'] ?? null;
+        if ($roleId !== null) {
+            $role = Role::where('guard_name', 'web')->findOrFail((int) $roleId);
+            $operator = $request->user();
+            $isSystemActor = $operator
+                && (($operator->user_type ?? null) === 'system' || ($operator->is_system ?? false) === true);
+            $isRoleManager = $isSystemActor;
+
+            if (!$isRoleManager && $operator) {
+                try {
+                    $isRoleManager = $operator->hasActiveRole('admin')
+                        || $operator->hasActivePermissionTo('system.role');
+                } catch (\Throwable $e) {
+                    Log::warning('EmployeeController::store role assignment check failed: ' . $e->getMessage());
+                }
+            }
+
+            if (!$isRoleManager) {
+                return response()->json([
+                    'code' => 403,
+                    'message' => '只有系统账号或具备角色管理权限的用户可以为新员工分配角色',
+                ], 403);
+            }
+
+            if (!$isSystemActor && in_array($role->name, ['admin', 'system', 'system_admin'], true)) {
+                return response()->json([
+                    'code' => 403,
+                    'message' => "角色「{$role->name}」仅系统账号可以授予",
+                ], 403);
+            }
+        }
+
         $generatedPassword = false;
         if (empty($data['password'])) {
             $data['password'] = TemporaryPassword::generate();
@@ -180,7 +213,6 @@ class EmployeeController extends Controller
         if (empty($data['email'] ?? null)) {
             unset($data['email']);
         }
-        $roleId = $data['role_id'] ?? null;
         unset($data['role_id']);
         $hireDate = $data['hire_date'] ?? null;
         unset($data['hire_date']);

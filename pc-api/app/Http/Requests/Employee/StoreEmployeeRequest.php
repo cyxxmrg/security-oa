@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Employee;
 
 use App\Http\Requests\BaseFormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * V1.2.7 P1-1: 新建员工
@@ -23,7 +24,7 @@ class StoreEmployeeRequest extends BaseFormRequest
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'position_id'   => ['nullable', 'integer', 'exists:positions,id'],
             'gender'        => ['nullable', 'string', 'in:male,female,other'],
-            'role_id'       => ['nullable', 'integer', 'exists:roles,id'],
+            'role_id'       => ['nullable', 'integer', Rule::exists('roles', 'id')->where('guard_name', 'web')],
             'hire_date'     => ['nullable', 'date', 'date_format:Y-m-d'],
             'base_salary'   => ['nullable', 'numeric', 'min:0'],
         ];
