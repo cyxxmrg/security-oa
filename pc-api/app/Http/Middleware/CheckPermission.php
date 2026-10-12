@@ -83,9 +83,11 @@ class CheckPermission
      */
     private function resolveCandidates(string $expression): array
     {
-        // V1.4.5 (REVIEW P2-2): 候选解析结果短 TTL 缓存 — 权限点注册只在迁移/后台变更,
-        // 60s 陈旧窗口对"新权限名未定义"判定影响可忽略, 避免每个请求重复 LIKE 查 permissions 表
-        return Cache::remember('perm:candidates:' . md5($expression), 60, function () use ($expression) {
+        // Versioned keys let RBAC changes invalidate candidate results without flushing unrelated cache entries.
+        $version = Cache::get('perm:candidates:version', '0');
+        $cacheKey = 'perm:candidates:' . $version . ':' . md5($expression);
+
+        return Cache::remember($cacheKey, 60, function () use ($expression) {
             $parts = array_filter(array_map('trim', explode('|', $expression)), fn($p) => $p !== '');
             $resolved = [];
             foreach ($parts as $part) {

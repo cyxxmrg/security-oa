@@ -31,6 +31,12 @@ class RoleController extends Controller
         } catch (\Throwable $e) {
             Log::warning('clearPermissionCaches::forget spatie.permission.cache failed: ' . $e->getMessage());
         }
+
+        try {
+            Cache::forever('perm:candidates:version', bin2hex(random_bytes(16)));
+        } catch (\Throwable $e) {
+            Log::warning('clearPermissionCaches::rotate candidate cache version failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -480,6 +486,7 @@ class RoleController extends Controller
             $newPerms = array_filter($autoPermsToCreate, fn($p) => !in_array($p['name'], $existing));
             if (!empty($newPerms)) {
                 Permission::insertOrIgnore($newPerms);
+                $this->clearPermissionCaches();
             }
         }
 
@@ -783,7 +790,7 @@ class RoleController extends Controller
         if (!$user) {
             return response()->json(['code' => 401, 'message' => '未认证'], 401);
         }
-        // admin 直接返所有权限 (前端不显示 hidden menu)
+        // 后端 CheckPermission 对 system 账号和 admin 角色放行，返回全部已注册权限保持前端可见性一致。
         $userRoles = [];
         try {
             $userRoles = $user->activeRoles()->pluck('roles.name')->all();
@@ -791,7 +798,7 @@ class RoleController extends Controller
             \Log::error(__METHOD__ . ': catch', ['msg' => $e->getMessage(), 'file' => $e->getFile() . ':' . $e->getLine()]);
             // ignore
         }
-        if (in_array('admin', $userRoles, true)) {
+        if (($user->user_type ?? 'business') === 'system' || in_array('admin', $userRoles, true)) {
             $list = Permission::where('guard_name', 'web')->orderBy('module')->orderBy('id')->get(['name', 'module', 'display_name', 'description'])
                 ->map(fn($p) => [
                     'name' => $p->name,
